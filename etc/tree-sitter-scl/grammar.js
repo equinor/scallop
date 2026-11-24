@@ -19,7 +19,7 @@ module.exports = grammar({
     // Extras
     whitespace: $ => /\s/,
     inline_comment: $ => /\/\/[^\n\r]*[\n\r]*/,
-    block_comment: $ => /\/\*([^\*]*\*+[^\*/])*([^\*]*\*+|[^\*])*\*\//,
+    block_comment: $ => /\/\*[^*]*\*+(?:[^*/][^*]*\*+)*\//,
 
     // Basics
     identifier: $ => $.name,
