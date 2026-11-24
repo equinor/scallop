@@ -201,7 +201,10 @@ impl<Prov: Provenance> DynamicRelation<Prov> {
       } else {
         batch.collect::<Vec<_>>()
       };
-      self.to_add.borrow_mut().push(DynamicSortedCollection::from_vec(data, ctx));
+      self
+        .to_add
+        .borrow_mut()
+        .push(DynamicSortedCollection::from_vec(data, ctx));
     }
   }
 
@@ -217,7 +220,10 @@ impl<Prov: Provenance> DynamicRelation<Prov> {
       } else {
         batch.collect::<Vec<_>>()
       };
-      self.to_add.borrow_mut().push(DynamicSortedCollection::from_vec(data, ctx));
+      self
+        .to_add
+        .borrow_mut()
+        .push(DynamicSortedCollection::from_vec(data, ctx));
     }
   }
 

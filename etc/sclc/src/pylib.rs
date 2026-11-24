@@ -5,7 +5,7 @@ use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use scallop_core::compiler;
@@ -34,7 +34,7 @@ pub fn create_pylib(
   // Run the command
   let output = cmd.output().unwrap();
   if output.status.success() {
-    let whls = fs::read_dir(&tmp_dir.join("target").join("wheels").join("current"))
+    let whls = fs::read_dir(tmp_dir.join("target").join("wheels").join("current"))
       .unwrap()
       .collect::<Vec<_>>();
     assert_eq!(whls.len(), 1, "Only one wheel should be generated for compilation");
@@ -42,7 +42,7 @@ pub fn create_pylib(
     let whl_name = whl.file_name().unwrap();
 
     // Copy the wheel to the wheels directory
-    fs::copy(whl.clone(), &tmp_dir.join("target").join("wheels").join(whl_name)).unwrap();
+    fs::copy(whl.clone(), tmp_dir.join("target").join("wheels").join(whl_name)).unwrap();
 
     // If we want to copy the wheel to the parent directory
     if !opt.do_not_copy_artifact {
@@ -64,7 +64,7 @@ pub fn create_pylib(
 }
 
 pub fn generate_pylib_rust_project(
-  input: &PathBuf,
+  input: &Path,
   compile_opt: compiler::CompileOptions,
   ram: &compiler::ram::Program,
 ) -> (PathBuf, PathBuf) {
@@ -83,10 +83,10 @@ pub fn generate_pylib_rust_project(
 
   // Create a temporary directory holding the cargo project
   fs::create_dir_all(&tmp_dir).unwrap();
-  fs::create_dir_all(&tmp_dir.join("src")).unwrap();
-  fs::create_dir_all(&tmp_dir.join("target")).unwrap();
-  fs::create_dir_all(&tmp_dir.join("target").join("wheels")).unwrap();
-  fs::create_dir_all(&tmp_dir.join("target").join("wheels").join("current")).unwrap();
+  fs::create_dir_all(tmp_dir.join("src")).unwrap();
+  fs::create_dir_all(tmp_dir.join("target")).unwrap();
+  fs::create_dir_all(tmp_dir.join("target").join("wheels")).unwrap();
+  fs::create_dir_all(tmp_dir.join("target").join("wheels").join("current")).unwrap();
 
   // Create a Cargo.toml file
   let mut cargo_toml_file = File::create(tmp_dir.join("Cargo.toml")).unwrap();
@@ -96,15 +96,15 @@ pub fn generate_pylib_rust_project(
         r#"[package]
 name = "{}"
 version = "1.0.0"
-edition = "2018"
+edition = "2024"
 [lib]
 name = "{}"
 crate-type = ["cdylib"]
 [dependencies]
 scallop-core = {{ path = "{}/core" }}
-rayon = "1.5"
+rayon = "1.12"
 [dependencies.pyo3]
-version = "0.16.5"
+version = "0.30.1"
 features = ["extension-module"]
 [workspace]
 "#,
@@ -141,11 +141,11 @@ fn generate_pylib_code(
 
   // Generate the code
   quote! {
-    use pyo3::prelude::*;
+    use pyo3::{prelude::*, Bound, IntoPyObjectExt};
     use pyo3::exceptions::*;
     use pyo3::types::*;
     use rayon::prelude::*;
-    use scallop_core::common::tensors::*;
+    use scallop_core::common::foreign_tensor::{DynamicExternalTensor, FromTensor};
     use scallop_core::common::tuple::*;
     use scallop_core::common::tuple_type::*;
     use scallop_core::common::value::*;
@@ -154,13 +154,14 @@ fn generate_pylib_code(
     use scallop_core::runtime::database::extensional::*;
     use scallop_core::utils::*;
     use std::collections::*;
+    use std::sync::Arc;
     mod scallop_module { #module #create_edb_code }
     #static_context_code
     #binding_error_code
     #context_code
     #helper_functions
     #[pymodule]
-    fn #program_name_ident(_py: Python, m: &PyModule) -> PyResult<()> {
+    fn #program_name_ident(m: &Bound<'_, PyModule>) -> PyResult<()> {
       m.add_class::<Context>()?;
       Ok(())
     }
@@ -196,7 +197,7 @@ fn generate_static_context_code(ram: &compiler::ram::Program) -> TokenStream {
         Self { prov_ctx, edb, output: None }
       }
 
-      fn add_py_facts(&mut self, r: &str, py_facts: &PyList) -> Result<(), BindingError> {
+      fn add_py_facts(&mut self, r: &str, py_facts: &Bound<'_, PyList>) -> Result<(), BindingError> {
         if let Some(ty) = self.edb.type_of(r) {
           let facts = C::process_typed_py_facts(py_facts, &ty)?;
 
@@ -211,7 +212,7 @@ fn generate_static_context_code(ram: &compiler::ram::Program) -> TokenStream {
       }
 
       fn add_facts(&mut self, r: &str, facts: Vec<(Option<C::InputTag>, Tuple)>) -> Result<(), BindingError> {
-        if let Some(ty) = self.edb.type_of(r) {
+        if self.edb.type_of(r).is_some() {
           // Add facts and disjunctions to relation
           self.edb.add_static_input_facts(r, facts).unwrap();
 
@@ -240,7 +241,10 @@ fn generate_static_context_code(ram: &compiler::ram::Program) -> TokenStream {
       }
 
       fn py_relation(&self, r: &str) -> Result<Vec<Py<PyAny>>, BindingError> {
-        self.relation(r).map(|c| c.into_iter().map(C::to_output_py_fact).collect())
+        self.relation(r)?
+          .into_iter()
+          .map(|fact| C::to_output_py_fact(fact).map_err(BindingError::from))
+          .collect()
       }
     }
   }
@@ -261,9 +265,7 @@ fn generate_binding_error_code() -> TokenStream {
 
     impl std::convert::From<BindingError> for PyErr {
       fn from(err: BindingError) -> Self {
-        let err_str = format!("{}", err.0);
-        let py_err_str: Py<PyAny> = Python::with_gil(|py| err_str.to_object(py));
-        PyException::new_err(py_err_str)
+        PyException::new_err(err.0)
       }
     }
 
@@ -293,7 +295,7 @@ fn generate_context_code() -> TokenStream {
     #[pymethods]
     impl Context {
       #[new]
-      #[args(provenance = "\"unit\"", top_k = "None", wmc_with_disjunctions = "False")]
+      #[pyo3(signature = (provenance = "unit", top_k = None, wmc_with_disjunctions = false))]
       fn new(provenance: &str, top_k: Option<usize>, wmc_with_disjunctions: bool) -> PyResult<Self> {
         let top_k = top_k.unwrap_or(3);
         match provenance {
@@ -302,7 +304,7 @@ fn generate_context_code() -> TokenStream {
           "addmultprob" => Ok(Self { ctx: ContextEnum::AddMultProb(StaticContext::new(add_mult_prob::AddMultProbProvenance::default())) }),
           "diffminmaxprob" => Ok(Self { ctx: ContextEnum::DiffMinMaxProb(StaticContext::new(diff_min_max_prob::DiffMinMaxProbProvenance::default())) }),
           "difftopkproofs" => Ok(Self { ctx: ContextEnum::DiffTopKProofs(StaticContext::new(diff_top_k_proofs::DiffTopKProofsProvenance::new(top_k, wmc_with_disjunctions))) }),
-          "difftopbottomkclauses" => Ok(Self { ctx: ContextEnum::DiffTopBottomKClauses(StaticContext::new(diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance::new(top_k))) }),
+          "difftopbottomkclauses" => Ok(Self { ctx: ContextEnum::DiffTopBottomKClauses(StaticContext::new(diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance::new(top_k, wmc_with_disjunctions))) }),
           p => Err(PyErr::from(BindingError(format!("Unknown provenance `{}`", p.to_string())))),
         }
       }
@@ -318,7 +320,7 @@ fn generate_context_code() -> TokenStream {
         }
       }
 
-      fn add_facts(&mut self, r: &str, facts: &PyList) -> PyResult<()> {
+      fn add_facts(&mut self, r: &str, facts: &Bound<'_, PyList>) -> PyResult<()> {
         let res = match &mut self.ctx {
           ContextEnum::Unit(c) => c.add_py_facts(r, facts),
           ContextEnum::MinMaxProb(c) => c.add_py_facts(r, facts),
@@ -341,19 +343,19 @@ fn generate_context_code() -> TokenStream {
         }
       }
 
-      fn run_batch_parallel(&self, inputs: HashMap<String, Vec<&PyList>>, outputs: Vec<&str>) -> PyResult<Vec<(Option<Vec<Py<PyAny>>>, Vec<Vec<Py<PyAny>>>)>> {
+      fn run_batch_parallel(&self, py: Python<'_>, inputs: HashMap<String, Vec<Bound<'_, PyList>>>, outputs: Vec<String>) -> PyResult<Vec<(Option<Vec<Py<PyAny>>>, Vec<Vec<Py<PyAny>>>)>> {
         let res = match &self.ctx {
-          ContextEnum::Unit(c) => run_batch_parallel(c, inputs, outputs),
-          ContextEnum::MinMaxProb(c) => run_batch_parallel(c, inputs, outputs),
-          ContextEnum::AddMultProb(c) => run_batch_parallel(c, inputs, outputs),
-          ContextEnum::DiffMinMaxProb(c) => run_batch_parallel(c, inputs, outputs),
-          ContextEnum::DiffTopKProofs(c) => run_batch_parallel(c, inputs, outputs),
-          ContextEnum::DiffTopBottomKClauses(c) => run_batch_parallel(c, inputs, outputs),
+          ContextEnum::Unit(c) => run_batch_parallel(py, c, inputs, outputs),
+          ContextEnum::MinMaxProb(c) => run_batch_parallel(py, c, inputs, outputs),
+          ContextEnum::AddMultProb(c) => run_batch_parallel(py, c, inputs, outputs),
+          ContextEnum::DiffMinMaxProb(c) => run_batch_parallel(py, c, inputs, outputs),
+          ContextEnum::DiffTopKProofs(c) => run_batch_parallel(py, c, inputs, outputs),
+          ContextEnum::DiffTopBottomKClauses(c) => run_batch_parallel(py, c, inputs, outputs),
         };
         res.map_err(PyErr::from)
       }
 
-      fn run_batch_non_parallel(&self, inputs: HashMap<String, Vec<&PyList>>, outputs: Vec<&str>) -> PyResult<Vec<(Option<Vec<Py<PyAny>>>, Vec<Vec<Py<PyAny>>>)>> {
+      fn run_batch_non_parallel(&self, inputs: HashMap<String, Vec<Bound<'_, PyList>>>, outputs: Vec<String>) -> PyResult<Vec<(Option<Vec<Py<PyAny>>>, Vec<Vec<Py<PyAny>>>)>> {
         let res = match &self.ctx {
           ContextEnum::Unit(c) => run_batch_non_parallel(c, inputs, outputs),
           ContextEnum::MinMaxProb(c) => run_batch_non_parallel(c, inputs, outputs),
@@ -383,9 +385,10 @@ fn generate_context_code() -> TokenStream {
 fn generate_helper_functions() -> TokenStream {
   quote! {
     fn run_batch_parallel<C>(
+      py: Python<'_>,
       c: &StaticContext<C>,
-      inputs: HashMap<String, Vec<&PyList>>,
-      outputs: Vec<&str>,
+      inputs: HashMap<String, Vec<Bound<'_, PyList>>>,
+      outputs: Vec<String>,
     ) -> Result<Vec<(Option<Vec<Py<PyAny>>>, Vec<Vec<Py<PyAny>>>)>, BindingError>
     where
       C: PythonProvenance + std::marker::Sync,
@@ -400,13 +403,13 @@ fn generate_helper_functions() -> TokenStream {
         .into_iter()
         .map(|(r, batch)| {
           let ty = c.edb.type_of(&r).ok_or(BindingError(format!("Unknown relation `{}`", r)))?;
-          let prep_batch = batch.into_iter().map(|facts| C::process_typed_py_facts(facts, &ty)).collect::<Result<_, BindingError>>()?;
+          let prep_batch = batch.into_iter().map(|facts| C::process_typed_py_facts(&facts, &ty)).collect::<Result<_, BindingError>>()?;
           Ok((r, prep_batch))
         })
         .collect::<Result<HashMap<String, Vec<Vec<(Option<C::InputTag>, Tuple)>>>, BindingError>>()?;
 
       // Actually execute the program in parallel
-      let base_results = (0..batch_size)
+      let base_results = py.detach(|| (0..batch_size)
         .into_par_iter()
         .map(|i| {
           let mut temp_ctx = c.clone();
@@ -418,24 +421,15 @@ fn generate_helper_functions() -> TokenStream {
           let relations = outputs.iter().map(|o| temp_ctx.relation(o)).collect::<Result<Vec<_>, _>>()?;
           Ok((input_tags, relations))
         })
-        .collect::<Result<Vec<_>, BindingError>>()?;
+        .collect::<Result<Vec<_>, BindingError>>())?;
 
-      // Recover python collection
-      let results = base_results
-        .into_iter()
-        .map(|(input_tags, relations)| {
-          (input_tags, relations.into_iter().map(|rs| rs.into_iter().map(C::to_output_py_fact).collect()).collect())
-        })
-        .collect();
-
-      // Return
-      Ok(results)
+      to_python_batch::<C>(base_results)
     }
 
     fn run_batch_non_parallel<C>(
       c: &StaticContext<C>,
-      inputs: HashMap<String, Vec<&PyList>>,
-      outputs: Vec<&str>,
+      inputs: HashMap<String, Vec<Bound<'_, PyList>>>,
+      outputs: Vec<String>,
     ) -> Result<Vec<(Option<Vec<Py<PyAny>>>, Vec<Vec<Py<PyAny>>>)>, BindingError>
     where
       C: PythonProvenance,
@@ -447,7 +441,7 @@ fn generate_helper_functions() -> TokenStream {
         .into_iter()
         .map(|(r, batch)| {
           let ty = c.edb.type_of(&r).ok_or(BindingError(format!("Unknown relation `{}`", r)))?;
-          let prep_batch = batch.into_iter().map(|facts| C::process_typed_py_facts(facts, &ty)).collect::<Result<_, BindingError>>()?;
+          let prep_batch = batch.into_iter().map(|facts| C::process_typed_py_facts(&facts, &ty)).collect::<Result<_, BindingError>>()?;
           Ok((r, prep_batch))
         })
         .collect::<Result<HashMap<String, Vec<Vec<(Option<C::InputTag>, Tuple)>>>, BindingError>>()?;
@@ -467,47 +461,61 @@ fn generate_helper_functions() -> TokenStream {
         })
         .collect::<Result<Vec<_>, BindingError>>()?;
 
-      // Recover python collection
-      let results = base_results
-        .into_iter()
-        .map(|(input_tags, relations)| {
-          (input_tags, relations.into_iter().map(|rs| rs.into_iter().map(C::to_output_py_fact).collect()).collect())
-        })
-        .collect();
-
-      // Return
-      Ok(results)
+      to_python_batch::<C>(base_results)
     }
 
-    fn to_python_tuple(tup: &Tuple) -> Py<PyAny> {
+    fn to_python_batch<C: PythonProvenance>(
+      batch: Vec<(Option<Vec<Py<PyAny>>>, Vec<Vec<(C::OutputTag, Tuple)>>)>,
+    ) -> Result<Vec<(Option<Vec<Py<PyAny>>>, Vec<Vec<Py<PyAny>>>)>, BindingError> {
+      batch
+        .into_iter()
+        .map(|(input_tags, relations)| {
+          let relations = relations
+            .into_iter()
+            .map(|rs| rs.into_iter().map(C::to_output_py_fact).collect())
+            .collect::<PyResult<_>>()?;
+          Ok((input_tags, relations))
+        })
+        .collect()
+    }
+
+    fn to_py<T: for<'py> IntoPyObject<'py>>(value: T) -> PyResult<Py<PyAny>> {
+      Python::attach(|py| value.into_py_any(py))
+    }
+
+    fn to_python_tuple(tup: &Tuple) -> PyResult<Py<PyAny>> {
       match tup {
-        Tuple::Tuple(t) => Python::with_gil(|py| PyTuple::new(py, t.iter().map(to_python_tuple).collect::<Vec<_>>()).into()),
+        Tuple::Tuple(t) => {
+          let elems = t.iter().map(to_python_tuple).collect::<PyResult<Vec<_>>>()?;
+          Python::attach(|py| Ok(PyTuple::new(py, elems)?.into_any().unbind()))
+        }
         Tuple::Value(v) => {
           use Value::*;
           match v {
-            I8(i) => Python::with_gil(|py| i.to_object(py)),
-            I16(i) => Python::with_gil(|py| i.to_object(py)),
-            I32(i) => Python::with_gil(|py| i.to_object(py)),
-            I64(i) => Python::with_gil(|py| i.to_object(py)),
-            I128(i) => Python::with_gil(|py| i.to_object(py)),
-            ISize(i) => Python::with_gil(|py| i.to_object(py)),
-            U8(i) => Python::with_gil(|py| i.to_object(py)),
-            U16(i) => Python::with_gil(|py| i.to_object(py)),
-            U32(i) => Python::with_gil(|py| i.to_object(py)),
-            U64(i) => Python::with_gil(|py| i.to_object(py)),
-            U128(i) => Python::with_gil(|py| i.to_object(py)),
-            USize(i) => Python::with_gil(|py| i.to_object(py)),
-            F32(f) => Python::with_gil(|py| f.to_object(py)),
-            F64(f) => Python::with_gil(|py| f.to_object(py)),
-            Char(c) => Python::with_gil(|py| c.to_object(py)),
-            Bool(b) => Python::with_gil(|py| b.to_object(py)),
-            Str(s) => Python::with_gil(|py| s.to_object(py)),
-            String(s) => Python::with_gil(|py| s.to_object(py)),
+            I8(i) => to_py(*i),
+            I16(i) => to_py(*i),
+            I32(i) => to_py(*i),
+            I64(i) => to_py(*i),
+            I128(i) => to_py(*i),
+            ISize(i) => to_py(*i),
+            U8(i) => to_py(*i),
+            U16(i) => to_py(*i),
+            U32(i) => to_py(*i),
+            U64(i) => to_py(*i),
+            U128(i) => to_py(*i),
+            USize(i) => to_py(*i),
+            F32(f) => to_py(*f),
+            F64(f) => to_py(*f),
+            Char(c) => to_py(*c),
+            Bool(b) => to_py(*b),
+            Str(s) => to_py(*s),
+            String(s) => to_py(s.as_str()),
             Symbol(_) => unimplemented!(),
             SymbolString(_) => unimplemented!(),
             DateTime(_) => unimplemented!(),
             Duration(_) => unimplemented!(),
-            Entity(i) => Python::with_gil(|py| i.to_object(py)),
+            Entity(i) => to_py(*i),
+            EntityString(_) => unimplemented!(),
             Tensor(_) => unimplemented!(),
             TensorValue(_) => unimplemented!(),
           }
@@ -515,17 +523,17 @@ fn generate_helper_functions() -> TokenStream {
       }
     }
 
-    fn from_python_tuple(v: &PyAny, ty: &TupleType) -> PyResult<Tuple> {
+    fn from_python_tuple(v: &Bound<'_, PyAny>, ty: &TupleType) -> PyResult<Tuple> {
       match ty {
         TupleType::Tuple(ts) => {
-          let tup: &PyTuple = v.cast_as()?;
+          let tup = v.cast::<PyTuple>()?;
           if tup.len() == ts.len() {
             let elems = ts
               .iter()
               .enumerate()
               .map(|(i, t)| {
                 let e = tup.get_item(i)?;
-                from_python_tuple(e, t)
+                from_python_tuple(&e, t)
               })
               .collect::<PyResult<Box<_>>>()?;
             Ok(Tuple::Tuple(elems))
@@ -563,43 +571,24 @@ fn generate_helper_functions() -> TokenStream {
 
     #[derive(Clone)]
     pub struct ExtTag {
-      pub tag: Py<PyAny>,
+      tag: Arc<Py<PyAny>>,
     }
 
     impl FromTensor for ExtTag {
-      #[allow(unused)]
-      #[cfg(not(feature = "torch-tensor"))]
-      fn from_tensor(tensor: Tensor) -> Option<Self> {
+      fn from_tensor(_: DynamicExternalTensor) -> Option<Self> {
         None
       }
+    }
 
-      #[cfg(feature = "torch-tensor")]
-      fn from_tensor(tensor: Tensor) -> Option<Self> {
-        use super::torch::*;
-        Python::with_gil(|py| {
-          let py_tensor = PyTensor(tensor.tensor);
-          let py_obj: Py<PyAny> = py_tensor.into_py(py);
-          let ext_tag: ExtTag = py_obj.into();
-          Some(ext_tag)
-        })
+    impl From<&Bound<'_, PyAny>> for ExtTag {
+      fn from(tag: &Bound<'_, PyAny>) -> Self {
+        Self { tag: Arc::new(tag.clone().unbind()) }
       }
     }
 
-    impl From<Py<PyAny>> for ExtTag {
-      fn from(tag: Py<PyAny>) -> Self {
-        Self { tag }
-      }
-    }
-
-    impl From<&PyAny> for ExtTag {
-      fn from(tag: &PyAny) -> Self {
-        Self { tag: tag.into() }
-      }
-    }
-
-    impl Into<Py<PyAny>> for ExtTag {
-      fn into(self) -> Py<PyAny> {
-        self.tag
+    impl From<ExtTag> for Py<PyAny> {
+      fn from(tag: ExtTag) -> Self {
+        Arc::try_unwrap(tag.tag).unwrap_or_else(|tag| Python::attach(|py| tag.clone_ref(py)))
       }
     }
 
@@ -609,49 +598,32 @@ fn generate_helper_functions() -> TokenStream {
 
     impl ExtTagVec for Vec<ExtTag> {
       fn into_vec(self) -> Vec<Py<PyAny>> {
-        self.into_iter().map(|v| v.tag).collect()
-      }
-    }
-
-    pub trait ExtTagOption {
-      fn into_option(self) -> Option<Py<PyAny>>;
-    }
-
-    impl ExtTagOption for Option<ExtTag> {
-      fn into_option(self) -> Option<Py<PyAny>> {
-        self.map(|v| v.tag)
-      }
-    }
-
-    impl ExtTagOption for Option<&ExtTag> {
-      fn into_option(self) -> Option<Py<PyAny>> {
-        self.map(|v| v.tag.clone())
+        self.into_iter().map(Into::into).collect()
       }
     }
 
     trait PythonProvenance: Provenance {
       /// Process a list of python facts while the tuples are typed with `tuple_type`
-      fn process_typed_py_facts(facts: &PyList, tuple_type: &TupleType) -> Result<Vec<(Option<Self::InputTag>, Tuple)>, BindingError> {
-        let facts: Vec<&PyAny> = facts.extract()?;
+      fn process_typed_py_facts(facts: &Bound<'_, PyList>, tuple_type: &TupleType) -> Result<Vec<(Option<Self::InputTag>, Tuple)>, BindingError> {
         facts
-          .into_iter()
+          .iter()
           .map(|fact| {
             let (maybe_py_tag, py_tup) = Self::split_py_fact(fact)?;
-            let tag = Self::process_optional_py_tag(maybe_py_tag)?;
-            let tup = from_python_tuple(py_tup, tuple_type).map_err(|_| BindingError(format!("Cannot parse tuple `{}` with type `{}`", py_tup, tuple_type)))?;
+            let tag = Self::process_optional_py_tag(maybe_py_tag.as_ref())?;
+            let tup = from_python_tuple(&py_tup, tuple_type).map_err(|err| BindingError(format!("Cannot parse tuple `{}` with type `{}`: {}", py_tup, tuple_type, err)))?;
             Ok((tag, tup))
           })
           .collect::<Result<Vec<_>, _>>()
       }
 
       /// Split a python object into (Option<PyTag>, PyTup) pair
-      fn split_py_fact(fact: &PyAny) -> Result<(Option<&PyAny>, &PyAny), BindingError> {
+      fn split_py_fact(fact: Bound<'_, PyAny>) -> Result<(Option<Bound<'_, PyAny>>, Bound<'_, PyAny>), BindingError> {
         let (py_tag, py_tup) = fact.extract()?;
         Ok((py_tag, py_tup))
       }
 
       /// Convert a python object into an optional input tag for this provenance context
-      fn process_optional_py_tag(maybe_py_tag: Option<&PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_optional_py_tag(maybe_py_tag: Option<&Bound<'_, PyAny>>) -> Result<Option<Self::InputTag>, BindingError> {
         if let Some(py_tag) = maybe_py_tag {
           Ok(Self::process_py_tag(py_tag)?)
         } else {
@@ -660,14 +632,14 @@ fn generate_helper_functions() -> TokenStream {
       }
 
       /// Convert a python object into an optional input tag for this provenance context
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError>;
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError>;
 
       /// Convert an output tag into a python object
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny>;
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>>;
 
       /// Convert a fact into a python fact
-      fn to_output_py_fact((tag, tup): (Self::OutputTag, Tuple)) -> Py<PyAny> {
-        Python::with_gil(|py| (Self::to_output_py_tag(&tag), to_python_tuple(&tup)).to_object(py))
+      fn to_output_py_fact((tag, tup): (Self::OutputTag, Tuple)) -> PyResult<Py<PyAny>> {
+        to_py((Self::to_output_py_tag(&tag)?, to_python_tuple(&tup)?))
       }
 
       /// Get input tags
@@ -677,63 +649,62 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for unit::UnitProvenance {
-      fn split_py_fact(fact: &PyAny) -> Result<(Option<&PyAny>, &PyAny), BindingError> {
+      fn split_py_fact(fact: Bound<'_, PyAny>) -> Result<(Option<Bound<'_, PyAny>>, Bound<'_, PyAny>), BindingError> {
         Ok((None, fact))
       }
 
-      fn process_py_tag(_: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(_: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         Ok(None)
       }
 
-      fn to_output_py_tag(_: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| ().to_object(py))
+      fn to_output_py_tag(_: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py(())
       }
 
-      fn to_output_py_fact((_, tup): (Self::OutputTag, Tuple)) -> Py<PyAny> {
+      fn to_output_py_fact((_, tup): (Self::OutputTag, Tuple)) -> PyResult<Py<PyAny>> {
         to_python_tuple(&tup)
       }
     }
 
     impl PythonProvenance for proofs::ProofsProvenance<ArcFamily> {
-      fn process_py_tag(disj_id: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(disj_id: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         let disj_id: usize = disj_id.extract()?;
         Ok(Some(Exclusion::Exclusive(disj_id)))
       }
 
-      fn to_output_py_tag(proofs: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| {
+      fn to_output_py_tag(proofs: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py(
           proofs
             .proofs
             .iter()
             .map(|proof| proof.facts.iter().collect::<Vec<_>>())
-            .collect::<Vec<_>>()
-            .to_object(py)
-        })
+            .collect::<Vec<_>>(),
+        )
       }
     }
 
     impl PythonProvenance for min_max_prob::MinMaxProbProvenance {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         tag.extract().map(Some).map_err(BindingError::from)
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| tag.to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py(tag)
       }
     }
 
     impl PythonProvenance for add_mult_prob::AddMultProbProvenance {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         tag.extract().map(Some).map_err(BindingError::from)
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| tag.to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py(tag)
       }
     }
 
     impl PythonProvenance for top_k_proofs::TopKProofsProvenance<ArcFamily> {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         let (prob, disj_id): (Option<f64>, Option<usize>) = tag.extract().map_err(BindingError::from)?;
         if let Some(prob) = prob {
           Ok(Some((prob, disj_id).into()))
@@ -742,13 +713,13 @@ fn generate_helper_functions() -> TokenStream {
         }
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| tag.to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py(tag)
       }
     }
 
     impl PythonProvenance for top_bottom_k_clauses::TopBottomKClausesProvenance<ArcFamily> {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         let (prob, disj_id): (Option<f64>, Option<usize>) = tag.extract().map_err(BindingError::from)?;
         if let Some(prob) = prob {
           Ok(Some((prob, disj_id).into()))
@@ -757,36 +728,38 @@ fn generate_helper_functions() -> TokenStream {
         }
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| tag.to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py(tag)
       }
     }
 
     impl PythonProvenance for diff_min_max_prob::DiffMinMaxProbProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         let prob: f64 = tag.extract().map_err(BindingError::from)?;
         let tag: ExtTag = tag.into();
         Ok(Some((prob, Some(tag)).into()))
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
         match tag.2 {
-          1 => Python::with_gil(|py| (1, tag.3.as_ref().into_option().unwrap()).to_object(py)),
-          0 => Python::with_gil(|py| (0, tag.0).to_object(py)),
-          _ => Python::with_gil(|py| (-1, tag.3.as_ref().into_option().unwrap()).to_object(py)),
+          0 => to_py((0, tag.0)),
+          sign => {
+            let value = tag.3.clone().ok_or_else(|| PyValueError::new_err("Missing differentiable output tag"))?;
+            to_py((if sign == 1 { 1 } else { -1 }, Py::from(value)))
+          }
         }
       }
     }
 
     impl PythonProvenance for diff_add_mult_prob::DiffAddMultProbProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         let prob: f64 = tag.extract().map_err(BindingError::from)?;
         let tag: ExtTag = tag.into();
         Ok(Some((prob, Some(tag)).into()))
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| (tag.0, tag.1.clone()).to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py((tag.0, tag.1.clone()))
       }
 
       fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
@@ -795,14 +768,14 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for diff_nand_mult_prob::DiffNandMultProbProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         let prob: f64 = tag.extract().map_err(BindingError::from)?;
         let tag: ExtTag = tag.into();
         Ok(Some((prob, Some(tag)).into()))
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| (tag.0, tag.1.clone()).to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py((tag.0, tag.1.clone()))
       }
 
       fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
@@ -811,14 +784,14 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for diff_max_mult_prob::DiffMaxMultProbProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         let prob: f64 = tag.extract().map_err(BindingError::from)?;
         let tag: ExtTag = tag.into();
         Ok(Some((prob, Some(tag)).into()))
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| (tag.0, tag.1.clone()).to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py((tag.0, tag.1.clone()))
       }
 
       fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
@@ -827,14 +800,14 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for diff_nand_min_prob::DiffNandMinProbProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         let prob: f64 = tag.extract()?;
         let tag: ExtTag = tag.into();
         Ok(Some((prob, Some(tag)).into()))
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| (tag.0, tag.1.clone()).to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py((tag.0, tag.1.clone()))
       }
 
       fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
@@ -843,18 +816,18 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for diff_sample_k_proofs::DiffSampleKProofsProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
-        let tag_disj_id: (&PyAny, Option<usize>) = tag.extract()?;
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
+        let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
         if let Some(prob) = tag_disj_id.0.extract()? {
-          let tag: ExtTag = tag_disj_id.0.into();
+          let tag = ExtTag::from(&tag_disj_id.0);
           Ok(Some((prob, tag, tag_disj_id.1).into()))
         } else {
           Ok(None)
         }
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| (tag.0, tag.1.clone()).to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py((tag.0, tag.1.clone()))
       }
 
       fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
@@ -863,18 +836,18 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
-        let tag_disj_id: (&PyAny, Option<usize>) = tag.extract()?;
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
+        let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
         if let Some(prob) = tag_disj_id.0.extract()? {
-          let tag: ExtTag = tag_disj_id.0.into();
+          let tag = ExtTag::from(&tag_disj_id.0);
           Ok(Some((prob, tag, tag_disj_id.1).into()))
         } else {
           Ok(None)
         }
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| (tag.0, tag.1.clone()).to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py((tag.0, tag.1.clone()))
       }
 
       fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
@@ -883,18 +856,18 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &PyAny) -> Result<Option<Self::InputTag>, BindingError> {
-        let tag_disj_id: (&PyAny, Option<usize>) = tag.extract()?;
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
+        let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
         if let Some(prob) = tag_disj_id.0.extract()? {
-          let tag: ExtTag = tag_disj_id.0.into();
+          let tag = ExtTag::from(&tag_disj_id.0);
           Ok(Some((prob, tag, tag_disj_id.1).into()))
         } else {
           Ok(None)
         }
       }
 
-      fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-        Python::with_gil(|py| (tag.0, tag.1.clone()).to_object(py))
+      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
+        to_py((tag.0, tag.1.clone()))
       }
 
       fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {

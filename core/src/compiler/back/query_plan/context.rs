@@ -143,7 +143,12 @@ impl<'a> QueryPlanContext<'a> {
   }
 
   fn pos_atom_arcs(&self, beam_size: usize) -> State {
-    let atom_relations = self.pos_atoms.iter().enumerate().map(|(i, atom)| (i, atom.predicate.clone())).collect();
+    let atom_relations = self
+      .pos_atoms
+      .iter()
+      .enumerate()
+      .map(|(i, atom)| (i, atom.predicate.clone()))
+      .collect();
 
     // If there is no positive atom, return an empty state
     if self.pos_atoms.is_empty() {

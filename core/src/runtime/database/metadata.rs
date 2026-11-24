@@ -25,10 +25,11 @@ pub enum StorageMetadata {
 
 impl StorageMetadata {
   pub fn choices_string() -> String {
-    vec![
-      Self::Sorted,
-      Self::IndexedVec,
-    ].into_iter().map(|m| format!("{:?}", m.to_string())).collect::<Vec<_>>().join(", ")
+    vec![Self::Sorted, Self::IndexedVec]
+      .into_iter()
+      .map(|m| format!("{:?}", m.to_string()))
+      .collect::<Vec<_>>()
+      .join(", ")
   }
 }
 
@@ -55,7 +56,7 @@ impl FromStr for StorageMetadata {
     match s {
       "sorted" => Ok(Self::Sorted),
       "indexed_vec" => Ok(Self::IndexedVec),
-      _ => Err(format!("Unknown storage type `{}`", s))
+      _ => Err(format!("Unknown storage type `{}`", s)),
     }
   }
 }

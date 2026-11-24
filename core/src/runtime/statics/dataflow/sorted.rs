@@ -23,7 +23,7 @@ where
   S: Dataflow<T, Prov>,
 {
   source: S,
-  phantom: PhantomData<(T, Prov)>
+  phantom: PhantomData<(T, Prov)>,
 }
 
 impl<S, T, Prov> Dataflow<T, Prov> for Sorted<S, T, Prov>

@@ -32,10 +32,7 @@ pub struct DynamicSortedBatch<'a, Prov: Provenance> {
 
 impl<'a, Prov: Provenance> DynamicSortedBatch<'a, Prov> {
   pub fn new(src: DynamicBatch<'a, Prov>) -> Self {
-    Self {
-      src,
-      sorted_tgt: None,
-    }
+    Self { src, sorted_tgt: None }
   }
 }
 

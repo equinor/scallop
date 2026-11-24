@@ -8,10 +8,8 @@ use scallop_core::compiler;
 use sclc_core::pylib;
 
 pub fn check_compile_pylib_from_program_string(program_name: &str, program_string: &str) {
-  let tmp_dir = tempfile::tempdir()
-    .expect("Unable to create temporary directory")
-    .keep();
-  let scl_file_dir = tmp_dir.join(format!("{}.scl", program_name));
+  let tmp_dir = tempfile::tempdir().expect("Unable to create temporary directory");
+  let scl_file_dir = tmp_dir.path().join(format!("{}.scl", program_name));
 
   // Write into file_dir
   let mut file = File::create(&scl_file_dir).expect("Unable to create file in temporary directory");
@@ -27,14 +25,14 @@ pub fn check_compile_pylib_from_program_string(program_name: &str, program_strin
       for err in errs {
         eprintln!("{}", err);
       }
-      return;
+      panic!("Unable to compile generated Python library test program");
     }
   };
   let (_, proj_dir) = pylib::generate_pylib_rust_project(&scl_file_dir, opt, &ram);
 
   // Create command for cargo check on proj dir
   let mut cmd = Command::new("cargo");
-  cmd.current_dir(&proj_dir).arg("check");
+  cmd.current_dir(&proj_dir).args(["check", "--message-format=short"]);
 
   // Run the command
   let output = cmd.output().unwrap();

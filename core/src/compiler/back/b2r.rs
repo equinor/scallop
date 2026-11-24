@@ -321,8 +321,15 @@ impl Program {
       input_file,
       output,
       is_goal: rel.attributes.get::<GoalAttribute>().is_some(),
-      scheduler: rel.attributes.get::<SchedulerAttribute>().map(|sa| sa.scheduler.clone()),
-      storage: rel.attributes.get::<StorageAttribute>().map(|attr| attr.metadata.clone()).unwrap_or(StorageMetadata::default()),
+      scheduler: rel
+        .attributes
+        .get::<SchedulerAttribute>()
+        .map(|sa| sa.scheduler.clone()),
+      storage: rel
+        .attributes
+        .get::<StorageAttribute>()
+        .map(|attr| attr.metadata.clone())
+        .unwrap_or(StorageMetadata::default()),
       immutable,
     };
 
@@ -343,13 +350,7 @@ impl Program {
     }
   }
 
-  fn plan_to_ram_update(
-    &self,
-    ctx: &mut B2RContext,
-    head: &Head,
-    plan: &Plan,
-    prefer_in_place: bool,
-  ) -> ram::Update {
+  fn plan_to_ram_update(&self, ctx: &mut B2RContext, head: &Head, plan: &Plan, prefer_in_place: bool) -> ram::Update {
     // Check if the dataflow needs projection and update the dataflow
     let dataflow = match head {
       Head::Atom(head_atom) => {
@@ -738,11 +739,21 @@ impl Program {
   ) -> ram::Dataflow {
     // 1. Select the variables from the goal that comes from the left
     let sub_goal_1 = self.sub_tuple(goal, d1);
-    let sub_dataflow_1 = self.plan_to_ram_dataflow(ctx, &sub_goal_1, d1, prop.with_need_sorted(true).with_is_negative(false));
+    let sub_dataflow_1 = self.plan_to_ram_dataflow(
+      ctx,
+      &sub_goal_1,
+      d1,
+      prop.with_need_sorted(true).with_is_negative(false),
+    );
 
     // 2. Select the variables from the goal that comes from the right
     let sub_goal_2 = self.sub_tuple(goal, d2);
-    let sub_dataflow_2 = self.plan_to_ram_dataflow(ctx, &sub_goal_2, d2, prop.with_need_sorted(true).with_is_negative(false));
+    let sub_dataflow_2 = self.plan_to_ram_dataflow(
+      ctx,
+      &sub_goal_2,
+      d2,
+      prop.with_need_sorted(true).with_is_negative(false),
+    );
 
     // 3. Join the two dataflows
     let joint_sub_goal = VariableTuple::from((sub_goal_1, sub_goal_2));
@@ -1312,7 +1323,7 @@ impl Program {
           if let Some(storage_attr) = rel.attributes.get::<StorageAttribute>() {
             match &storage_attr.metadata {
               StorageMetadata::IndexedVec => Some(rel_name.clone()),
-              _ => None
+              _ => None,
             }
           } else {
             None
@@ -1321,7 +1332,7 @@ impl Program {
           None
         }
       }
-      _ => None
+      _ => None,
     }
   }
 

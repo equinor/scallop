@@ -33,8 +33,11 @@ where
   expect_output_collection(p, idb.get_output_collection_ref(p).unwrap(), e);
 }
 
-pub fn expect_contains_interpret_result_with_runtime_option<T>(s: &str, o: RuntimeEnvironmentOptions, (p, e): (&str, Vec<T>))
-where
+pub fn expect_contains_interpret_result_with_runtime_option<T>(
+  s: &str,
+  o: RuntimeEnvironmentOptions,
+  (p, e): (&str, Vec<T>),
+) where
   T: Into<Tuple> + Clone,
 {
   let prov = unit::UnitProvenance::default();

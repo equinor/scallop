@@ -1,5 +1,5 @@
-use std::collections::*;
 use itertools::Itertools;
+use std::collections::*;
 
 use crate::{common::input_tag::DynamicInputTag, utils::IdAllocator2};
 
@@ -81,7 +81,7 @@ impl Provenance for RealTropicalProofsProvenance {
       Self::InputTag::NewVariable => RealTropicalProofsTag {
         real: 0.0,
         proof: std::iter::once(self.id_allocator.alloc()).collect(),
-      }
+      },
     }
   }
 
@@ -102,7 +102,7 @@ impl Provenance for RealTropicalProofsProvenance {
 
   fn zero(&self) -> Self::Tag {
     Self::Tag {
-      real: std::f64::INFINITY,
+      real: f64::INFINITY,
       proof: BTreeSet::new(),
     }
   }

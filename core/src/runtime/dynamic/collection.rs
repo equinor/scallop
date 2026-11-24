@@ -11,7 +11,7 @@ pub enum DynamicCollection<Prov: Provenance> {
 
 impl<Prov: Provenance> std::fmt::Display for DynamicCollection<Prov>
 where
-  DynamicElement<Prov>: std::fmt::Display
+  DynamicElement<Prov>: std::fmt::Display,
 {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
@@ -24,7 +24,7 @@ where
 
 impl<Prov: Provenance> std::fmt::Debug for DynamicCollection<Prov>
 where
-  DynamicElement<Prov>: std::fmt::Debug
+  DynamicElement<Prov>: std::fmt::Debug,
 {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
@@ -116,7 +116,7 @@ impl<'a, Prov: Provenance> DynamicCollectionRef<'a, Prov> {
 
 impl<'a, Prov: Provenance> std::fmt::Display for DynamicCollectionRef<'a, Prov>
 where
-  DynamicElement<Prov>: std::fmt::Display
+  DynamicElement<Prov>: std::fmt::Display,
 {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {

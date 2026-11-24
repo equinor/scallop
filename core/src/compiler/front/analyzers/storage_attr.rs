@@ -32,24 +32,36 @@ impl StorageAttributeAnalysis {
                 return Some(metadata);
               }
               Err(_) => {
-                self.errors.push(FrontCompileErrorMessage::error()
-                  .msg(&format!("Cannot parse storage type `{}` for @storage. Choose from {}", storage_name, StorageMetadata::choices_string()))
-                  .src(storage_arg.location().clone()));
-                return None
+                self.errors.push(
+                  FrontCompileErrorMessage::error()
+                    .msg(&format!(
+                      "Cannot parse storage type `{}` for @storage. Choose from {}",
+                      storage_name,
+                      StorageMetadata::choices_string()
+                    ))
+                    .src(storage_arg.location().clone()),
+                );
+                return None;
               }
             }
           }
           None => {
-            self.errors.push(FrontCompileErrorMessage::error()
-              .msg(&format!("Expected a string for the first positional argument for @storage"))
-              .src(attr.location().clone()));
+            self.errors.push(
+              FrontCompileErrorMessage::error()
+                .msg(&format!(
+                  "Expected a string for the first positional argument for @storage"
+                ))
+                .src(attr.location().clone()),
+            );
             return None;
           }
         }
       } else {
-        self.errors.push(FrontCompileErrorMessage::error()
-          .msg(&format!("Needs at least one positional argument for @storage"))
-          .src(attr.location().clone()));
+        self.errors.push(
+          FrontCompileErrorMessage::error()
+            .msg(&format!("Needs at least one positional argument for @storage"))
+            .src(attr.location().clone()),
+        );
         return None;
       }
     } else {
@@ -65,9 +77,11 @@ impl NodeVisitor<RelationDecl> for StorageAttributeAnalysis {
         if !self.storage_attrs.contains_key(&pred) {
           self.storage_attrs.insert(pred.clone(), storage.clone());
         } else {
-          self.errors.push(FrontCompileErrorMessage::error()
-            .msg(&format!("@storage double specified on relation `{}`", pred))
-            .src(node.location().clone()));
+          self.errors.push(
+            FrontCompileErrorMessage::error()
+              .msg(&format!("@storage double specified on relation `{}`", pred))
+              .src(node.location().clone()),
+          );
           return;
         }
       }
@@ -83,9 +97,11 @@ impl NodeVisitor<RelationTypeDecl> for StorageAttributeAnalysis {
         if !self.storage_attrs.contains_key(pred) {
           self.storage_attrs.insert(pred.clone(), storage.clone());
         } else {
-          self.errors.push(FrontCompileErrorMessage::error()
-            .msg(&format!("@storage double specified on relation `{}`", pred))
-            .src(node.location().clone()));
+          self.errors.push(
+            FrontCompileErrorMessage::error()
+              .msg(&format!("@storage double specified on relation `{}`", pred))
+              .src(node.location().clone()),
+          );
           return;
         }
       }

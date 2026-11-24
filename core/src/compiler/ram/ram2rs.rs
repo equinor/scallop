@@ -1,4 +1,4 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Literal, TokenStream};
 use quote::{format_ident, quote};
 use std::collections::*;
 
@@ -529,7 +529,7 @@ fn expr_to_rs_expr(expr: &Expr) -> TokenStream {
       if a.len() == 0 {
         quote! { t }
       } else {
-        let indices = a.iter().map(|id| syn::Index::from(id));
+        let indices = a.iter().map(Literal::usize_unsuffixed);
         quote! { t.#(#indices).* }
       }
     }

@@ -85,7 +85,7 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicJoinIndexedVecBatch<'a, Pr
       if let Some((tail, right_tag)) = self.right.get(index) {
         let merged_tag = self.ctx.mult(&left_tag, &right_tag);
         let merged_tup = Tuple::from((key.clone(), tuple[1].clone(), tail));
-        return Some(DynamicElement::new(merged_tup, merged_tag))
+        return Some(DynamicElement::new(merged_tup, merged_tag));
       }
     }
     None

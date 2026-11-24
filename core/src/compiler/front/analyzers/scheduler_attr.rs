@@ -31,14 +31,19 @@ impl SchedulerAttributeAnalysis {
               "dfs" => Scheduler::DFS,
               "astar" => Scheduler::AStar,
               "beam" => {
-                let maybe_beam_size = attr.kw_arg("beam_size").and_then(|av| av.as_integer()).map(|i| i as usize);
+                let maybe_beam_size = attr
+                  .kw_arg("beam_size")
+                  .and_then(|av| av.as_integer())
+                  .map(|i| i as usize);
                 let beam_size = maybe_beam_size.unwrap_or(3);
                 Scheduler::Beam { beam_size }
               }
               n => {
-                self.errors.push(FrontCompileErrorMessage::error()
-                  .msg(&format!("Unknown scheduler `{}` for @scheduler attribute", n))
-                  .src(scheduler_arg.location().clone()));
+                self.errors.push(
+                  FrontCompileErrorMessage::error()
+                    .msg(&format!("Unknown scheduler `{}` for @scheduler attribute", n))
+                    .src(scheduler_arg.location().clone()),
+                );
                 return None;
               }
             };
@@ -46,16 +51,22 @@ impl SchedulerAttributeAnalysis {
             return Some(scheduler);
           }
           None => {
-            self.errors.push(FrontCompileErrorMessage::error()
-              .msg(&format!("Expected a string for the first positional argument for @scheduler"))
-              .src(attr.location().clone()));
+            self.errors.push(
+              FrontCompileErrorMessage::error()
+                .msg(&format!(
+                  "Expected a string for the first positional argument for @scheduler"
+                ))
+                .src(attr.location().clone()),
+            );
             return None;
           }
         }
       } else {
-        self.errors.push(FrontCompileErrorMessage::error()
-          .msg(&format!("Needs at least one positional argument for @scheduler"))
-          .src(attr.location().clone()));
+        self.errors.push(
+          FrontCompileErrorMessage::error()
+            .msg(&format!("Needs at least one positional argument for @scheduler"))
+            .src(attr.location().clone()),
+        );
         return None;
       }
     } else {
@@ -71,9 +82,11 @@ impl NodeVisitor<RuleDecl> for SchedulerAttributeAnalysis {
         if !self.scheduler_attrs.contains_key(&pred) {
           self.scheduler_attrs.insert(pred.clone(), scheduler.clone());
         } else {
-          self.errors.push(FrontCompileErrorMessage::error()
-            .msg(&format!("@scheduler double specified on relation `{}`", pred))
-            .src(node.location().clone()));
+          self.errors.push(
+            FrontCompileErrorMessage::error()
+              .msg(&format!("@scheduler double specified on relation `{}`", pred))
+              .src(node.location().clone()),
+          );
           return;
         }
       }
@@ -89,9 +102,11 @@ impl NodeVisitor<RelationTypeDecl> for SchedulerAttributeAnalysis {
         if !self.scheduler_attrs.contains_key(pred) {
           self.scheduler_attrs.insert(pred.clone(), scheduler.clone());
         } else {
-          self.errors.push(FrontCompileErrorMessage::error()
-            .msg(&format!("@scheduler double specified on relation `{}`", pred))
-            .src(node.location().clone()));
+          self.errors.push(
+            FrontCompileErrorMessage::error()
+              .msg(&format!("@scheduler double specified on relation `{}`", pred))
+              .src(node.location().clone()),
+          );
           return;
         }
       }

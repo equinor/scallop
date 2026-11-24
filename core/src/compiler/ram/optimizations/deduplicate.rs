@@ -17,7 +17,6 @@ pub fn deduplicate_within_stratum(stratum: &mut Stratum) -> bool {
   // 1. Find temporary relations with the same update
   for (i, update_i) in stratum.updates.iter().enumerate() {
     for (j, update_j) in stratum.updates.iter().enumerate() {
-
       // Check if the dataflow of the update looks exactly the same
       if i != j && update_i.dataflow == update_j.dataflow {
         let head_i = &update_i.target;
@@ -108,21 +107,16 @@ impl EquivalentRelations {
         self.sets[eq_set_id_1].extend(relations.into_iter());
       }
     } else if contains_r1.is_some() {
-
       // Insert the second into the equivalence set
       let eq_set_id = contains_r1.unwrap();
       self.eq_map.insert(r2.to_string(), eq_set_id);
       self.sets[eq_set_id].insert(r2.to_string());
-
     } else if contains_r2.is_some() {
-
       // Insert the first into the equivalence set
       let eq_set_id = contains_r2.unwrap();
       self.eq_map.insert(r1.to_string(), eq_set_id);
       self.sets[eq_set_id].insert(r1.to_string());
-
     } else {
-
       // Create a new equivalence set
       let eq_set_id = self.sets.len();
       let eq_set = vec![r1.to_string(), r2.to_string()].into_iter().collect();
