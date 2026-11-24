@@ -508,8 +508,8 @@ fn value_type_to_rs_type(ty: &ValueType) -> TokenStream {
     ValueType::Str => quote! { &'static str },
     ValueType::String => quote! { String },
     ValueType::Symbol => unimplemented!(),
-    ValueType::DateTime => quote! { DateTime<Utc> },
-    ValueType::Duration => quote! { Duration },
+    ValueType::DateTime => quote! { scallop_core::common::value::DateTime },
+    ValueType::Duration => quote! { scallop_core::common::duration::Duration },
     ValueType::Entity => quote! { u64 },
     ValueType::Tensor => unimplemented!(),
   }

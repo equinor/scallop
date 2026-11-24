@@ -160,11 +160,11 @@ In the following example, we specify the `DateTime` values using the `t`-quoted-
 rel event_dates = {("enroll", t"2020-01-01"), ("finish", t"2020-03-01")}
 ```
 
-The dates will be all transformed into UTC time-zone.
-When the date part is specified and the time is not specified, we will fill the time `00:00:00 UTC`.
-When the time is specified but the date is not, we will use the current date when the program is invoked.
-Any reasonable date-time format are acceptable, common ones include
+Scallop normalizes dates and times to UTC. Input without an explicit offset is interpreted as UTC.
+A date without a time defaults to midnight, and a time without a date uses the current date.
+Scallop accepts ISO 8601, RFC 2822, and common written date and time formats, including:
 
+- `t"2019-11-29T16:08:05Z"`
 - `t"2019-11-29 08:08:05-08"`
 - `t"4/8/2014 22:05"`
 - `t"September 17, 2012 10:09am"`
@@ -177,7 +177,8 @@ Any reasonable date-time format are acceptable, common ones include
 rel event_durations = {("e1", d"12 days"), ("e2", d"15 days 20 seconds")}
 ```
 
-The string can contain numbers followed by their units.
+The string can contain numbers followed by their units, or use ISO 8601, such as `d"P1M3DT4H"`.
+In the number-and-unit form, individual terms can be negative, as in `d"1 day -15 minutes"`.
 When specifying durations, the following units are accepted:
 
 - nanoseconds (`n`)

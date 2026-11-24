@@ -14,7 +14,6 @@ members = [
 
   # Additional dependencies
   "lib/astnode-derive",
-  "lib/parse_relative_duration",
   "lib/sdd",
 
   # Laboratory

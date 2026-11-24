@@ -1,5 +1,5 @@
 use super::*;
-use chrono::Datelike;
+use jiff::tz::Offset;
 
 /// DateTime YMD extraction foreign predicate
 ///
@@ -47,9 +47,14 @@ impl ForeignPredicate for DateTimeYMD {
     assert_eq!(bounded.len(), 1);
     match &bounded[0] {
       Value::DateTime(dt) => {
+        let date = Offset::UTC.to_datetime(*dt).date();
         vec![(
           DynamicInputTag::None,
-          vec![Value::from(dt.year()), Value::from(dt.month()), Value::from(dt.day())],
+          vec![
+            Value::I32(i32::from(date.year())),
+            Value::U32(date.month() as u32),
+            Value::U32(date.day() as u32),
+          ],
         )]
       }
       _ => panic!("Bounded argument is not a DateTime instance"),

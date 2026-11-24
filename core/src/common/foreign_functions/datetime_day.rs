@@ -1,4 +1,4 @@
-use chrono::Datelike;
+use jiff::tz::Offset;
 
 use super::*;
 
@@ -30,7 +30,7 @@ impl ForeignFunction for DateTimeDay {
 
   fn execute(&self, args: Vec<Value>) -> Option<Value> {
     match &args[0] {
-      Value::DateTime(d) => Some(Value::U32(d.day())),
+      Value::DateTime(d) => Some(Value::U32(Offset::UTC.to_datetime(*d).day() as u32)),
       _ => None,
     }
   }

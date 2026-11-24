@@ -1,4 +1,4 @@
-use chrono::Datelike;
+use jiff::tz::Offset;
 
 use super::*;
 
@@ -30,7 +30,7 @@ impl ForeignFunction for DateTimeYear {
 
   fn execute(&self, args: Vec<Value>) -> Option<Value> {
     match &args[0] {
-      Value::DateTime(d) => Some(Value::I32(d.year())),
+      Value::DateTime(d) => Some(Value::I32(i32::from(Offset::UTC.to_datetime(*d).year()))),
       _ => None,
     }
   }

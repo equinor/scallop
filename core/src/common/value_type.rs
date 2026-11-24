@@ -2,6 +2,7 @@ use serde::*;
 
 use crate::utils;
 
+use super::duration::Duration;
 use super::tuple::*;
 use super::value::*;
 
@@ -609,12 +610,12 @@ impl FromType<String> for ValueType {
   }
 }
 
-impl FromType<chrono::DateTime<chrono::Utc>> for ValueType {
+impl FromType<DateTime> for ValueType {
   fn from_type() -> Self {
     Self::DateTime
   }
 }
-impl FromType<chronoutil::RelativeDuration> for ValueType {
+impl FromType<Duration> for ValueType {
   fn from_type() -> Self {
     Self::Duration
   }
