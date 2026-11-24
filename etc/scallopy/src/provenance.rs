@@ -188,9 +188,21 @@ impl PythonProvenance for top_bottom_k_clauses::TopBottomKClausesProvenance<ArcF
   }
 }
 
+fn extract_diff_probability(tag: &Bound<'_, PyAny>) -> PyResult<f64> {
+  if !tag.is_instance_of::<PyFloat>() && !tag.is_instance_of::<PyInt>() {
+    let modules = tag.py().import("sys")?.getattr("modules")?;
+    if let Some(torch) = modules.cast::<PyDict>()?.get_item("torch")? {
+      if !torch.is_none() && tag.is_instance(&torch.getattr("Tensor")?)? {
+        return tag.call_method0("item")?.extract();
+      }
+    }
+  }
+  tag.extract()
+}
+
 impl PythonProvenance for diff_min_max_prob::DiffMinMaxProbProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let prob: f64 = tag.extract()?;
+    let prob = extract_diff_probability(tag)?;
     let tag: ExtTag = tag.into();
     Ok(Some((prob, Some(tag)).into()))
   }
@@ -213,7 +225,7 @@ impl PythonProvenance for diff_min_max_prob::DiffMinMaxProbProvenance<ExtTag, Ar
 
 impl PythonProvenance for diff_add_mult_prob::DiffAddMultProbProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let prob: f64 = tag.extract()?;
+    let prob = extract_diff_probability(tag)?;
     let tag: ExtTag = tag.into();
     Ok(Some((prob, Some(tag)).into()))
   }
@@ -232,7 +244,7 @@ impl PythonProvenance for diff_add_mult_prob::DiffAddMultProbProvenance<ExtTag, 
 
 impl PythonProvenance for diff_nand_mult_prob::DiffNandMultProbProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let prob: f64 = tag.extract()?;
+    let prob = extract_diff_probability(tag)?;
     let tag: ExtTag = tag.into();
     Ok(Some((prob, Some(tag)).into()))
   }
@@ -251,7 +263,7 @@ impl PythonProvenance for diff_nand_mult_prob::DiffNandMultProbProvenance<ExtTag
 
 impl PythonProvenance for diff_max_mult_prob::DiffMaxMultProbProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let prob: f64 = tag.extract()?;
+    let prob = extract_diff_probability(tag)?;
     let tag: ExtTag = tag.into();
     Ok(Some((prob, Some(tag)).into()))
   }
@@ -270,7 +282,7 @@ impl PythonProvenance for diff_max_mult_prob::DiffMaxMultProbProvenance<ExtTag, 
 
 impl PythonProvenance for diff_nand_min_prob::DiffNandMinProbProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let prob: f64 = tag.extract()?;
+    let prob = extract_diff_probability(tag)?;
     let tag: ExtTag = tag.into();
     Ok(Some((prob, Some(tag)).into()))
   }
@@ -290,7 +302,8 @@ impl PythonProvenance for diff_nand_min_prob::DiffNandMinProbProvenance<ExtTag, 
 impl PythonProvenance for diff_sample_k_proofs::DiffSampleKProofsProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
     let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
-    if let Some(prob) = tag_disj_id.0.extract()? {
+    if !tag_disj_id.0.is_none() {
+      let prob = extract_diff_probability(&tag_disj_id.0)?;
       let tag: ExtTag = (&tag_disj_id.0).into();
       Ok(Some((prob, tag, tag_disj_id.1).into()))
     } else {
@@ -313,7 +326,8 @@ impl PythonProvenance for diff_sample_k_proofs::DiffSampleKProofsProvenance<ExtT
 impl PythonProvenance for diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
     let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
-    if let Some(prob) = tag_disj_id.0.extract()? {
+    if !tag_disj_id.0.is_none() {
+      let prob = extract_diff_probability(&tag_disj_id.0)?;
       let tag: ExtTag = (&tag_disj_id.0).into();
       Ok(Some((prob, tag, tag_disj_id.1).into()))
     } else {
@@ -336,7 +350,8 @@ impl PythonProvenance for diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, Ar
 impl PythonProvenance for diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
     let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
-    if let Some(prob) = tag_disj_id.0.extract()? {
+    if !tag_disj_id.0.is_none() {
+      let prob = extract_diff_probability(&tag_disj_id.0)?;
       let tag: ExtTag = (&tag_disj_id.0).into();
       Ok(Some((prob, tag, tag_disj_id.1).into()))
     } else {
@@ -360,7 +375,8 @@ impl PythonProvenance for diff_top_k_proofs_debug::DiffTopKProofsDebugProvenance
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
     let tag_tuple = tag.cast::<PyTuple>()?;
     let prob = tag_tuple.get_item(0)?;
-    if let Some(prob) = prob.extract()? {
+    if !prob.is_none() {
+      let prob = extract_diff_probability(&prob)?;
       let tag_disj_id: (Bound<'_, PyAny>, usize, Option<usize>) = tag.extract()?;
       let tag: ExtTag = (&tag_disj_id.0).into();
       let id: usize = tag_disj_id.1.into();

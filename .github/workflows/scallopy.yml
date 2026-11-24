@@ -24,8 +24,10 @@ jobs:
           version: "0.13.9"
           python-version: ${{ matrix.python-version }}
           activate-environment: true
-      - name: Install CPU PyTorch
-        run: uv pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0
+      - name: Install NumPy and CPU PyTorch
+        run: |
+          uv pip install "numpy>=2.4.6,<3"
+          uv pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0
       - name: Build and install Scallopy
         run: uv pip install --config-setting build-args=--locked ./etc/scallopy
       - name: Test

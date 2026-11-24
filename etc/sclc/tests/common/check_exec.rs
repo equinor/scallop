@@ -10,7 +10,7 @@ use sclc_core::exec;
 pub fn check_compile_exec_from_program_string(program_name: &str, program_string: &str) {
   let tmp_dir = tempfile::tempdir()
     .expect("Unable to create temporary directory")
-    .into_path();
+    .keep();
   let scl_file_dir = tmp_dir.join(format!("{}.scl", program_name));
 
   // Write into file_dir
