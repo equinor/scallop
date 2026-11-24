@@ -1,5 +1,6 @@
 use pyo3::{Bound, Py, PyAny, Python};
 use std::any::Any;
+use std::sync::Arc;
 
 use scallop_core::common::foreign_tensor::*;
 
@@ -7,16 +8,16 @@ use super::super::*;
 
 #[derive(Clone)]
 pub struct TorchTensor {
-  internal: Py<PyAny>,
+  internal: Arc<Py<PyAny>>,
 }
 
 impl TorchTensor {
   pub fn new(p: Py<PyAny>) -> Self {
-    Self { internal: p }
+    Self { internal: p.into() }
   }
 
   pub fn internal(&self) -> Py<PyAny> {
-    self.internal.clone()
+    Python::attach(|py| self.internal.clone_ref(py))
   }
 }
 
@@ -51,12 +52,10 @@ impl ExternalTensor for TorchTensor {
 
 impl PyExternalTensor for TorchTensor {
   fn from_py_value(p: &Bound<'_, PyAny>) -> Self {
-    Self {
-      internal: p.clone().unbind(),
-    }
+    Self::new(p.clone().unbind())
   }
 
   fn to_py_value(&self) -> Py<PyAny> {
-    self.internal.clone()
+    self.internal()
   }
 }

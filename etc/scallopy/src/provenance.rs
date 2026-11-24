@@ -397,8 +397,7 @@ impl PythonProvenance for diff_top_k_proofs_debug::DiffTopKProofsDebugProvenance
 
 impl PythonProvenance for custom_tag::CustomProvenance {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let tag: Py<PyAny> = tag.clone().unbind();
-    Ok(Some(tag))
+    Ok(Some(custom_tag::CustomTag::new(tag.clone().unbind())))
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, _: &Self) -> CollectionEnum<ArcFamily> {
@@ -406,6 +405,6 @@ impl PythonProvenance for custom_tag::CustomProvenance {
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    tag.clone()
+    Python::attach(|py| tag.0.clone_ref(py))
   }
 }

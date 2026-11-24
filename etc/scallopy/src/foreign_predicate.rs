@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pyo3::prelude::*;
 use pyo3::types::*;
 
@@ -13,7 +15,7 @@ use super::tuple::*;
 
 #[derive(Clone)]
 pub struct PythonForeignPredicate {
-  fp: Py<PyAny>,
+  fp: Arc<Py<PyAny>>,
   name: String,
   type_params: Vec<ValueType>,
   types: Vec<ValueType>,
@@ -95,7 +97,7 @@ impl PythonForeignPredicate {
       };
 
       Self {
-        fp,
+        fp: fp.into(),
         name,
         type_params,
         types,

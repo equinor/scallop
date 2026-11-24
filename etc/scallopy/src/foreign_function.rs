@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pyo3::types::*;
 use pyo3::*;
 
@@ -14,7 +16,7 @@ use super::tuple::*;
 /// TODO: Memoization
 #[derive(Clone)]
 pub struct PythonForeignFunction {
-  ff: Py<PyAny>,
+  ff: Arc<Py<PyAny>>,
   suppress_warning: bool,
 }
 
@@ -28,7 +30,10 @@ impl PythonForeignFunction {
         .expect("`suppress_warning` cannot be extracted into boolean")
     });
 
-    Self { ff, suppress_warning }
+    Self {
+      ff: ff.into(),
+      suppress_warning,
+    }
   }
 }
 

@@ -1,14 +1,16 @@
+use std::sync::Arc;
+
 use pyo3::{Py, PyAny, Python};
 use scallop_core::runtime::provenance;
 
 /// The custom tag which holds an arbitrary python object.
 #[derive(Clone, Debug)]
-pub struct CustomTag(pub Py<PyAny>);
+pub struct CustomTag(pub Arc<Py<PyAny>>);
 
 impl CustomTag {
   /// Create a new custom tag with a python object.
   pub fn new(tag: Py<PyAny>) -> Self {
-    Self(tag)
+    Self(tag.into())
   }
 }
 
@@ -23,14 +25,14 @@ impl provenance::Tag for CustomTag {}
 
 /// The custom provenance which is a wrapper of a python class
 #[derive(Clone, Debug)]
-pub struct CustomProvenance(pub Py<PyAny>);
+pub struct CustomProvenance(pub Arc<Py<PyAny>>);
 
 impl provenance::Provenance for CustomProvenance {
   type Tag = CustomTag;
 
-  type InputTag = Py<PyAny>;
+  type InputTag = CustomTag;
 
-  type OutputTag = Py<PyAny>;
+  type OutputTag = CustomTag;
 
   fn name(&self) -> String {
     Python::attach(|py| self.0.call_method(py, "name", (), None).unwrap().to_string())
@@ -38,7 +40,7 @@ impl provenance::Provenance for CustomProvenance {
 
   /// Invoking the provenance's tagging function on the input tag
   fn tagging_fn(&self, i: Self::InputTag) -> Self::Tag {
-    Python::attach(|py| Self::Tag::new(self.0.call_method(py, "tagging_fn", (i,), None).unwrap()))
+    Python::attach(|py| Self::Tag::new(self.0.call_method(py, "tagging_fn", (i.0.bind(py),), None).unwrap()))
   }
 
   /// Invoking the provenance's recover function on an internal tag
@@ -46,9 +48,8 @@ impl provenance::Provenance for CustomProvenance {
     Python::attach(|py| {
       self
         .0
-        .call_method(py, "recover_fn", (t.0.clone(),), None)
-        .unwrap()
-        .extract(py)
+        .call_method(py, "recover_fn", (t.0.bind(py),), None)
+        .map(CustomTag::new)
         .unwrap()
     })
   }
@@ -58,7 +59,7 @@ impl provenance::Provenance for CustomProvenance {
     Python::attach(|py| {
       self
         .0
-        .call_method(py, "discard", (t.0.clone(),), None)
+        .call_method(py, "discard", (t.0.bind(py),), None)
         .unwrap()
         .extract(py)
         .unwrap()
@@ -93,7 +94,7 @@ impl provenance::Provenance for CustomProvenance {
 
   fn add(&self, t1: &Self::Tag, t2: &Self::Tag) -> Self::Tag {
     Python::attach(|py| {
-      let input = (t1.0.clone(), t2.0.clone());
+      let input = (t1.0.bind(py), t2.0.bind(py));
       Self::Tag::new(
         self
           .0
@@ -107,7 +108,7 @@ impl provenance::Provenance for CustomProvenance {
 
   fn mult(&self, t1: &Self::Tag, t2: &Self::Tag) -> Self::Tag {
     Python::attach(|py| {
-      let input = (t1.0.clone(), t2.0.clone());
+      let input = (t1.0.bind(py), t2.0.bind(py));
       Self::Tag::new(
         self
           .0
@@ -121,7 +122,7 @@ impl provenance::Provenance for CustomProvenance {
 
   fn negate(&self, t: &Self::Tag) -> Option<Self::Tag> {
     Python::attach(|py| {
-      let input = (t.0.clone(),);
+      let input = (t.0.bind(py),);
       Some(Self::Tag::new(
         self
           .0
@@ -135,7 +136,7 @@ impl provenance::Provenance for CustomProvenance {
 
   fn saturated(&self, t_old: &Self::Tag, t_new: &Self::Tag) -> bool {
     Python::attach(|py| {
-      let input = (t_old.0.clone(), t_new.0.clone());
+      let input = (t_old.0.bind(py), t_new.0.bind(py));
       self
         .0
         .call_method(py, "saturated", input, None)

@@ -51,7 +51,10 @@ pub fn to_python_value(val: &Value, env: &PythonRuntimeEnvironment) -> Option<Py
     Entity(e) => e.into_py_any(py).ok(),
     EntityString(_) => panic!("[Internal Error] Entity string could not be turned to python value"),
     Tensor(t) => tensor_to_py_object(t.clone()),
-    TensorValue(v) => tensor_to_py_object(env.tensor_registry.eval(v)?),
+    TensorValue(v) => {
+      // The registry can call into Python while holding its lock.
+      tensor_to_py_object(py.detach(|| env.tensor_registry.eval(v))?)
+    }
   })
 }
 
@@ -124,9 +127,9 @@ pub fn from_python_value(v: &Bound<'_, PyAny>, ty: &ValueType, env: &PythonRunti
 
 fn tensor_from_py_object(pyobj: &Bound<'_, PyAny>, env: &PythonRuntimeEnvironment) -> PyResult<Value> {
   let py_tensor = Tensor::from_py_value(pyobj);
-  let symbol = env
-    .tensor_registry
-    .register(DynamicExternalTensor::new(py_tensor))
+  let symbol = pyobj
+    .py()
+    .detach(|| env.tensor_registry.register(DynamicExternalTensor::new(py_tensor)))
     .ok_or(BindingError::CannotRegisterTensor)?;
   Ok(Value::TensorValue(symbol.into()))
 }

@@ -16,6 +16,20 @@ class TestForeignPredicate(unittest.TestCase):
     ctx.run()
     self.assertEqual(list(ctx.relation("r")), [(1,), (2,), (3,), (4,)])
 
+  def test_foreign_predicate_in_parallel_batch(self):
+    @scallopy.foreign_predicate
+    def successor(x: int) -> scallopy.Facts[None, Tuple[int]]:
+      yield (x + 1,)
+
+    ctx = scallopy.ScallopContext()
+    ctx.register_foreign_predicate(successor)
+    ctx.add_relation("input", int)
+    ctx.add_rule("result(y) = input(x) and successor(x, y)")
+    ctx._internal.compile()
+
+    results = ctx._internal.run_batch([["result"], ["result"]], {"input": [[(1,)], [(4,)]]}, True)
+    self.assertEqual([list(collection) for (collection,) in results], [[(2,)], [(5,)]])
+
   def test_fp_entity(self):
     @scallopy.foreign_predicate
     def my_dummy_semantic_parser(s: str) -> scallopy.Facts[None, Tuple[scallopy.Entity]]:
