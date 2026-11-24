@@ -1,21 +1,22 @@
 import scallopy
 import os
+from torch import Tensor
 
 """Code adapted from https://github.com/allenai/visprog.git"""
 
-@scallopy.foreign_function
+@scallopy.foreign_function(arg_types=[Tensor, scallopy.u32, scallopy.u32, scallopy.u32, scallopy.u32])
 def tag_image(
-    img_tensor: scallopy.Tensor,
-    bbox_x: scallopy.u32,
-    bbox_y: scallopy.u32,
-    bbox_w: scallopy.u32,
-    bbox_h: scallopy.u32,
-    label: str = None,
-    color: str = None,
-    width: int = None,
-    font_size: int = None,
-    enlarge_factor: float = None,
-) -> scallopy.Tensor:
+    img_tensor: Tensor,
+    bbox_x: int,
+    bbox_y: int,
+    bbox_w: int,
+    bbox_h: int,
+    label: str | None = None,
+    color: str | None = None,
+    width: int | None = None,
+    font_size: int | None = None,
+    enlarge_factor: float | None = None,
+) -> Tensor:
   from PIL import Image, ImageDraw, ImageFont
   import torch
   import numpy

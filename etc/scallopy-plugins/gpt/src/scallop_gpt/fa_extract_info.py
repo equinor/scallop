@@ -1,11 +1,11 @@
-from typing import *
+from typing import Callable, List, Optional, Tuple
 import re
 import json
 
-import openai
+from openai.types.chat import ChatCompletionAssistantMessageParam, ChatCompletionMessageParam, ChatCompletionUserMessageParam
 import scallopy
 
-from . import ScallopGPTPlugin
+from .plugin import ScallopGPTPlugin, message_text
 
 FA_NAME = "gpt_extract_info"
 ERR_HEAD = f"[@{FA_NAME}]"
@@ -22,8 +22,8 @@ def get_gpt_extract_info(plugin: ScallopGPTPlugin):
     header: str = "",
     prompts: List[str],
     examples: List[Tuple[List[str], List[List[Tuple[str, ...]]]]] = [],
-    model: str = None,
-    cot: List[bool] = None,
+    model: Optional[str] = None,
+    cot: Optional[List[bool]] = None,
     error_retry_limit: int = 1,
     error_retry_message: str = "Sorry, the answer is invalid. We expect you to generate a JSON list.",
     debug: bool = False,
@@ -103,7 +103,7 @@ def get_gpt_extract_info(plugin: ScallopGPTPlugin):
     prompts: List[str],
     examples: List[Tuple[List[str], List[List[Tuple[str, ...]]]]],
     model: Optional[str] = None,
-    cot: List[bool] = None,
+    cot: Optional[List[bool]] = None,
     debug: bool = False,
   ):
     def format_input(args):
@@ -126,6 +126,7 @@ def get_gpt_extract_info(plugin: ScallopGPTPlugin):
       # Check whether we can call GPT
       plugin.assert_can_request()
       plugin.increment_num_performed_request()
+      client = plugin.client()
 
       # The result to return
       result = {}
@@ -134,7 +135,7 @@ def get_gpt_extract_info(plugin: ScallopGPTPlugin):
       if debug: print(f"Processing question: {memoization_key}")
 
       # Current messages
-      current_messages = [
+      current_messages: list[ChatCompletionMessageParam] = [
         {"role": "system", "content": f"{SYS_PROMPT} {header}"},
       ]
 
@@ -157,21 +158,22 @@ def get_gpt_extract_info(plugin: ScallopGPTPlugin):
         call_header = format_input(args) if idx == 0 else ""
         cot_response_content = ""
         if cot_arr[idx]:
-          cot_message = {"role": "user", "content": f"{call_header}{prompt} {COT_PROMPT}"}
-          cot_response = openai.ChatCompletion.create(
+          cot_message: ChatCompletionUserMessageParam = {"role": "user", "content": f"{call_header}{prompt} {COT_PROMPT}"}
+          cot_response = client.chat.completions.create(
             model=local_model,
             messages=current_messages + [cot_message],
             temperature=plugin.temperature())
-          cot_response_content = cot_response["choices"][0]["message"]["content"]
-        current_message = {"role": "user", "content": f"{call_header}{cot_response_content} {prompt}"}
+          cot_response_content = message_text(cot_response.choices[0].message)
+        current_message: ChatCompletionUserMessageParam = {"role": "user", "content": f"{call_header}{cot_response_content} {prompt}"}
         if debug: print(f"> Sending request: {current_message}")
         current_messages.append(current_message)
-        curr_response = openai.ChatCompletion.create(
+        curr_response = client.chat.completions.create(
           model=local_model,
           messages=current_messages,
           temperature=plugin.temperature(),
           response_format={"type": "json_object"})
-        curr_response_message = curr_response["choices"][0]["message"]
+        message = curr_response.choices[0].message
+        curr_response_message: ChatCompletionAssistantMessageParam = {"role": message.role, "content": message_text(message)}
         if debug: print(f"> Obtained response: {curr_response_message}")
         current_messages.append(curr_response_message)
         curr_response_json = parse_response_json(curr_response_message, arg_names[num_bounded:])

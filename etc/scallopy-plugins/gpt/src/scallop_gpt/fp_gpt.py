@@ -1,14 +1,13 @@
-import openai
 import scallopy
 
-from . import ScallopGPTPlugin
+from .plugin import ScallopGPTPlugin, message_text
 
 def get_gpt(plugin: ScallopGPTPlugin):
   # A storage for @gpt foreign predicate
   STORAGE = {}
 
   @scallopy.foreign_predicate
-  def gpt(s: str) -> scallopy.Facts[None, str]:
+  def gpt(s: str) -> scallopy.Facts[None, tuple[str]]:
     # Check if the storage already contains the response
     if s in STORAGE:
       response = STORAGE[s]
@@ -18,7 +17,7 @@ def get_gpt(plugin: ScallopGPTPlugin):
 
       # Memoize the response
       plugin.increment_num_performed_request()
-      response = openai.ChatCompletion.create(
+      response = plugin.client().chat.completions.create(
         model=plugin.model(),
         messages=[{"role": "user", "content": s}],
         temperature=plugin.temperature(),
@@ -26,8 +25,8 @@ def get_gpt(plugin: ScallopGPTPlugin):
       STORAGE[s] = response
 
     # Iterate through all the choices
-    for choice in response["choices"]:
-      result = choice["message"]["content"].strip()
+    for choice in response.choices:
+      result = message_text(choice.message).strip()
       yield (result,)
 
   return gpt

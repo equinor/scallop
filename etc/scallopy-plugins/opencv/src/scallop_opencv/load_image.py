@@ -1,8 +1,9 @@
 import scallopy
+from torch import Tensor
 
 
 @scallopy.foreign_function
-def load_image(image_dir: str) -> scallopy.Tensor:
+def load_image(image_dir: str) -> Tensor:
     # Import
     import torch
     import numpy
@@ -17,7 +18,7 @@ def load_image(image_dir: str) -> scallopy.Tensor:
 
 
 @scallopy.foreign_function
-def load_image_url(image_url: str) -> scallopy.Tensor:
+def load_image_url(image_url: str) -> Tensor:
     import torch
     import numpy
     import requests

@@ -1,14 +1,16 @@
-develop:
-	pip install --editable .
+.PHONY: build install develop test clean
 
-install: build
-	find dist -name "*.whl" -print | xargs pip install --force-reinstall
+develop:
+	$(MAKE) -C .. develop-gpt
+
+install:
+	$(MAKE) -C .. install-gpt
 
 build:
-	python -m build
+	$(MAKE) -C .. build-gpt
 
 test:
-	python tests/test.py
+	uv run --no-project python tests/test.py
 
 clean:
 	rm -rf dist

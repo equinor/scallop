@@ -1,4 +1,4 @@
-from .plugin import ScallopGeminiPlugin
+from .plugin import ScallopGeminiPlugin as ScallopGeminiPlugin
 # import scallopy
 
 # def setup_arg_parser(parser: ArgumentParser):

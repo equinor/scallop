@@ -1,1 +1,1 @@
-from .plip import ScallopPLIPPlugin
+from .plip import ScallopPLIPPlugin as ScallopPLIPPlugin

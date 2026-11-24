@@ -5,8 +5,9 @@ from collections import defaultdict
 import scallopy
 
 from ..plugin import ScallopCodeQLPlugin
+from ._fields import CsvField
 
-FIELDS = {
+FIELDS: dict[str, CsvField] = {
   "source_id": {
     "name": "source_id",
     "type": "usize",
@@ -52,7 +53,7 @@ def get_local_dataflow_edge(arg_names: List[str], arg_types: List[scallopy.AstTy
       if row_id == 0: continue
       try:
         yield tuple([FIELDS[field_name]["retrieve"](row_id, row) for field_name in arg_names])
-      except:
+      except (IndexError, KeyError, ValueError):
         continue
 
   def create_and_cache_dataflow_edge_indices(dataflow_nodes_id_map: DataFlowNodesIdMap, dataflow_edges_csv_dir: str):
@@ -72,7 +73,7 @@ def get_local_dataflow_edge(arg_names: List[str], arg_types: List[scallopy.AstTy
           sink_id = dataflow_nodes_id_map.retrieve_id(file_name, *sink)
           if source_id == sink_id: continue
           dataflow_edge_indices.append((source_id, sink_id))
-        except:
+        except KeyError:
           pass
       return plugin.save_index_csv(DATAFLOW_EDGE_INDICES_NAME, ["source_id", "sink_id"], dataflow_edge_indices)
 

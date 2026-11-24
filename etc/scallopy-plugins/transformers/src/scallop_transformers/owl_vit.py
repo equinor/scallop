@@ -1,10 +1,14 @@
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional
+from collections.abc import Iterator
+from functools import lru_cache
+import logging
 import os
 import torch
 from PIL import Image
 from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
 import scallopy
+from scallopy.utils.image import box_slices
 from scallop_gpu import get_device
 
 FA_NAME = "owl_vit"
@@ -16,58 +20,47 @@ HARD_OBJ_LIMIT = 1000
 FIELDS = {
   "bbox-x": {
     "description": "The x-coordinate of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-y": {
     "description": "The y-coordinate of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-w": {
     "description": "The width of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-h": {
     "description": "The height of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-center-x": {
     "description": "The x coordinate of the center of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-center-y": {
     "description": "The y coordinate of the center of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "cropped-image": {
     "description": "The cropped image (bounded by bounding box)",
-    "type": scallopy.Tensor,
+    "type": "Tensor",
   },
   "class": {
     "description": "The classified label",
-    "type": scallopy.String,
+    "type": "String",
   },
   "area": {
     "description": "The area of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
 }
 
-_OWL_VIT_MODEL = None
-_OWL_VIT_PROCESSOR = None
-
-
-def get_owl_vit_model(checkpoint):
-  global _OWL_VIT_MODEL
-  global _OWL_VIT_PROCESSOR
-
-  if _OWL_VIT_MODEL is None:
-    try:
-      _OWL_VIT_PROCESSOR = OwlViTProcessor.from_pretrained(checkpoint)
-      _OWL_VIT_MODEL = OwlViTForObjectDetection.from_pretrained(checkpoint).to(get_device())
-    except:
-      return None
-
-  return _OWL_VIT_MODEL, _OWL_VIT_PROCESSOR
+@lru_cache(maxsize=1)
+def get_owl_vit_model(checkpoint: str, device: str) -> tuple[OwlViTForObjectDetection, OwlViTProcessor]:
+  processor = OwlViTProcessor.from_pretrained(checkpoint)
+  model = OwlViTForObjectDetection.from_pretrained(checkpoint).to(device)
+  return model, processor
 
 
 @scallopy.foreign_attribute
@@ -96,20 +89,20 @@ def owl_vit(
   arg_types = [ab.ty for ab in relation_decl.arg_bindings]
 
   # Expected input arguments
-  expected_args = [(scallopy.Tensor, "image: Tensor")]
+  expected_args = [("Tensor", "image: Tensor")]
 
   # Object queries
   if object_queries is None:
-    expected_args += [(scallopy.String, "object_queries: String")]
+    expected_args += [("String", "object_queries: String")]
 
   # Object count
   if input_obj_count:
-    expected_args += [(scallopy.u32, "obj_count: u32")]
+    expected_args += [("u32", "obj_count: u32")]
 
   num_bounded = len(expected_args)
 
   # Expected output arguments
-  expected_args += [(scallopy.u32, "id: u32")]
+  expected_args += [("u32", "id: u32")]
 
   # Fields: make sure that all output fields are supported
   assert type(output_fields) == list, f"{ERR_HEAD} The parameter `output_fields` need to be a list"
@@ -143,7 +136,7 @@ def owl_vit(
     output_arg_types=arg_types[num_bounded:],
     tag_type=float,
   )
-  def owl_vit_search(*args) -> scallopy.Facts[float, Tuple[str]]:
+  def owl_vit_search(*args) -> Iterator[tuple[float, tuple[int | str | torch.Tensor, ...]]]:
     # If object_queries is an arg, assume it's a semicolon-separated string
     if object_queries is None and input_obj_count:
       assert len(args) == 3
@@ -166,13 +159,14 @@ def owl_vit(
       input_object_queries = object_queries
       obj_count_limit = limit if limit else HARD_OBJ_LIMIT
 
-    # return type annotation is wrong, should be Tuple[Union[str, int]] but scallop complains
     device = get_device()
-    maybe_owl_vit_model = get_owl_vit_model(checkpoint)
-    if maybe_owl_vit_model is None: return
-    else: owl_vit_model, owl_vit_processor = maybe_owl_vit_model
+    try:
+      owl_vit_model, owl_vit_processor = get_owl_vit_model(checkpoint, device)
+    except (OSError, RuntimeError, ValueError):
+      logging.getLogger(__name__).exception("Failed to load OWL-ViT checkpoint %s on %s", checkpoint, device)
+      return
 
-    img_w, img_h, _ = img.shape
+    img_h, img_w, _ = img.shape
     image = Image.fromarray(img.numpy())
     inputs = owl_vit_processor(text=input_object_queries, images=image, return_tensors="pt").to(device)
 
@@ -184,7 +178,7 @@ def owl_vit(
     target_sizes = torch.Tensor([image.size[::-1]]).to(device)
 
     # Convert outputs (bounding boxes and class logits) to final bounding boxes and scores
-    results = owl_vit_processor.post_process_object_detection(
+    results = owl_vit_processor.image_processor.post_process_object_detection(
         outputs=outputs,
         threshold=score_threshold,
         target_sizes=target_sizes,
@@ -202,13 +196,13 @@ def owl_vit(
       yielded_count += 1
 
       # Basic data
-      final_score = score * score_multiplier if not flatten_probability else torch.ones(1)
+      final_score = float(score) * score_multiplier if not flatten_probability else 1.0
       bbox_raw = [max(round(coord), 0) for coord in box.tolist()]
       bbox_x, bbox_y = bbox_raw[0], bbox_raw[1]
       bbox_w, bbox_h = bbox_raw[2] - bbox_x, bbox_raw[3] - bbox_y
 
       # Output tuple
-      result_tuple = [segment_id]
+      result_tuple: list[int | str | torch.Tensor] = [segment_id]
       for field in output_fields:
         if field == "bbox-x":
           result_tuple.append(bbox_x)
@@ -227,8 +221,8 @@ def owl_vit(
         elif field == "class":
           result_tuple.append(input_object_queries[label])
         elif field == "cropped-image":
-          (x_crop_slice, y_crop_slice) = get_xy_cropping_slices(img_w, img_h, bbox_y, bbox_x, bbox_h, bbox_w, expand_crop_region)
-          cropped_image = img[x_crop_slice, y_crop_slice, :]
+          rows, columns = box_slices(img_h, img_w, bbox_x, bbox_y, bbox_w, bbox_h, expand_crop_region)
+          cropped_image = img[rows, columns, :]
           result_tuple.append(cropped_image)
           if dump_image:
             save_temporary_image(id(img), segment_id, field, cropped_image)
@@ -252,16 +246,4 @@ def save_temporary_image(img_id, i, kind, img_tensor):
   # Dump the image
   file_name = os.path.join(directory, f"{kind}-{i}.jpg")
   img = Image.fromarray(img_tensor.numpy())
-  img.save(open(file_name, "w"))
-
-
-def get_xy_cropping_slices(img_w, img_h, bb_x, bb_y, bb_w, bb_h, expand_crop_region=0):
-  x_slice = get_cropping_slice(img_w, bb_x, bb_w, expand_crop_region)
-  y_slice = get_cropping_slice(img_h, bb_y, bb_h, expand_crop_region)
-  return (x_slice, y_slice)
-
-
-def get_cropping_slice(size, x, w, expand_crop_region):
-  start = max(0, x - expand_crop_region)
-  end = min(size, x + w + expand_crop_region)
-  return slice(start, end)
+  img.save(file_name)

@@ -1,1 +1,1 @@
-from .sam import ScallopSamPlugin
+from .sam import ScallopSamPlugin as ScallopSamPlugin

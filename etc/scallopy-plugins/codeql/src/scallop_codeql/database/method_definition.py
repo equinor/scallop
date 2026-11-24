@@ -1,11 +1,26 @@
+from __future__ import annotations
+
+from collections.abc import Callable
 from typing import List
 import csv
 
 import scallopy
 
 from ..plugin import ScallopCodeQLPlugin
+from ._fields import FieldMetadata
 
-FIELDS = {
+
+class MethodField(FieldMetadata):
+  retrieve: Callable[[int, list[str], ClassDefinition | None], int | str]
+
+
+def _retrieve_class_id(row_id: int, row: list[str], class_def: ClassDefinition | None) -> int:
+  if class_def is None:
+    raise RuntimeError("Class definitions are required for class_id")
+  return class_def.get(row[2], row[1])
+
+
+FIELDS: dict[str, MethodField] = {
   "id": {
     "name": "id",
     "type": "usize",
@@ -19,7 +34,7 @@ FIELDS = {
   "class_id": {
     "name": "class_id",
     "type": "usize",
-    "retrieve": lambda id, row, class_def: class_def.get(row[2], row[1]),
+    "retrieve": _retrieve_class_id,
   },
   "class_name": {
     "name": "class_name",
@@ -78,7 +93,7 @@ def get_method_definition(arg_names: List[str], arg_types: List[scallopy.AstType
       try:
         fact = tuple([FIELDS[field_name]["retrieve"](row_id, row, class_def) for field_name in arg_names])
         yield fact
-      except:
+      except (IndexError, KeyError, ValueError):
         continue
 
   # Return the foreign predicate

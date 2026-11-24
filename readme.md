@@ -12,6 +12,13 @@ Scallop program can be easily integrated in Python and even with a PyTorch learn
 Internally, Scallop is built on a generalized [Provenance Semiring](https://repository.upenn.edu/cgi/viewcontent.cgi?article=1022&context=db_research) framework.
 It allows arbitrary semirings to be configured, supporting Scallop to perform discrete logical reasoning, probabilistic reasoning, and differentiable reasoning.
 
+## Python development
+
+With [uv](https://docs.astral.sh/uv/) installed, run `make lint-python typecheck-python`
+from the repository root. CI runs the same Ruff and `ty` checks on Scallopy
+(including its native extension stubs), the Scallop CLI, and all Python plugins.
+The checks target Python 3.11 and do not require building the native extension.
+
 ## Example
 
 Here is a simple probabilistic DataLog program that is written in Scallop:

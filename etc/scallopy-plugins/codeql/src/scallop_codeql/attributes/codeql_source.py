@@ -1,4 +1,3 @@
-import scallopy
 
 from ..plugin import ScallopCodeQLPlugin
 

@@ -23,7 +23,8 @@ class ScallopCLIPPlugin(scallopy.Plugin):
     parser.add_argument("--clip-model-checkpoint", type=str, default=self._default_clip_model_checkpoint)
 
   def configure(self, args: Dict = {}, unknown_args: List = []):
-    self._clip_model_checkpoint = args["clip_model_checkpoint"]
+    if "clip_model_checkpoint" in args:
+      self._clip_model_checkpoint = args["clip_model_checkpoint"]
 
   def get_clip_model(self, debug=False):
     if self._clip_model is None:
@@ -35,7 +36,7 @@ class ScallopCLIPPlugin(scallopy.Plugin):
         self._clip_model = model
         self._clip_preprocess = preprocess
         if debug:
-          print(f"[scallop-clip] Done!")
+          print("[scallop-clip] Done!")
       except Exception as ex:
         if debug:
           print(ex, file=sys.stderr)

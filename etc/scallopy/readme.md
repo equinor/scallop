@@ -51,6 +51,10 @@ UV_PYTHON=3.14 make init-venv
 make test-scallopy
 ```
 
+Run `make lint-python typecheck-python` from the repository root to check the
+library and native extension stubs, CLI, and all plugins with Ruff and `ty`.
+Both checks match CI, use tools locked by `uv`, and target Python 3.11.
+
 Install experiment dependencies as needed; they are not part of the test lockfile.
 For example, the MNIST experiment uses PyTorch, TorchVision, and `tqdm`:
 

@@ -8,9 +8,47 @@ dev = [
   "numpy>=2.4.6,<3",
   "torch>=2.15,<3",
 ]
+lint = ["ruff>=0.17.6,<0.18"]
+quality = [
+  "clip @ git+https://github.com/openai/CLIP.git",
+  "face-detection",
+  "google-genai>=3.6.1,<4",
+  "openai>=3.58,<4",
+  "opencv-python",
+  "pillow",
+  "prompt-toolkit>=3.0.53,<4",
+  "requests",
+  "segment-anything @ git+https://github.com/facebookresearch/segment-anything.git",
+  "tabulate>=0.10,<1",
+  "transformers",
+  "ty>=0.0.109,<0.1",
+  "types-pyyaml",
+  "types-requests",
+  "types-tabulate",
+]
+
+[tool.ruff]
+target-version = "py311"
+include = [
+  "etc/scallopy/scallopy/**/*.py",
+  "etc/scallopy/scallopy/**/*.pyi",
+  "etc/scallop-cli/scallop/**/*.py",
+  "etc/scallopy-plugins/*/src/**/*.py",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E9", "E722", "F"]
+
+[tool.ty.environment]
+python-version = "3.11"
+extra-paths = ["etc/scallopy", "etc/scallopy-plugins/gpu/src"]
+
+[tool.ty.src]
+include = ["etc/scallopy/scallopy", "etc/scallop-cli/scallop", "etc/scallopy-plugins/*/src"]
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"

@@ -1,4 +1,6 @@
-from typing import Optional, Tuple
+from typing import Optional
+from functools import lru_cache
+import logging
 import torch
 from PIL import Image
 from transformers import ViltProcessor, ViltForQuestionAnswering
@@ -12,22 +14,11 @@ ERR_HEAD = f"[@{FA_NAME}]"
 
 HARD_TOP_LIMIT = 1000
 
-_VILT_MODEL = None
-_VILT_PROCESSOR = None
-
-
-def get_vilt_model(checkpoint):
-  global _VILT_MODEL
-  global _VILT_PROCESSOR
-
-  if _VILT_MODEL is None:
-    try:
-      _VILT_PROCESSOR = ViltProcessor.from_pretrained(checkpoint)
-      _VILT_MODEL = ViltForQuestionAnswering.from_pretrained(checkpoint).to(get_device())
-    except:
-      return None
-
-  return _VILT_MODEL, _VILT_PROCESSOR
+@lru_cache(maxsize=1)
+def get_vilt_model(checkpoint: str, device: str) -> tuple[ViltForQuestionAnswering, ViltProcessor]:
+  processor = ViltProcessor.from_pretrained(checkpoint)
+  model = ViltForQuestionAnswering.from_pretrained(checkpoint).to(device)
+  return model, processor
 
 
 @scallopy.foreign_attribute
@@ -36,7 +27,7 @@ def vilt(
   *,
   question: Optional[str] = None,
   top: int = 5,
-  score_threshold: int = 0.1,
+  score_threshold: float = 0.1,
   checkpoint: str = "dandelin/vilt-b32-finetuned-vqa",
   debug: bool = False
 ):
@@ -75,21 +66,24 @@ def vilt(
 
     img = args[0]
     device = get_device()
-    maybe_vilt_model = get_vilt_model(checkpoint)
-    if maybe_vilt_model is None: return
-    else: vilt_model, vilt_processor = maybe_vilt_model
+    try:
+      vilt_model, vilt_processor = get_vilt_model(checkpoint, device)
+    except (OSError, RuntimeError, ValueError):
+      logging.getLogger(__name__).exception("Failed to load ViLT checkpoint %s on %s", checkpoint, device)
+      return
 
     image = Image.fromarray(img.numpy())
     encoding = vilt_processor(image, input_question, return_tensors="pt").to(device)
     with torch.no_grad(): outputs = vilt_model(**encoding)
 
-    sigmoid = torch.sigmoid(outputs.logits).to(device)[0]
-    sorted_indices = torch.sort(sigmoid, descending=True).indices.to(device)
+    probabilities = outputs.logits[0].sigmoid()
+    scores, indices = probabilities.topk(min(top, probabilities.numel()))
+    labels = vilt_model.config.id2label
+    if labels is None:
+      raise ValueError(f"{ERR_HEAD} checkpoint `{checkpoint}` does not define answer labels")
 
-    for idx_tensor in sorted_indices[:top]:
-      index = idx_tensor.item()
-      score = sigmoid[index].item()
-      answer = vilt_model.config.id2label[index]
+    for score, index in zip(scores.tolist(), indices.tolist()):
+      answer = labels[index]
 
       if debug:
         print((score, (input_question, answer)))

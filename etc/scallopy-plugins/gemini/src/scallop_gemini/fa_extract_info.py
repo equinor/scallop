@@ -1,10 +1,11 @@
-from typing import *
+from typing import Callable, List, Optional, Tuple
 import re
 import json
 from google.genai import types
 import scallopy
 
 from . import ScallopGeminiPlugin
+from ._response import response_text
 
 FA_NAME = "gemini_extract_info"
 ERR_HEAD = f"[@{FA_NAME}]"
@@ -23,7 +24,7 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
     prompts: List[str],
     examples: List[Tuple[List[str], List[List[Tuple[str, ...]]]]] = [],
     model: Optional[str] = None,
-    cot: List[bool] = None,
+    cot: Optional[List[bool]] = None,
     error_retry_limit: int = 1,
     error_retry_message: str = "Sorry, the answer is invalid. We expect you to generate a JSON list.",
     debug: bool = False,
@@ -104,7 +105,7 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
     prompts: List[str],
     examples: List[Tuple[List[str], List[List[Tuple[str, ...]]]]],
     model: Optional[str] = None,
-    cot: List[bool] = None,
+    cot: Optional[List[bool]] = None,
     debug: bool = False,
   ):
     def format_input(args):
@@ -145,11 +146,11 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
           call_header = format_input(bound) if idx == 0 else ""
           current_messages += call_header + prompt + " "
 
-          for arg_values in output_arg_values:
-            output = ""
-            for (arg_name, arg_value) in zip(arg_names[len(args):], arg_values):
-              output += arg_name + ": " + arg_value + " "
-          current_messages += output + "\n"
+          rendered_facts = [
+            "".join(f"{arg_name}: {arg_value} " for arg_name, arg_value in zip(arg_names[len(args):], arg_values))
+            for arg_values in output_arg_values
+          ]
+          current_messages += "\n".join(rendered_facts) + "\n"
         current_messages += "\n"
 
       # Make the subsequent calls to Gemini
@@ -170,7 +171,7 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
           )
 
 
-          cot_response_content = cot_response.candidates[0].content.parts[0].text
+          cot_response_content = response_text(cot_response)
         current_message = call_header + cot_response_content + prompt
         
         if debug: print(f"> Sending request: {current_message}")
@@ -185,7 +186,7 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
               top_p = 0.5,
           ),
         )
-        curr_response_message = curr_response.candidates[0].content.parts[0].text
+        curr_response_message = response_text(curr_response)
 
         if debug: print(f"> Obtained response: {curr_response_message}\n")
         current_messages += curr_response_message

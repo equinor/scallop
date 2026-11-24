@@ -1,10 +1,7 @@
-from typing import *
-
-import openai
 import torch
 
 import scallopy
-from scallop_gpu import get_device
+from scallopy.plugin.utils import get_device
 
 from . import ScallopGPTPlugin
 
@@ -27,7 +24,7 @@ def get_gpt_encoder(plugin: ScallopGPTPlugin):
 
     # Generate foreign function
     @scallopy.foreign_function(name=item.function_decl_name())
-    def encode_text(text: str) -> scallopy.Tensor:
+    def encode_text(text: str) -> torch.Tensor:
       # Check memoization
       if text in STORAGE:
         pass
@@ -39,8 +36,8 @@ def get_gpt_encoder(plugin: ScallopGPTPlugin):
           print(f"{ERR_HEAD} Querying `{model}` for text `{text}`")
 
         # Memoize the response
-        response = openai.Embedding.create(input=[text], model=model)
-        embedding = response['data'][0]['embedding']
+        response = plugin.client().embeddings.create(input=[text], model=model)
+        embedding = response.data[0].embedding
 
         if debug:
           print(f"{ERR_HEAD} Obtaining response: {response}")

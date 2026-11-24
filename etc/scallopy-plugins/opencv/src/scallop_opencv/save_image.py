@@ -1,9 +1,11 @@
-import scallopy
+import logging
 import os
 
+from torch import Tensor
+
 def _save_image(
-    img_tensor: scallopy.Tensor,
-    img_name: str = None,
+    img_tensor: Tensor,
+    img_name: str | None = None,
     save_image_path: str = "",
 ) -> str:
   from PIL import Image
@@ -13,7 +15,7 @@ def _save_image(
 
   # Default name
   if img_name is None:
-    img_name = id(img)
+    img_name = str(id(img))
 
   # First get the directory
   directory = save_image_path
@@ -23,7 +25,8 @@ def _save_image(
 
   # Save the image
   try:
-    img.save(open(file_name, "w"))
+    img.save(file_name)
     return file_name
-  except:
+  except (OSError, ValueError):
+    logging.getLogger(__name__).exception("Failed to save image to %s", file_name)
     return ""

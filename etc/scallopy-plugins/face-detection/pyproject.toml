@@ -1,8 +1,14 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "scallop-face-detection"
 version = "0.0.2"
 dependencies = [
   "face_detection",
+  "numpy",
+  "pillow",
   "torch",
 ]
 

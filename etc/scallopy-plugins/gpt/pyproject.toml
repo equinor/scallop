@@ -1,10 +1,15 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "scallop-gpt"
 version = "0.0.2"
-dependencies = [
-  "openai == 0.28",
-  "torch",
-]
+requires-python = ">=3.10"
+dependencies = ["openai>=3.58,<4"]
+
+[project.optional-dependencies]
+embeddings = ["torch"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

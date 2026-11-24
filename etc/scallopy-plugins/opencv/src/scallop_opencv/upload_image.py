@@ -1,12 +1,12 @@
 import os
 
 import requests
-import scallopy
+from torch import Tensor
 
 from .save_image import _save_image
 
 def _upload_imgur(
-    img_tensor: scallopy.Tensor,
+    img_tensor: Tensor,
     save_image_path: str = "",
 ) -> str:
   img_path = _save_image(img_tensor, save_image_path=save_image_path)

@@ -2,13 +2,14 @@ from google.genai import types
 import scallopy
 
 from . import ScallopGeminiPlugin
+from ._response import candidate_text
 
 def get_gemini(plugin: ScallopGeminiPlugin):
   # A storage for @gemini foreign predicate
   STORAGE = {}
 
   @scallopy.foreign_predicate
-  def gemini(s: str) -> scallopy.Facts[None, str]:
+  def gemini(s: str) -> scallopy.Facts[None, tuple[str]]:
     # Check if the storage already contains the response
     if s in STORAGE:
       response = STORAGE[s]
@@ -31,8 +32,10 @@ def get_gemini(plugin: ScallopGeminiPlugin):
       STORAGE[s] = response
 
     # Iterate through all the choices
+    if not response.candidates:
+      raise ValueError("[scallop_gemini] Response contains no candidates")
     for candidate in response.candidates:
-      result = candidate.content.parts[0].text.strip()
+      result = candidate_text(candidate).strip()
       yield (result,)
 
   return gemini

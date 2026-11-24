@@ -104,6 +104,18 @@ vscode-plugin:
 # ====================================
 # === Project testing and cleaning ===
 
+.PHONY: lint-python typecheck-python lint-scallopy typecheck-scallopy
+
+lint-python:
+	uv run --locked --only-group lint ruff check
+
+typecheck-python:
+	uv run --locked --group quality ty check --error-on-warning
+
+lint-scallopy: lint-python
+
+typecheck-scallopy: typecheck-python
+
 clean:
 	cargo clean
 	make -C etc/scallopy clean
