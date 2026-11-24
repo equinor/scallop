@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import *
+from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple, TypeVar, Union, TYPE_CHECKING
 from copy import deepcopy
 
 # Try import torch; if not there, delegate to something else
@@ -14,10 +14,11 @@ from .input_mapping import InputMapping
 from .function import ForeignFunction
 from .predicate import ForeignPredicate
 from .attribute import ForeignAttributeProcessor
-from .utils import HistoryAction, record_history
-from .sample_type import SAMPLE_TYPE_TOP_K
+from .utils import Counter, HistoryAction, record_history
 from .stdlib import STDLIB
-from .utils import Counter, _map_entity_tuple_to_str_tuple
+
+if TYPE_CHECKING:
+  from .forward import InternalScallopForwardFunction, _OutputMapping
 
 # Main context
 class ScallopContext:
@@ -73,7 +74,7 @@ class ScallopContext:
     # Check if we are creating a forked context or not
     if fork_from is None:
       # Validify provenance; differentiable needs PyTorch
-      if "diff" in provenance and not torch_importer.has_pytorch:
+      if "diff" in provenance and not torch_importer.has_pytorch():
         raise Exception("Attempting to use differentiable provenance but with no PyTorch imported")
 
       # Prepare Python based provenance
@@ -245,7 +246,7 @@ class ScallopContext:
     else:
       self._internal.set_iter_limit(iter_limit)
 
-  def run(self):
+  def run(self) -> None:
     """
     Execute the code under the current context. This operation is incremental
     and might use as many as previous information as possible.
@@ -258,18 +259,29 @@ class ScallopContext:
 
   def run_batch(
     self,
-    inputs: Dict[str, List[Union[Tuple[List[Tuple], Optional[List[List[int]]]], List[Tuple]]]],
+    inputs: Mapping[str, Sequence[Union[Tuple[List[Any], Optional[List[List[int]]]], List[Any]]]],
     output_relation: Union[str, List[str]],
     parallel: bool = False,
-  ):
+  ) -> List[ScallopCollection]:
     """
-    Run the program in batch mode
+    Run the program in batch mode, returning one collection per task.
+    Pass one output relation for all tasks or one name per task.
     """
-    batch_size = len(list(inputs.values())[0])
-    output_relations = output_relation if type(output_relation) == list else [output_relation] * batch_size
-    inputs = {r: [i if type(i) == tuple else (i, None) for i in b] for (r, b) in inputs.items()}
-    internal_collections = self._internal.run_batch(output_relations, inputs, parallel)
-    return [ScallopCollection(self.provenance, coll) for coll in internal_collections]
+    if not inputs:
+      raise ValueError("Batch inputs must contain at least one relation")
+    batch_size = len(next(iter(inputs.values())))
+    output_relations = [output_relation] * batch_size if isinstance(output_relation, str) else output_relation
+    if len(output_relations) != batch_size:
+      raise ValueError(f"Expected {batch_size} output relations, got {len(output_relations)}")
+    batch_inputs = {
+      relation: [
+        self._prepare_facts(relation, *task) if isinstance(task, tuple) else self._prepare_facts(relation, task)
+        for task in tasks
+      ]
+      for relation, tasks in inputs.items()
+    }
+    results = self._internal.run_batch([[r] for r in output_relations], batch_inputs, parallel)
+    return [ScallopCollection(self.provenance, coll) for (coll,) in results]
 
   @record_history
   def import_file(self, file_name: str):
@@ -324,15 +336,15 @@ class ScallopContext:
   def forward_function(
     self,
     output: Optional[str] = None,
-    output_mapping: Optional[Union[List[Tuple], Tuple]] = None,
-    output_mappings: Optional[Dict[str, List[Tuple]]] = None,
-    dispatch: Optional[str] = "parallel",
+    output_mapping: Optional[_OutputMapping] = None,
+    output_mappings: Optional[Dict[str, Optional[_OutputMapping]]] = None,
+    dispatch: str = "parallel",
     debug_provenance: bool = False,
     jit: bool = False,
     jit_name: str = "",
     recompile: bool = False,
     sparse_jacobian: bool = False,
-  ) -> Callable:
+  ) -> InternalScallopForwardFunction:
     """
     Generate a forward function for PyTorch module.
 
@@ -347,12 +359,11 @@ class ScallopContext:
     :param output_mapping: the output mapping for vectorization
     If not specified (i.e. None), will run until fixpoint
     """
-    # Import ScallopForward to avoid circular dependency
-    from .forward import InternalScallopForwardFunction
-
     # Check PyTorch support
-    if not torch_importer.has_pytorch:
+    if not torch_importer.has_pytorch():
       raise Exception("`forward_function` cannot be called when there is no PyTorch")
+
+    from .forward import InternalScallopForwardFunction
 
     # Needs to be a differentiable context
     if "diff" in self.provenance or self.provenance == "custom": pass
@@ -502,9 +513,9 @@ class ScallopContext:
   def add_facts(
     self,
     relation: str,
-    elems: List[Tuple],
+    elems: List[Any],
     disjunctions: Optional[List[List[int]]] = None,
-  ):
+  ) -> None:
     """
     Add facts to the relation under the context. The simple usage is as
     follows:
@@ -538,6 +549,14 @@ class ScallopContext:
     :param disjunctions: the disjunctions
     """
 
+    self._internal.add_facts(relation, self._prepare_facts(relation, elems, disjunctions))
+
+  def _prepare_facts(
+    self,
+    relation: str,
+    elems: List[Any],
+    disjunctions: Optional[List[List[int]]] = None,
+  ) -> List[Tuple[Any, ...]]:
     # First normalize the probability format
     if self.relation_is_non_probabilistic(relation) and self.requires_tag():
       elems = [(None, t) for t in elems]
@@ -549,11 +568,7 @@ class ScallopContext:
       else:
         elems = [(tup,) if type(tup) != tuple else tup for tup in elems]
 
-    # Add disjunction information if present
-    elems = self._process_disjunctive_elements(elems, disjunctions)
-
-    # Add the facts
-    self._internal.add_facts(relation, elems)
+    return self._process_disjunctive_elements(elems, disjunctions)
 
   @record_history
   def add_rule(self, rule: str, tag: Optional[Any] = None, demand: Optional[str] = None):
@@ -636,9 +651,9 @@ class ScallopContext:
     """
     return self._internal.relations(include_hidden=include_hidden)
 
-  def relation_field_names(self, relation: str) -> List[Optional[str]]:
+  def relation_field_names(self, relation: str) -> Optional[List[Optional[str]]]:
     """
-    Get the field names of the relation, if it is declared.
+    Get the field names of the relation, or None if it is not declared.
     Given the following Scallop program
 
     ``` scl
@@ -657,7 +672,7 @@ class ScallopContext:
     """
     Set the relation to be non-probabilistic
     """
-    if type(relation) == list:
+    if isinstance(relation, list):
       for r in relation:
         self._set_relation_non_probabilistic(r, non_probabilistic)
     else:
@@ -760,7 +775,11 @@ class ScallopContext:
     ])
     return self.provenance in PROVENANCE_SUPPORTING_DISJUNCTIONS
 
-  def _process_disjunctive_elements(self, elems, disjunctions):
+  def _process_disjunctive_elements(
+    self,
+    elems: List[Tuple[Any, ...]],
+    disjunctions: Optional[List[List[int]]],
+  ) -> List[Tuple[Any, ...]]:
     processed_elems = [e for e in elems]
 
     # Check if we the provenance supports handling disjunctions

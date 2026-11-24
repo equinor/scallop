@@ -1,7 +1,7 @@
-from .node_location import NodeLocation
-from .ast_node import AstNode
-from .ast_constant_node import AstConstantNode
-from .ast_enum_node import AstEnumNode
-from .ast_struct_node import AstStructNode
-from .ast_type_node import AstTypeNode
-from .ast_variant_node import AstVariantNode
+from .node_location import NodeLocation as NodeLocation
+from .ast_node import AstNode as AstNode
+from .ast_constant_node import AstConstantNode as AstConstantNode
+from .ast_enum_node import AstEnumNode as AstEnumNode
+from .ast_struct_node import AstStructNode as AstStructNode
+from .ast_type_node import AstTypeNode as AstTypeNode
+from .ast_variant_node import AstVariantNode as AstVariantNode

@@ -1,2 +1,2 @@
-from .registry import PluginRegistry
-from .plugin import Plugin
+from .registry import PluginRegistry as PluginRegistry
+from .plugin import Plugin as Plugin

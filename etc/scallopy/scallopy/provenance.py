@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, List
 
 from . import torch_importer
 
@@ -64,13 +64,13 @@ class ScallopProvenance:
     """
     raise Exception("Not implemented")
 
-  def add(self, t1, t2):
+  def add(self, t1, t2, /):
     """
     Perform semiring addition on two tags (`t1` and `t2`)
     """
     raise Exception("Not implemented")
 
-  def mult(self, t1, t2):
+  def mult(self, t1, t2, /):
     """
     Perform semiring multiplication on two tags (`t1` and `t2`)
     """
@@ -101,7 +101,7 @@ class ScallopProvenance:
     if len(elems) > 0: return [elems[0]]
     else: return []
 
-  def collate(self, batch_outputs):
+  def collate(self, batch_outputs, /) -> Any:
     """
     Collate a List of List of tags into potentially a batched output
     """
@@ -123,7 +123,7 @@ class DiffAddMultProb2Semiring(ScallopProvenance):
   """
   def __init__(self):
     super(DiffAddMultProb2Semiring, self).__init__()
-    if not torch_importer.has_pytorch:
+    if not torch_importer.has_pytorch():
       raise Exception("PyTorch unavailable. You can use this semiring only with PyTorch")
 
   def zero(self):
@@ -173,7 +173,7 @@ class DiffNandMultProb2Semiring(ScallopProvenance):
   """
   def __init__(self):
     super(DiffNandMultProb2Semiring, self).__init__()
-    if not torch_importer.has_pytorch:
+    if not torch_importer.has_pytorch():
       raise Exception("PyTorch unavailable. You can use this semiring only with PyTorch")
 
   def zero(self):
@@ -220,7 +220,7 @@ class DiffMaxMultProb2Semiring(ScallopProvenance):
   """
   def __init__(self):
     super(DiffMaxMultProb2Semiring, self).__init__()
-    if not torch_importer.has_pytorch:
+    if not torch_importer.has_pytorch():
       raise Exception("PyTorch unavailable. You can use this semiring only with PyTorch")
 
   def zero(self):

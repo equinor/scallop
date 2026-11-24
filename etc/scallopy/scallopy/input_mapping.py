@@ -1,5 +1,4 @@
-from typing import *
-from functools import reduce
+from typing import Iterator, Literal, Optional, Tuple, List, Dict
 import itertools
 from copy import deepcopy
 
@@ -78,21 +77,26 @@ class InputMapping:
     if self._kind == "dict":
       return tuple([self._mapping[i][j] for (i, j) in enumerate(index)])
     else:
-      return self._mapping[self._mult_dim_index_to_index(index)]
+      return tuple(self._mapping[self._mult_dim_index_to_index(index)])
 
   def all_tuples(self) -> Iterator[Tuple]:
     """Iterate over all the tuples in the input mapping"""
     if self._kind == "list" or self._kind == "tuple" or self.kind == "value":
       for element in self._mapping:
-        yield element
+        yield tuple(element)
     elif self.kind == "dict":
       for element in itertools.product(*self._mapping):
         yield element
 
   def all_indices(self) -> Iterator[Tuple]:
-    return itertools.product(*[list(range(x)) for x in self.shape])
+    return itertools.product(*(range(size) for size in self.shape))
 
-  def process_tensor(self, tensor: torch_importer.Tensor, batched=False, mutual_exclusion_counter=None) -> List:
+  def process_tensor(
+    self,
+    tensor: torch_importer.Tensor,
+    batched: bool = False,
+    mutual_exclusion_counter: Optional[Counter] = None,
+  ) -> List:
     """Process a tensor to produce a list of probabilistic symbols"""
 
     # Check the kind, if there is none
@@ -112,8 +116,8 @@ class InputMapping:
     else:
       raise Exception(f"Tensor shape mismatch: expected {self._shape}, got {tensor.shape}")
 
-  def _process_one_tensor(self, tensor: torch_importer.Tensor, mutual_exclusion_counter: Counter) -> List:
-    inc, exc = InclusiveSet(), ExclusiveSet()
+  def _process_one_tensor(self, tensor: torch_importer.Tensor, mutual_exclusion_counter: Optional[Counter]) -> List:
+    included = set()
 
     # Do sampling
     import torch
@@ -123,12 +127,10 @@ class InputMapping:
           transposed_tensor = tensor.transpose(self.sample_dim, tensor.dim() - 1)
           distributions = torch.distributions.Categorical(transposed_tensor)
           sampled_indices = distributions.sample((self.retain_k,)).transpose(0, transposed_tensor.dim() - 1)
-          for index in self._convert_categorical_sampled_indices(sampled_indices, self.sample_dim):
-            inc.add(index)
+          included.update(self._convert_categorical_sampled_indices(sampled_indices, self.sample_dim))
         elif self.sample_strategy == "top":
           topk_result = torch.topk(tensor, self.retain_k, dim=self.sample_dim)
-          for index in self._convert_topk_sampled_indices(topk_result.indices, self.sample_dim):
-            inc.add(index)
+          included.update(self._convert_topk_sampled_indices(topk_result.indices, self.sample_dim))
         else:
           raise Exception(f"Unknown sample strategy `{self.sample_strategy}`")
       else:
@@ -136,32 +138,36 @@ class InputMapping:
         if self.sample_strategy == "categorical":
           categorical_distr = torch.distributions.Categorical(probs=flat_tensor)
           sampled_indices = categorical_distr.sample((self.retain_k,))
-          for index in sampled_indices:
-            inc.add(self._index_to_mult_dim_index(int(index)))
         elif self.sample_strategy == "top":
-          topk_result = torch.topk(flat_tensor, self.retain_k)
-          for index in topk_result.indices:
-            inc.add(self._index_to_mult_dim_index(int(index)))
+          sampled_indices = torch.topk(flat_tensor, self.retain_k).indices
         else:
           raise Exception(f"Unknown sample strategy `{self.sample_strategy}`")
 
-    # Do thresholding; if the probability is less than the threshold, add the index to the exclusive map
-    if self.retain_threshold is not None:
-      for index in self.all_indices():
-        if tensor[index] < self.retain_threshold:
-          exc.exclude(index)
+        if self.shape:
+          coordinates = torch.unravel_index(sampled_indices, self.shape)
+          included.update(zip(*(axis.tolist() for axis in coordinates)))
+        elif sampled_indices.numel():
+          included.add(())
 
-    # Get a set of filtered indices
-    filtered_indices = [index for index in self.all_indices() if inc.contains(index) and exc.contains(index)]
+    # An empty sample leaves all indices eligible; emit facts in mapping order.
+    threshold = self.retain_threshold
+    filtered_indices = [
+      index for index in self.all_indices()
+      if (not included or index in included) and not (threshold is not None and tensor[index] < threshold)
+    ]
 
     # Add disjunctions
     if self.supports_disjunctions:
       if self.disjunctive:
-        if self.disjunctive_dim is not None:
-          partial_indices = itertools.product(*[range(d) for (i, d) in enumerate(self.shape) if i != self.disjunctive_dim])
+        assert mutual_exclusion_counter is not None
+        disjunctive_dim = self.disjunctive_dim
+        if disjunctive_dim is not None:
+          partial_indices = itertools.product(*[range(d) for (i, d) in enumerate(self.shape) if i != disjunctive_dim])
           disj_map = {index: mutual_exclusion_counter.get_and_increment() for index in partial_indices}
-          get_partial_index = lambda index: index[:self.disjunctive_dim] + index[self.disjunctive_dim + 1:]
-          facts = [((tensor[index], disj_map[get_partial_index(index)]), self[index]) for index in filtered_indices]
+          facts = [
+            ((tensor[index], disj_map[index[:disjunctive_dim] + index[disjunctive_dim + 1:]]), self[index])
+            for index in filtered_indices
+          ]
         else:
           disj_id = mutual_exclusion_counter.get_and_increment()
           facts = [((tensor[index], disj_id), self[index]) for index in filtered_indices]
@@ -202,7 +208,7 @@ class InputMapping:
           # Check the consistency of the tuple
           if tuple_size == None:
             if not self._is_primitive(element):
-              raise Exception(f"Invalid input mapping: expected singleton value, found tuple")
+              raise Exception("Invalid input mapping: expected singleton value, found tuple")
             curr_elements[i] = (element,)
           else:
             if len(element) != tuple_size:
@@ -328,18 +334,10 @@ class InputMapping:
       return self._is_primitive(e)
 
   def _mult_dim_index_to_index(self, mult_dim_index):
-    summed_index = 0
-    for i in range(len(self._shape)):
-      summed_index += mult_dim_index[i] * reduce(lambda acc, i: acc * i, self._shape[i + 1:], 1)
-    return summed_index
-
-  def _index_to_mult_dim_index(self, index):
-    acc_index = index
-    mult_dim_index = []
-    for i in range(len(self._shape), 0, -1):
-      mult_dim_index.append(acc_index % self._shape[i - 1])
-      acc_index = acc_index // self._shape[i - 1]
-    return tuple(reversed(mult_dim_index))
+    flat_index = 0
+    for dim, size in enumerate(self._shape):
+      flat_index = flat_index * size + mult_dim_index[dim]
+    return flat_index
 
   def _convert_topk_sampled_indices(self, sampled_indices, sample_dim):
     for partial_index in itertools.product(*[range(d) for (i, d) in enumerate(self._shape) if i != sample_dim]):
@@ -359,58 +357,18 @@ class InputMapping:
     ty = type(e)
     return ty == int or ty == float or ty == str or ty == bool
 
-  def _get_kind(self) -> str:
+  @property
+  def kind(self) -> Optional[str]:
     return self._kind
 
-  def _set_kind(self):
-    raise Exception("Cannot set kind of an input mapping")
-
-  kind = property(_get_kind, _set_kind)
-
-  def _get_shape(self) -> Tuple[int]:
+  @property
+  def shape(self) -> Tuple[int, ...]:
     return self._shape
 
-  def _set_shape(self):
-    raise Exception("Cannot set shape of an input mapping")
-
-  shape = property(_get_shape, _set_shape)
-
-  def _get_dimension(self) -> int:
+  @property
+  def dimension(self) -> int:
     return len(self._shape)
 
-  def _set_dimension(self):
-    raise Exception("Cannot set dimension of an input mapping")
-
-  dimension = property(_get_dimension, _set_dimension)
-
-  def _get_is_singleton(self) -> int:
+  @property
+  def is_singleton(self) -> bool:
     return self._is_singleton
-
-  def _set_is_singleton(self):
-    raise Exception("Cannot set is_singleton of an input mapping")
-
-  is_singleton = property(_get_is_singleton, _set_is_singleton)
-
-
-class InclusiveSet:
-  def __init__(self, init_include_all=True):
-    self.include_all = init_include_all
-    self.included_set = set()
-
-  def add(self, index: Tuple):
-    self.include_all = False
-    self.included_set.add(index)
-
-  def contains(self, index: Tuple):
-    return self.include_all or (index in self.included_set)
-
-
-class ExclusiveSet:
-  def __init__(self):
-    self.excluded_set = set()
-
-  def exclude(self, index: Tuple):
-    self.excluded_set.add(index)
-
-  def contains(self, index: Tuple) -> bool:
-    return index not in self.excluded_set

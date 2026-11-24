@@ -44,7 +44,7 @@ class CSVFileOptions:
 
   def with_keys(self, keys: Optional[Union[str, List[str]]]):
     copied = deepcopy(self)
-    copied.keys = keys
+    copied.keys = _sanitize_keys(keys)
     return copied
 
 

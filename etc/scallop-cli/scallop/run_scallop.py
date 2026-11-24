@@ -50,7 +50,8 @@ def cmd_args(plugin_registry: scallopy.PluginRegistry):
 
 def print_relation(ctx: scallopy.ScallopContext, relation_name: str):
   # First get the relation
-  if ctx.is_probabilistic():
+  probabilistic = ctx.is_probabilistic()
+  if probabilistic:
     relation = [(f"{prob:.4f}", *tup) for (prob, tup) in ctx.relation(relation_name)]
   else:
     relation = list(ctx.relation(relation_name))
@@ -64,19 +65,21 @@ def print_relation(ctx: scallopy.ScallopContext, relation_name: str):
   arity = len(relation[0])
 
   # Check if the tuple is empty
-  if arity == 0 and not ctx.is_probabilistic():
+  if arity == 0 and not probabilistic:
     relation[0] = ("()",)
-  elif arity == 1 and ctx.is_probabilistic():
+  elif arity == 1 and probabilistic:
     relation[0] = (relation[0][0], "()")
 
   # Compute column width
-  max_column_width = [MAX_COL_WIDTH for _ in range(arity)]
+  max_column_width: list[int | None] = [MAX_COL_WIDTH] * len(relation[0])
+  if probabilistic:
+    max_column_width[0] = None
 
   # Then get the headers
-  headers = ctx.relation_field_names(relation_name)
-  if headers and ctx.is_probabilistic():
+  fields = ctx.relation_field_names(relation_name)
+  headers = [field or "" for field in fields] if fields else []
+  if headers and probabilistic:
     headers = ["prob"] + headers
-    max_column_width = [None] + max_column_width
 
   # Check if we need multi-line table
   need_multi_line_table = False

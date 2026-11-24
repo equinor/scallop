@@ -7,7 +7,7 @@ class Plugin:
   """
   A Scallopy Plugin
   """
-  def __init__(self, name: str = None):
+  def __init__(self, name: str | None = None):
     """
     Create a new Scallopy plugin.
 

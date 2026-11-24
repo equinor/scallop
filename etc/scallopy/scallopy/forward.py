@@ -1,16 +1,18 @@
-from typing import Dict, Union, List, Optional, Tuple, Any, Callable
+from typing import Dict, Union, List, Optional, Tuple, Any, TypeAlias
 import logging
 import os
 import sys
 import zipfile
 import shutil
 
-from .sample_type import *
 from .context import ScallopContext
 from .provenance import ScallopProvenance
 from .utils import _mapping_tuple, get_backward_proxy
 
 from . import torch_importer
+
+_OutputMapping: TypeAlias = Union[List[Any], Tuple[Any, ...], range]
+
 
 class ScallopForwardFunction(torch_importer.Module):
   def __init__(
@@ -25,8 +27,8 @@ class ScallopForwardFunction(torch_importer.Module):
     non_probabilistic: Optional[List[str]] = None,
     input_mappings: Optional[Dict[str, Any]] = None,
     output_relation: Optional[str] = None,
-    output_mapping: Optional[List] = None,
-    output_mappings: Optional[Dict[str, List]] = None,
+    output_mapping: Optional[_OutputMapping] = None,
+    output_mappings: Optional[Dict[str, Optional[_OutputMapping]]] = None,
     k: int = 3,
     train_k: Optional[int] = None,
     test_k: Optional[int] = None,
@@ -44,17 +46,15 @@ class ScallopForwardFunction(torch_importer.Module):
     super(ScallopForwardFunction, self).__init__()
 
     # Setup the context
-    ctx_params = {
-      "provenance": provenance,
-      "custom_provenance": custom_provenance,
-      "k": k,
-      "train_k": train_k,
-      "test_k": test_k,
-      "wmc_with_disjunctions": wmc_with_disjunctions,
-      "monitors": monitors
-    }
-    ctx_params_non_null = {k: v for (k, v) in ctx_params.items() if v is not None}
-    self.ctx = ScallopContext(**ctx_params_non_null)
+    self.ctx = ScallopContext(
+      provenance=provenance,
+      custom_provenance=custom_provenance,
+      k=k,
+      train_k=train_k,
+      test_k=test_k,
+      wmc_with_disjunctions=wmc_with_disjunctions if wmc_with_disjunctions is not None else False,
+      monitors=monitors,
+    )
 
     # Import the file if specified
     if file is not None:
@@ -113,7 +113,7 @@ class ScallopForwardFunction(torch_importer.Module):
       sparse_jacobian=sparse_jacobian,
     )
 
-  def __call__(self, *pos_args, **kw_args):
+  def forward(self, *pos_args, **kw_args):
     return self.forward_fn(*pos_args, **kw_args)
 
 
@@ -129,8 +129,8 @@ class InternalScallopForwardFunction(torch_importer.Module):
     self,
     ctx: ScallopContext,
     output: Optional[str] = None,
-    output_mapping: Optional[Union[List[Tuple], Tuple]] = None,
-    output_mappings: Optional[Dict[str, List[Tuple]]] = None,
+    output_mapping: Optional[_OutputMapping] = None,
+    output_mappings: Optional[Dict[str, Optional[_OutputMapping]]] = None,
     dispatch: str = "parallel",
     debug_provenance: bool = False,
     jit: bool = False,
@@ -235,14 +235,15 @@ class InternalScallopForwardFunction(torch_importer.Module):
     else:
       raise Exception(f"Unknown output mapping type `{type(output_mapping)}`")
 
-  def _apply(self, f):
+  def _apply(self, fn, recurse=True):
     """
     Overriding `nn.Module`'s _apply function to accept additional tensor apply
     function `f`. Usually this `f` function is a `.to("cpu")` or `.to("gpu")`
     function. For Scallop to support GPU, we will use this function `f` to
     apply to any tensor that we generate in the computation process.
     """
-    self._torch_tensor_apply = f
+    self._torch_tensor_apply = fn
+    return super()._apply(fn, recurse=recurse)
 
   def _compile_for_jit(self, name=""):
     # First create a temporary directory
@@ -274,13 +275,13 @@ class InternalScallopForwardFunction(torch_importer.Module):
         return True
     return False
 
-  def __call__(
+  def forward(
     self,
     disjunctions: Dict[str, List[List[List[int]]]] = {},
     output_relations: Optional[List[Union[str, List[str]]]] = None,
-    output_mappings: Union[List, Dict[str, List]] = None,
-    **input_facts: Dict[str, Union[torch_importer.Tensor, List]],
-  ) -> Union[torch_importer.Tensor, Tuple[List[Tuple], torch_importer.Tensor]]:
+    output_mappings: Optional[Union[List, Dict[str, List]]] = None,
+    **input_facts: Union[torch_importer.Tensor, List],
+  ):
     """
     Invoke the forward function with the given facts
 
@@ -330,12 +331,9 @@ class InternalScallopForwardFunction(torch_importer.Module):
     # Process the output
     return self._process_output(batch_size, input_tags, output_results, self.output_mappings)
 
-  def _get_k(self):
-    if self.ctx._train_k is not None or self.ctx._test_k is not None:
-      if self.ctx.training: # Coming from nn.Module and `torch.train()` or `torch.eval()`
-        return self.ctx._train_k if self.ctx._train_k is not None else self.ctx._k
-      else:
-        return self.ctx._test_k if self.ctx._test_k is not None else self.ctx._k
+  def _get_k(self) -> int:
+    k = self.ctx._train_k if self.training else self.ctx._test_k
+    return self.ctx._k if k is None else k
 
   def _call_with_dynamic_ctx(
     self,
@@ -364,7 +362,7 @@ class InternalScallopForwardFunction(torch_importer.Module):
 
     # Making sure that output relations are well-formed
     if any([len(rs) == 0 for rs in current_output_relations]):
-      raise Exception(f"There exists a 0 output relations data-point")
+      raise Exception("There exists a 0 output relations data-point")
     if len(current_output_relations) != batch_size:
       raise Exception(f"Number of output relations ({len(current_output_relations)}) does not match the batch size ({batch_size})")
 
@@ -387,9 +385,9 @@ class InternalScallopForwardFunction(torch_importer.Module):
         if type(output_mappings) == list:
           # the output mappings could be a single list, which would by default be the output mapping
           # for the only output relation that is specified
-          assert len(output_mappings) > 0, f"Expect the `output_mappings` to be non-empty"
+          assert len(output_mappings) > 0, "Expect the `output_mappings` to be non-empty"
           current_output_mappings[output_relation] = self._process_one_output_mapping(output_mappings)
-        elif type(output_mappings) == dict:
+        elif isinstance(output_mappings, dict):
           # the output_mappings struct could be a dictionary. In this case it could either be empty or contains
           # exactly one output mapping which is for the only output relation.
           for (rela_name, rela_output_mapping) in output_mappings.items():
@@ -397,14 +395,14 @@ class InternalScallopForwardFunction(torch_importer.Module):
             assert len(rela_output_mapping) > 0, f"Expect the output mapping for the `{rela_name}` relation to be non-empty"
             current_output_mappings[rela_name] = self._process_one_output_mapping(rela_output_mapping)
         else:
-          assert False, f"Unknown format of `output_mappings` when calling Scallop forward. Expecting list or dict."
+          assert False, "Unknown format of `output_mappings` when calling Scallop forward. Expecting list or dict."
       else:
         # we make sure that this should be the same for every single data-point of the rest of the batch
         is_uniform_output = all([rs == first_output_relations for rs in current_output_relations[1:]])
-        assert is_uniform_output, f"We expect that the output relations to be the same across all datapoints in a batch"
+        assert is_uniform_output, "We expect that the output relations to be the same across all datapoints in a batch"
 
         # we make sure that the output_mappings is provided for all
-        assert type(output_mappings) == dict, f"Expect the `output_mappings` variable to be a dict for the batch with multiple output relations"
+        assert isinstance(output_mappings, dict), "Expect the `output_mappings` variable to be a dict for the batch with multiple output relations"
         for (rela_name, rela_output_mapping) in output_mappings.items():
           assert rela_name in set_of_output_relations, f"The provided output mapping {rela_name} is not among the set of output relations"
           assert len(rela_output_mapping) > 0, f"Expect the output mapping for the `{rela_name}` relation to be non-empty"
@@ -561,11 +559,17 @@ class InternalScallopForwardFunction(torch_importer.Module):
       output_results.append([self._process_single_output(output_relations[task_id][i], c, output_mappings) for (i, c) in enumerate(results[task_id])])
     return (input_tags, output_results)
 
+  def _new_static_ctx(self):
+    module = self._static_compiled_module
+    if module is None:
+      raise RuntimeError("The Scallop JIT module has not been compiled")
+    return module.StaticContext(provenance=self.ctx.provenance, top_k=self._get_k())
+
   def _run_single_static(self, task_id, all_inputs, output_mappings):
     """
     Run a batch of tasks using
     """
-    temp_ctx = self._static_compiled_module.StaticContext(provenance=self.ctx.provenance, top_k=self._get_k())
+    temp_ctx = self._new_static_ctx()
 
     # Add the facts into the context
     for (rela, rela_inputs) in all_inputs.items():
@@ -592,7 +596,7 @@ class InternalScallopForwardFunction(torch_importer.Module):
     Run a batch of tasks using statically compiled module
     """
     # Initialize a context
-    temp_ctx = self._static_compiled_module.StaticContext(provenance=self.ctx.provenance, top_k=self._get_k())
+    temp_ctx = self._new_static_ctx()
 
     # Depending on whether its parallel, run on the batch
     if parallel: result = temp_ctx.run_batch_parallel(all_inputs, self.outputs)
@@ -627,9 +631,9 @@ class InternalScallopForwardFunction(torch_importer.Module):
       outputs = list(output_mappings.keys())
     else:
       outputs = self.outputs
-    assert type(outputs) == list, f"Expect outputs to be a list"
-    assert len(outputs) > 0, f"Expect non-empty output from a forward function; however the current `outputs` is empty"
-    assert all(type(output_rel) == str for output_rel in outputs), f"Expect each element of output array to be a string (relation name)"
+    assert type(outputs) == list, "Expect outputs to be a list"
+    assert len(outputs) > 0, "Expect non-empty output from a forward function; however the current `outputs` is empty"
+    assert all(type(output_rel) == str for output_rel in outputs), "Expect each element of output array to be a string (relation name)"
 
     # Then depending on how many of the output relations, process the output for each output relation
     if len(outputs) == 1:
@@ -751,7 +755,10 @@ class InternalScallopForwardFunction(torch_importer.Module):
 
     # If we have a custom provenance, use its collate function
     elif self.ctx.provenance == "custom":
-      return self.ctx._custom_provenance.collate(tasks)
+      provenance = self.ctx._custom_provenance
+      if provenance is None:
+        raise RuntimeError("Missing custom provenance")
+      return provenance.collate(tasks)
 
     # Non-differentiable provenance
     else:
@@ -774,10 +781,10 @@ class InternalScallopForwardFunction(torch_importer.Module):
 
   def _batched_proxy_output(
     self,
-    output_tensor, # torch.Tensor
-    input_tags: Optional[List[List[Any]]],
+    output_tensor: torch_importer.Tensor,
+    input_tags: List[Optional[List[Any]]],
     tasks: List[List[Any]],
-  ) -> Callable:
+  ) -> torch_importer.Tensor:
     if self.ctx.provenance == "diffminmaxprob":
       return output_tensor
     elif self.ctx.provenance == "diffaddmultprob" or \
@@ -788,16 +795,21 @@ class InternalScallopForwardFunction(torch_importer.Module):
          self.ctx.provenance == "diffsamplekproofs" or \
          self.ctx.provenance == "difftopbottomkclauses" or \
          self.ctx.provenance == "difftopkproofsdebug":
-      return self._diff_proofs_batched_proxy_output(output_tensor, input_tags, tasks)
+      proof_input_tags = []
+      for tags in input_tags:
+        if tags is None:
+          raise RuntimeError(f"Missing input tags for {self.ctx.provenance}")
+        proof_input_tags.append(tags)
+      return self._diff_proofs_batched_proxy_output(output_tensor, proof_input_tags, tasks)
     else:
       raise Exception("[Internal Error] Should not happen")
 
   def _diff_proofs_batched_proxy_output(
     self,
-    output_tensor, # torch.Tensor
+    output_tensor: torch_importer.Tensor,
     input_tags: List[List[Any]],
     output_batch: List[List[Any]],
-  ) -> Callable:
+  ) -> torch_importer.Tensor:
     # Prepare the dimensions
     batch_size = len(output_batch)
     num_inputs = max(len(ts) for ts in input_tags)
@@ -870,3 +882,4 @@ class InternalScallopForwardFunction(torch_importer.Module):
             task_tensor_results.append([])
         results.append(task_tensor_results)
       return results
+    raise RuntimeError(f"No debug information for {self.ctx.provenance}")

@@ -1,9 +1,10 @@
 from typing import Dict
 
 from . import AstNode, NodeLocation, AstConstantNode
+from .ast_node import AstValue
 
 class AstStructNode(AstNode):
-  def __init__(self, loc: NodeLocation, fields: Dict[str, AstNode]):
+  def __init__(self, loc: NodeLocation, fields: Dict[str, AstValue]):
     self._loc = loc
     self._fields = fields
 

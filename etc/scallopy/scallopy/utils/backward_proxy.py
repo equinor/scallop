@@ -16,11 +16,12 @@ def get_backward_proxy():
       return output
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, *grad_outputs):
       """
       Backward function that propagates the gradient w.r.t. output to
       get the gradient w.r.t. input
       """
+      grad_output, = grad_outputs
       jacobian, = ctx.saved_tensors
       if ctx.sparse_jacobian:
         # An equivalent operation to using einsum under sparse setting

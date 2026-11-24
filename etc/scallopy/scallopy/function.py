@@ -1,4 +1,5 @@
-from typing import *
+from types import UnionType
+from typing import Any, Callable, List, Optional, Tuple, TypeVar, Union, get_args, get_origin
 import inspect
 
 from . import torch_importer
@@ -116,6 +117,7 @@ class Type:
          value == "f32" or value == "f64" or value == "bool" or value == "char" or value == "String" or value == "Tensor" or \
          value == "Symbol" or value == "Entity":
       return ("base", value)
+    raise TypeError(f"Unknown scallop function type annotation {value}")
 
   def is_base(self):
     return self.kind == "base"
@@ -236,7 +238,7 @@ def foreign_function(
   signature = inspect.signature(func)
 
   # Store all the argument types
-  static_argument_types = [] if not arg_types else arg_types
+  static_argument_types = [arg if isinstance(arg, Type) else Type(arg) for arg in arg_types or []]
   optional_argument_types = [] if not opt_arg_types else opt_arg_types
   variable_argument_type = None if not var_arg_type else var_arg_type
 
@@ -253,9 +255,14 @@ def foreign_function(
         static_argument_types.append(Type(item.annotation))
     else:
       if opt_arg_types is None:
-        if item.default != None:
+        if item.default is not None:
           raise Exception("Optional arguments need to have default `None`")
-        optional_argument_types.append(Type(item.annotation))
+        annotation = item.annotation
+        if get_origin(annotation) in (Union, UnionType):
+          union_args = get_args(annotation)
+          if len(union_args) == 2 and type(None) in union_args:
+            annotation = next(ty for ty in union_args if ty is not type(None))
+        optional_argument_types.append(Type(annotation))
 
   # Get all argument types
   all_arg_types = static_argument_types + \
@@ -265,7 +272,7 @@ def foreign_function(
   # Find return types
   if ret_type is None:
     if signature.return_annotation is None:
-      raise Exception(f"Return type annotation not provided")
+      raise Exception("Return type annotation not provided")
     return_type = Type(signature.return_annotation)
   else:
     return_type = Type(ret_type)
@@ -277,7 +284,7 @@ def foreign_function(
       if arg_type.is_generic() and arg_type.id == return_type.id:
         is_return_generic_type_ok = True
     if not is_return_generic_type_ok:
-      raise Exception(f"Return generic type not bounded by any input argument")
+      raise Exception("Return generic type not bounded by any input argument")
   elif return_type.is_type_family():
     raise Exception(f"Return type cannot be a type family ({return_type})")
 

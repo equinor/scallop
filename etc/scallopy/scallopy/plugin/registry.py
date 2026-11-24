@@ -63,9 +63,10 @@ class PluginRegistry:
     """
     Load multiple plugins from entry points obtained by `importlib`
     """
-    meta_entry_points = metadata.entry_points()
-    entry_points = utils._find_entry_points(meta_entry_points, constants.SCALLOP_PLUGIN_GROUP, self._filter)
-    for entry_point in entry_points:
+    entry_points = metadata.entry_points(group=constants.SCALLOP_PLUGIN_GROUP)
+    for entry_point in dict.fromkeys(entry_points):
+      if self._filter is not None and not self._filter(entry_point.name):
+        continue
       plugin_clazz = entry_point.load()
       plugin = plugin_clazz()
       self.load_plugin(plugin)

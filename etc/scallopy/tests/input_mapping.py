@@ -179,6 +179,25 @@ class TestInputMapping(unittest.TestCase):
     r = im.process_tensor(torch.randn((5, 5)))
     assert len(r) == 3
 
+  def test_flat_top_k_keeps_mapping_order_and_disjunction_ids(self):
+    mapping = scallopy.InputMapping(
+      [["a", "b"], ["c", "d"], ["e", "f"]],
+      retain_k=3,
+      retain_threshold=0.5,
+      disjunctive_dim=1,
+      supports_disjunctions=True,
+    )
+    facts = mapping.process_tensor(torch.tensor([[0.5, 0.1], [0.2, 0.0], [0.3, 0.9]]))
+    self.assertEqual([(group, fact) for (_, group), fact in facts], [(0, ("a",)), (2, ("f",))])
+
+  def test_empty_top_k_still_applies_threshold(self):
+    mapping = scallopy.InputMapping(["a", "b"], retain_k=0, retain_threshold=0.5)
+    self.assertEqual(mapping.process_tensor(torch.tensor([0.75, 0.25])), [(0.75, ("a",))])
+
+  def test_top_k_scalar_mapping(self):
+    mapping = scallopy.InputMapping("only", retain_k=1)
+    self.assertEqual(mapping.process_tensor(torch.tensor(0.75)), [(0.75, ("only",))])
+
   def test_mult_dim_retain_k_2(self):
     im = scallopy.InputMapping({0: range(5), 1: range(3)}, retain_k=2, sample_dim=1)
     r = im.process_tensor(torch.randn((5, 3)))

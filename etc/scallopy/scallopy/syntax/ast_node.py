@@ -1,4 +1,5 @@
-from typing import Optional
+from __future__ import annotations
+from typing import Optional, TypeAlias
 
 from . import NodeLocation
 
@@ -13,7 +14,7 @@ class AstNode:
       raise Exception(f"Unknown attribute `{attr_name}`")
 
   @staticmethod
-  def parse(internal_item) -> "AstNode":
+  def parse(internal_item) -> AstValue:
     from . import AstTypeNode, AstVariantNode, AstEnumNode, AstStructNode, AstConstantNode
 
     if type(internal_item) == dict:
@@ -46,3 +47,6 @@ class AstNode:
       return [AstNode.parse(item) for item in internal_item]
     else:
       return AstConstantNode(internal_item)
+
+
+AstValue: TypeAlias = AstNode | list["AstValue"]
