@@ -1,13 +1,9 @@
+#[derive(Default)]
 pub enum PredicateSet {
   None,
+  #[default]
   All,
   Some(Vec<String>),
-}
-
-impl Default for PredicateSet {
-  fn default() -> Self {
-    Self::All
-  }
 }
 
 impl PredicateSet {

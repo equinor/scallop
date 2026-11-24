@@ -60,7 +60,6 @@ impl DNFFormula {
   pub fn and(&self, t2: &Self) -> Self {
     Self {
       clauses: iproduct!(&self.clauses, &t2.clauses)
-        .into_iter()
         .filter_map(|(c1, c2)| c1.merge(c2))
         .collect(),
     }

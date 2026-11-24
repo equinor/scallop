@@ -1,4 +1,4 @@
-///! A-Star Search Scheduling
+//! A-Star Search Scheduling
 use std::collections::*;
 
 use crate::runtime::dynamic::*;
@@ -11,11 +11,11 @@ use super::utils::{compute_saturation_and_update_tag, compute_stable_retain};
 pub fn schedule_a_star<'a, Prov: Provenance>(
   to_add: &'a mut DynamicSortedCollection<Prov>,
   waitlist: &'a mut Vec<DynamicElement<Prov>>,
-  stable: &'a mut Vec<DynamicSortedCollection<Prov>>,
+  stable: &'a mut [DynamicSortedCollection<Prov>],
   ctx: &'a Prov,
 ) {
   // First go over the to_add set
-  if to_add.len() > 0 {
+  if !to_add.is_empty() {
     let mut to_remove_to_add_indices = HashSet::new();
     for stable_batch in stable.iter_mut() {
       let mut index = 0;
@@ -46,9 +46,9 @@ pub fn schedule_a_star<'a, Prov: Provenance>(
     let to_add_elem_weight = ctx.weight(&to_add_elem.tag);
 
     // Check if we can insert to_add_element in the middle of waitlist
-    let to_insert_index = gallop_index(&waitlist, 0, |elem| ctx.weight(&elem.tag) < to_add_elem_weight);
+    let to_insert_index = gallop_index(waitlist, 0, |elem| ctx.weight(&elem.tag) < to_add_elem_weight);
     if let Some(existing_elem) = waitlist.get_mut(to_insert_index) {
-      if &existing_elem.tuple == &to_add_elem.tuple {
+      if existing_elem.tuple == to_add_elem.tuple {
         existing_elem.tag = ctx.add(&existing_elem.tag, &to_add_elem.tag);
       } else {
         waitlist.insert(to_insert_index, to_add_elem);
@@ -64,7 +64,7 @@ pub fn schedule_a_star<'a, Prov: Provenance>(
     let mut not_found = true;
     for stable_batch in stable.iter_mut() {
       let stable_index = gallop_index(&stable_batch.elements, 0, |y| y < &waitlist_elem);
-      if stable_index >= stable_batch.len() || &stable_batch[stable_index].tuple != &waitlist_elem.tuple {
+      if stable_index >= stable_batch.len() || stable_batch[stable_index].tuple != waitlist_elem.tuple {
         // This element is not found in the current stable batch
       } else {
         let stable_elem = &mut stable_batch[stable_index];

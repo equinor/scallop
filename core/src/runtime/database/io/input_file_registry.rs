@@ -58,3 +58,9 @@ impl<Ptr: PointerFamily> InputFileRegistry<Ptr> {
     Ptr::get_rc(&self.input_files).get(file_path)
   }
 }
+
+impl<Ptr: PointerFamily> Default for InputFileRegistry<Ptr> {
+  fn default() -> Self {
+    Self::new()
+  }
+}

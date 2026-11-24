@@ -49,9 +49,9 @@ impl<'a, Prov: Provenance> BatchBinaryOp<'a, Prov> for JoinOp<'a, Prov> {
     let i1_curr = i1.next_elem();
     let i2_curr = i2.next_elem();
     DynamicBatch::new(DynamicJoinBatch {
-      i1: i1,
+      i1,
       i1_curr,
-      i2: i2,
+      i2,
       i2_curr,
       curr_iter: None,
       ctx: self.ctx,
@@ -86,17 +86,20 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicJoinBatch<'a, Prov> {
     use std::cmp::Ordering;
     loop {
       if let Some(curr_prod_iter) = &mut self.curr_iter {
-        if let Some((e1, e2)) = curr_prod_iter.next() {
-          let tuple = Tuple::from((e1.tuple[0].clone(), e1.tuple[1].clone(), e2.tuple[1].clone()));
-          let tag = self.ctx.mult(&e1.tag, &e2.tag);
-          let result = DynamicElement::new(tuple, tag);
-          return Some(result);
-        } else {
-          self.i1.step(curr_prod_iter.v1.len() - 1);
-          self.i1_curr = self.i1.next_elem();
-          self.i2.step(curr_prod_iter.v2.len() - 1);
-          self.i2_curr = self.i2.next_elem();
-          self.curr_iter = None;
+        match curr_prod_iter.next() {
+          Some((e1, e2)) => {
+            let tuple = Tuple::from((e1.tuple[0].clone(), e1.tuple[1].clone(), e2.tuple[1].clone()));
+            let tag = self.ctx.mult(&e1.tag, &e2.tag);
+            let result = DynamicElement::new(tuple, tag);
+            return Some(result);
+          }
+          None => {
+            self.i1.step(curr_prod_iter.v1.len() - 1);
+            self.i1_curr = self.i1.next_elem();
+            self.i2.step(curr_prod_iter.v2.len() - 1);
+            self.i2_curr = self.i2.next_elem();
+            self.curr_iter = None;
+          }
         }
       }
 

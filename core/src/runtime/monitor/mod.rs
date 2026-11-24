@@ -4,7 +4,7 @@ mod dump_proofs;
 mod dynamic_monitors;
 mod iteration_checker;
 mod logging;
-mod monitor;
+mod monitor_trait;
 mod registry;
 
 pub use debug_runtime::*;
@@ -13,5 +13,5 @@ pub use dump_proofs::*;
 pub use dynamic_monitors::*;
 pub use iteration_checker::*;
 pub use logging::*;
-pub use monitor::*;
+pub use monitor_trait::*;
 pub use registry::*;

@@ -34,7 +34,7 @@ impl Provenance for AddMultProbProvenance {
   }
 
   fn tagging_fn(&self, p: Self::InputTag) -> Self::Tag {
-    p.into()
+    p
   }
 
   fn recover_fn(&self, t: &Self::Tag) -> Self::OutputTag {
@@ -70,6 +70,6 @@ impl Provenance for AddMultProbProvenance {
   }
 
   fn weight(&self, t: &Self::Tag) -> f64 {
-    *t as f64
+    *t
   }
 }

@@ -8,11 +8,11 @@ use super::utils::compute_stable_retain;
 
 pub fn schedule_lfp<'a, Prov: Provenance>(
   to_add: &'a mut DynamicSortedCollection<Prov>,
-  #[allow(unused)] waitlist: &'a mut Vec<DynamicElement<Prov>>,
-  stable: &'a mut Vec<DynamicSortedCollection<Prov>>,
+  _waitlist: &'a mut [DynamicElement<Prov>],
+  stable: &'a mut [DynamicSortedCollection<Prov>],
   ctx: &'a Prov,
 ) {
-  if to_add.len() > 0 {
+  if !to_add.is_empty() {
     let mut to_remove_to_add_indices = HashSet::new();
     for stable_batch in stable.iter_mut() {
       let mut index = 0;

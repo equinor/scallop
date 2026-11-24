@@ -24,9 +24,9 @@ impl SumProdAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for SumProdAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::SumProd(self)
+impl From<SumProdAggregate> for DynamicAggregate {
+  fn from(val: SumProdAggregate) -> Self {
+    DynamicAggregate::SumProd(val)
   }
 }
 
@@ -129,16 +129,7 @@ impl<P: Provenance> Aggregator<P> for SumProdAggregator {
       let mut result = vec![];
       for chosen_set in (0..batch.len()).powerset() {
         let res = self.perform_sum_prod(chosen_set.iter().map(|i| &batch[*i].tuple));
-        let maybe_tag = batch.iter().enumerate().fold(Some(prov.one()), |maybe_acc, (i, elem)| {
-          maybe_acc.and_then(|acc| {
-            if chosen_set.contains(&i) {
-              Some(prov.mult(&acc, &elem.tag))
-            } else {
-              prov.negate(&elem.tag).map(|neg_tag| prov.mult(&acc, &neg_tag))
-            }
-          })
-        });
-        if let Some(tag) = maybe_tag {
+        if let Some(tag) = super::chosen_set_tag(prov, &batch, &chosen_set) {
           result.push(DynamicElement::new(res, tag));
         }
       }

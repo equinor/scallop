@@ -166,13 +166,14 @@ impl<Prov: Provenance> DynamicRelation<Prov> {
 
     // 2. Condense self.to_add
     let mut to_add_batches = self.to_add.borrow_mut();
-    let mut to_add = if let Some(mut to_add) = to_add_batches.pop() {
-      while let Some(to_add_more) = to_add_batches.pop() {
-        to_add = to_add.merge(to_add_more, ctx);
+    let mut to_add = match to_add_batches.pop() {
+      Some(mut to_add) => {
+        while let Some(to_add_more) = to_add_batches.pop() {
+          to_add = to_add.merge(to_add_more, ctx);
+        }
+        to_add
       }
-      to_add
-    } else {
-      DynamicSortedCollection::empty()
+      None => DynamicSortedCollection::empty(),
     };
 
     // 3. Move all the waitlist into to-add for global
@@ -235,5 +236,11 @@ impl<Prov: Provenance> DynamicRelation<Prov> {
       result = result.merge(batch, ctx);
     }
     result
+  }
+}
+
+impl<Prov: Provenance> Default for DynamicRelation<Prov> {
+  fn default() -> Self {
+    Self::new()
   }
 }

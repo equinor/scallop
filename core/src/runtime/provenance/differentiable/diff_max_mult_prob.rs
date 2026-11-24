@@ -22,7 +22,7 @@ impl<T: FromTensor, P: PointerFamily> DiffMaxMultProbProvenance<T, P> {
     P::get_rc_cell(&self.storage, |s| s.clone())
   }
 
-  pub fn tag_of_chosen_set<E>(&self, all: &Vec<E>, chosen_ids: &Vec<usize>) -> DualNumber2
+  pub fn tag_of_chosen_set<E>(&self, all: &[E], chosen_ids: &[usize]) -> DualNumber2
   where
     E: Element<Self>,
   {
@@ -33,7 +33,7 @@ impl<T: FromTensor, P: PointerFamily> DiffMaxMultProbProvenance<T, P> {
         if chosen_ids.contains(&id) {
           elem.tag().clone()
         } else {
-          self.negate(&elem.tag()).unwrap()
+          self.negate(elem.tag()).unwrap()
         }
       })
       .fold(self.one(), |a, b| self.mult(&a, &b))
@@ -57,7 +57,7 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffMaxMultProbProvenance<T
   type OutputTag = OutputDiffProb;
 
   fn name(&self) -> String {
-    format!("diffmaxmultprob")
+    "diffmaxmultprob".to_string()
   }
 
   fn tagging_fn(&self, input_tag: Self::InputTag) -> Self::Tag {

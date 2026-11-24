@@ -11,9 +11,9 @@ pub struct DynamicSortedCollection<Prov: Provenance> {
   pub elements: Vec<DynamicElement<Prov>>,
 }
 
-impl<Prov: Provenance> Into<DynamicCollection<Prov>> for DynamicSortedCollection<Prov> {
-  fn into(self) -> DynamicCollection<Prov> {
-    DynamicCollection::Sorted(self)
+impl<Prov: Provenance> From<DynamicSortedCollection<Prov>> for DynamicCollection<Prov> {
+  fn from(val: DynamicSortedCollection<Prov>) -> Self {
+    DynamicCollection::Sorted(val)
   }
 }
 
@@ -46,6 +46,15 @@ pub type DynamicSortedCollectionIter<'a, Prov> = core::iter::Cloned<core::slice:
 
 pub type DynamicSortedCollectionIntoIter<Prov> = <Vec<DynamicElement<Prov>> as IntoIterator>::IntoIter;
 
+impl<Prov: Provenance> IntoIterator for DynamicSortedCollection<Prov> {
+  type Item = DynamicElement<Prov>;
+  type IntoIter = DynamicSortedCollectionIntoIter<Prov>;
+
+  fn into_iter(self) -> Self::IntoIter {
+    self.elements.into_iter()
+  }
+}
+
 pub type DynamicSortedCollectionDrainer<'a, Prov> = std::vec::Drain<'a, DynamicElement<Prov>>;
 
 impl<Prov: Provenance> DynamicSortedCollection<Prov> {
@@ -67,7 +76,7 @@ impl<Prov: Provenance> DynamicSortedCollection<Prov> {
       to_keep += 1;
       index += 1;
       while index < elements.len() {
-        if &elements[index].tuple == &elements[last_index].tuple {
+        if elements[index].tuple == elements[last_index].tuple {
           let new_tag = ctx.add(&elements[last_index].tag, &elements[index].tag);
           elements[last_index].tag = new_tag;
         } else {
@@ -99,10 +108,6 @@ impl<Prov: Provenance> DynamicSortedCollection<Prov> {
 
   pub fn iter<'a>(&'a self) -> DynamicSortedCollectionIter<'a, Prov> {
     self.elements.iter().cloned()
-  }
-
-  pub fn into_iter(self) -> DynamicSortedCollectionIntoIter<Prov> {
-    self.elements.into_iter()
   }
 
   pub fn drain<'a>(&'a mut self) -> DynamicSortedCollectionDrainer<'a, Prov> {
@@ -182,9 +187,9 @@ impl<Prov: Provenance> DynamicSortedCollection<Prov> {
 
   /// Insert the element into the collection
   pub fn insert(&mut self, elem: DynamicElement<Prov>, ctx: &Prov) {
-    let to_insert_index = gallop_index(&self.elements, 0, |e| &e.tuple < &elem.tuple);
+    let to_insert_index = gallop_index(&self.elements, 0, |e| e.tuple < elem.tuple);
     if let Some(next_elem) = self.elements.get(to_insert_index) {
-      if &next_elem.tuple != &elem.tuple {
+      if next_elem.tuple != elem.tuple {
         // If the tuple is not the same, we insert our new element
         self.elements.insert(to_insert_index, elem);
       } else {
@@ -201,7 +206,7 @@ impl<Prov: Provenance> DynamicSortedCollection<Prov> {
   /// Insert the element into the collection with the assumption that the element
   /// does not pre-exist in the collection.
   pub fn insert_unchecked(&mut self, elem: DynamicElement<Prov>) {
-    let to_insert_index = gallop_index(&self.elements, 0, |e| &e.tuple < &elem.tuple);
+    let to_insert_index = gallop_index(&self.elements, 0, |e| e.tuple < elem.tuple);
     self.elements.insert(to_insert_index, elem);
   }
 
@@ -230,7 +235,7 @@ impl<Prov: Provenance> DynamicSortedCollection<Prov> {
 
     // Fast path for when all the new elements are after the exiting ones
     if elements1[elements1.len() - 1] < elements2[0] {
-      elements1.extend(elements2.into_iter());
+      elements1.extend(elements2);
       return Self { elements: elements1 };
     }
 

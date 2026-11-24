@@ -31,7 +31,7 @@ impl ForeignPredicate for StringSplitBBF {
 
   fn argument_type(&self, i: usize) -> ValueType {
     match i {
-      0 | 1 | 2 => ValueType::String,
+      0..=2 => ValueType::String,
       _ => panic!("Invalid argument ID `{}`", i),
     }
   }

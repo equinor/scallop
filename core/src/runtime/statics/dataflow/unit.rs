@@ -58,9 +58,7 @@ pub trait UnitTuple {
 }
 
 impl UnitTuple for () {
-  fn unit() -> () {
-    ()
-  }
+  fn unit() {}
 }
 
 impl<A> UnitTuple for (A,)

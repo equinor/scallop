@@ -13,7 +13,7 @@ impl Provenance for NaturalProvenance {
   type OutputTag = usize;
 
   fn name(&self) -> String {
-    format!("natural")
+    "natural".to_string()
   }
 
   fn tagging_fn(&self, t: Self::InputTag) -> Self::Tag {

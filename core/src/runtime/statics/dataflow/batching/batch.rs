@@ -23,7 +23,7 @@ where
 
   fn collect_vec(&mut self) -> Vec<StaticElement<Tup, Prov>> {
     let mut result = vec![];
-    while let Some(elem) = self.next() {
+    for elem in self.by_ref() {
       result.push(elem);
     }
     result

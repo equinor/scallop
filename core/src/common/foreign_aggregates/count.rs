@@ -10,9 +10,9 @@ use super::*;
 #[derive(Clone)]
 pub struct CountAggregate;
 
-impl Into<DynamicAggregate> for CountAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::Count(self)
+impl From<CountAggregate> for DynamicAggregate {
+  fn from(val: CountAggregate) -> Self {
+    DynamicAggregate::Count(val)
   }
 }
 
@@ -68,16 +68,7 @@ impl<Prov: Provenance> Aggregator<Prov> for CountAggregator {
       } else {
         for chosen_set in (0..batch.len()).powerset() {
           let count = chosen_set.len();
-          let maybe_tag = batch.iter().enumerate().fold(Some(prov.one()), |maybe_acc, (i, elem)| {
-            maybe_acc.and_then(|acc| {
-              if chosen_set.contains(&i) {
-                Some(prov.mult(&acc, &elem.tag))
-              } else {
-                prov.negate(&elem.tag).map(|neg_tag| prov.mult(&acc, &neg_tag))
-              }
-            })
-          });
-          if let Some(tag) = maybe_tag {
+          if let Some(tag) = super::chosen_set_tag(prov, &batch, &chosen_set) {
             result.push(DynamicElement::new(count, tag));
           }
         }

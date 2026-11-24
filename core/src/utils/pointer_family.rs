@@ -93,7 +93,7 @@ impl PointerFamily for ArcFamily {
   }
 
   fn get_rc<T>(ptr: &Self::Rc<T>) -> &T {
-    &*ptr
+    ptr
   }
 
   fn get_rc_mut<T>(ptr: &mut Self::Rc<T>) -> &mut T {
@@ -164,7 +164,7 @@ impl PointerFamily for RcFamily {
   }
 
   fn get_rc<T>(ptr: &Self::Rc<T>) -> &T {
-    &*ptr
+    ptr
   }
 
   fn get_rc_mut<T>(ptr: &mut Self::Rc<T>) -> &mut T {

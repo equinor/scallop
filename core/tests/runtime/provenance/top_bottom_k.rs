@@ -51,6 +51,25 @@ mod normal {
   use super::*;
 
   #[test]
+  fn test_clause_conversion_prioritizes_numeric_probabilities() {
+    let mut ctx = BasicCNFDNFClausesContext::new();
+    ctx.probabilities.extend([f64::NAN, 0.2, 0.8]);
+    let clauses = vec![Clause::new(vec![Literal::Pos(0), Literal::Pos(1), Literal::Pos(2)])];
+
+    let top = ctx.cnf2dnf_k(&clauses, 2);
+    assert_eq!(
+      top.clauses,
+      [Clause::singleton(Literal::Pos(2)), Clause::singleton(Literal::Pos(1))]
+    );
+
+    let bottom = ctx.dnf2cnf_k(&clauses, 2);
+    assert_eq!(
+      bottom.clauses,
+      [Clause::singleton(Literal::Pos(1)), Clause::singleton(Literal::Pos(2))]
+    );
+  }
+
+  #[test]
   fn test_top_bottom_k_clauses_1() {
     let k = 2;
     let mut ctx = BasicCNFDNFClausesContext::new();

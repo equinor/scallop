@@ -1,3 +1,10 @@
+# Unreleased
+
+Rust API migration:
+- `ForeignFunction::infer_return_type` overrides now take `&[Value]` instead of `&Vec<Value>`.
+- Use `TensorValue::checked_add`, `checked_sub`, and `checked_mul` for shape-checked arithmetic. Incompatible shapes still return `None`.
+- The unimplemented dense-matrix Rust storage variant has been removed. Scallop still supports `sorted` and `indexed_vec`.
+
 # v0.2.5, Sep 14, 2024
 
 - Adding `@goal` and `@scheduler` to Scallop: now we have multiple semantics driven by scheduling strategies (BFS, DFS, A-Star, Beam, etc.) and stopping criteria.

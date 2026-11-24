@@ -33,24 +33,18 @@ impl Disjunction {
     let mut has_same = false;
     let mut j_curr = j_iter.next();
     let mut f_curr = f_iter.next();
-    loop {
-      match (j_curr, f_curr) {
-        (Some(j_elem), Some(f_elem)) => {
-          if j_elem == f_elem {
-            if has_same {
-              return true;
-            } else {
-              has_same = true;
-            }
-            j_curr = j_iter.next();
-            f_curr = f_iter.next();
-          } else if j_elem < f_elem {
-            j_curr = j_iter.next();
-          } else {
-            f_curr = f_iter.next();
-          }
+    while let (Some(j_elem), Some(f_elem)) = (j_curr, f_curr) {
+      if j_elem == f_elem {
+        if has_same {
+          return true;
         }
-        _ => break,
+        has_same = true;
+        j_curr = j_iter.next();
+        f_curr = f_iter.next();
+      } else if j_elem < f_elem {
+        j_curr = j_iter.next();
+      } else {
+        f_curr = f_iter.next();
       }
     }
     false

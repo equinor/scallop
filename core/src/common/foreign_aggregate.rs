@@ -43,7 +43,7 @@ impl GenericTypeFamily {
   }
 
   pub fn non_empty_tuple_with_elements(elems: Vec<Self>) -> Self {
-    assert!(elems.len() > 0, "elements must be non-empty");
+    assert!(!elems.is_empty(), "elements must be non-empty");
     Self::NonEmptyTupleWithElements(elems)
   }
 
@@ -52,10 +52,7 @@ impl GenericTypeFamily {
   }
 
   pub fn is_type_family(&self) -> bool {
-    match self {
-      Self::TypeFamily(_) => true,
-      _ => false,
-    }
+    matches!(self, Self::TypeFamily(_))
   }
 
   pub fn as_type_family(&self) -> Option<&TypeFamily> {
@@ -131,10 +128,7 @@ impl BindingType {
   }
 
   pub fn is_generic(&self) -> bool {
-    match self {
-      Self::Generic(_) => false,
-      _ => true,
-    }
+    !matches!(self, Self::Generic(_))
   }
 
   pub fn as_value_type(&self) -> Option<&ValueType> {
@@ -153,10 +147,7 @@ pub enum ParamType {
 
 impl ParamType {
   pub fn is_mandatory(&self) -> bool {
-    match self {
-      Self::Mandatory(_) => true,
-      _ => false,
-    }
+    matches!(self, Self::Mandatory(_))
   }
 
   pub fn value_type(&self) -> &ValueType {
@@ -199,9 +190,9 @@ impl AggregateType {
     grounded_generic_arity: &mut HashMap<String, usize>,
   ) -> Result<(), String> {
     match binding_types {
-      BindingTypes::IfNotUnit { .. } => Err(format!("cannot have if-not-unit binding type in aggregate input")),
+      BindingTypes::IfNotUnit { .. } => Err("cannot have if-not-unit binding type in aggregate input".to_string()),
       BindingTypes::TupleType(elems) => {
-        if elems.len() == 0 {
+        if elems.is_empty() {
           // If elems.len() is 0, it means that there should be no variable for this part of aggregation.
           // We throw error if there is at least 1 variable.
           // Otherwise, the type checking is done as there is no variable that needs to be unified for type
@@ -290,7 +281,7 @@ impl AggregateType {
         if num_variables == 0 {
           Ok(0)
         } else {
-          self.solve_generic_type(kind, generic_type_name, &*child_generic_type_family, num_variables)
+          self.solve_generic_type(kind, generic_type_name, child_generic_type_family, num_variables)
         }
       }
       GenericTypeFamily::TypeFamily(_) => {
@@ -341,7 +332,7 @@ impl AggregateType {
           })
           .collect::<Result<Vec<_>, _>>()?
           .into_iter()
-          .fold(0, |acc, a| acc + a),
+          .sum::<usize>(),
       ),
     }
   }
@@ -508,6 +499,12 @@ impl AggregateRegistry {
       .iter()
       .map(|(name, agg)| (name.clone(), agg.aggregate_type()))
       .collect()
+  }
+}
+
+impl Default for AggregateRegistry {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

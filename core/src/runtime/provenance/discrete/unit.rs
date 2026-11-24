@@ -33,7 +33,7 @@ impl Provenance for UnitProvenance {
   type OutputTag = Unit;
 
   fn name(&self) -> String {
-    format!("unit")
+    "unit".to_string()
   }
 
   fn tagging_fn(&self, _: Self::InputTag) -> Self::Tag {

@@ -219,10 +219,8 @@ pub trait ForeignFunction: DynClone {
       let optional_argument_id = i - self.num_static_arguments();
       if optional_argument_id < self.num_optional_arguments() {
         Some(self.optional_argument_type(optional_argument_id).clone())
-      } else if let Some(var_arg_type) = &self.optional_variable_argument_type() {
-        Some(var_arg_type.clone())
       } else {
-        None
+        self.optional_variable_argument_type()
       }
     }
   }
@@ -276,16 +274,16 @@ pub trait ForeignFunction: DynClone {
   }
 
   /// Infer the function return type from concrete input arguments
-  fn infer_return_type(&self, input_args: &Vec<Value>) -> ValueType {
+  fn infer_return_type(&self, input_args: &[Value]) -> ValueType {
     // Get the exact return type from argument type
     match self.return_type() {
       ForeignFunctionParameterType::BaseType(ty) => ty,
       ForeignFunctionParameterType::Generic(generic_id) => {
-        for i in 0..input_args.len() {
+        for (i, arg) in input_args.iter().enumerate() {
           let arg_ty = self.argument_type(i).unwrap();
           match arg_ty {
             ForeignFunctionParameterType::Generic(curr_generic_id) if generic_id == curr_generic_id => {
-              return input_args[i].value_type()
+              return arg.value_type()
             }
             _ => {}
           }
@@ -597,6 +595,12 @@ impl ForeignFunctionRegistry {
   /// Get a foreign function in this registry
   pub fn get(&self, name: &str) -> Option<&DynamicForeignFunction> {
     self.registry.get(name)
+  }
+}
+
+impl Default for ForeignFunctionRegistry {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

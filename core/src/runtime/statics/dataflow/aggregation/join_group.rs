@@ -68,15 +68,11 @@ where
   }
 
   fn iter_recent(self) -> Self::Recent {
-    let mut group_by_c = if let Some(b) = self.d1.iter_recent().next() {
-      b
-    } else {
+    let Some(mut group_by_c) = self.d1.iter_recent().next() else {
       return Self::Recent::empty();
     };
 
-    let mut main_c = if let Some(b) = self.d2.iter_recent().next() {
-      b
-    } else {
+    let Some(mut main_c) = self.d2.iter_recent().next() else {
       return Self::Recent::empty();
     };
 
@@ -97,14 +93,15 @@ where
         let to_agg_tup = &to_agg_elem.tuple;
 
         // Compare the keys
-        if key_tup.0 == to_agg_tup.0 {
+        let order = key_tup.0.cmp_tuple(&to_agg_tup.0);
+        if order.is_eq() {
           let key = key_tup.0.clone();
 
           // Get the set of variables to join on
           let mut to_join = vec![(key_tag.clone(), key_tup.1.clone())];
           i = group_by_c.next();
           while let Some(e) = &i {
-            if e.tuple.0 == key {
+            if e.tuple.0.cmp_tuple(&key).is_eq() {
               to_join.push((e.tag.clone(), e.tuple.1.clone()));
               i = group_by_c.next();
             } else {
@@ -116,7 +113,7 @@ where
           let mut to_agg = vec![to_agg_elem.clone()];
           j = main_c.next();
           while let Some(e) = &j {
-            if e.tuple.0 == key {
+            if e.tuple.0.cmp_tuple(&key).is_eq() {
               to_agg.push(e.clone());
               j = main_c.next();
             } else {
@@ -126,7 +123,7 @@ where
 
           // Add this to the groups
           groups.push((key, to_join, to_agg));
-        } else if key_tup.0 < to_agg_tup.0 {
+        } else if order.is_lt() {
           groups.push((key_tup.0.clone(), vec![(key_tag.clone(), key_tup.1.clone())], vec![]));
           i = group_by_c.next();
         } else {
@@ -142,7 +139,7 @@ where
 
     let result: StaticElements<(K, T1, A::Output), Prov> = groups
       .into_iter()
-      .map(|(group_key, group_by_vals, to_agg_vals)| {
+      .flat_map(|(group_key, group_by_vals, to_agg_vals)| {
         let to_agg_tups = to_agg_vals
           .iter()
           .map(|e| StaticElement::new(e.tuple.1.clone(), e.tag.clone()))
@@ -157,7 +154,6 @@ where
           })
           .collect::<Vec<_>>()
       })
-      .flatten()
       .collect::<Vec<_>>();
 
     Self::Recent::singleton(result.into_iter())

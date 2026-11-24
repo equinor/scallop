@@ -6,20 +6,20 @@ use scallop_core::testing::*;
 
 #[test]
 fn test_dynamic_difference_unit_1() {
-  test_dynamic_difference_master_1(unit::UnitProvenance::default());
+  test_dynamic_difference_master_1(unit::UnitProvenance);
 }
 
 #[test]
 fn test_dynamic_difference_bool_1() {
-  test_dynamic_difference_master_1(boolean::BooleanProvenance::default());
+  test_dynamic_difference_master_1(boolean::BooleanProvenance);
 }
 
-fn test_dynamic_difference_master_1<Prov>(mut ctx: Prov)
+fn test_dynamic_difference_master_1<Prov>(ctx: Prov)
 where
   Prov::Tag: std::fmt::Debug,
   Prov: Provenance,
 {
-  let mut rt = RuntimeEnvironment::default();
+  let rt = RuntimeEnvironment::default();
 
   // Relations
   let mut source_1 = DynamicRelation::<Prov>::new();
@@ -27,8 +27,8 @@ where
   let mut target = DynamicRelation::<Prov>::new();
 
   // Initial
-  source_1.insert_untagged(&mut ctx, vec![(0i8, 1i8), (1i8, 2i8)]);
-  source_2.insert_untagged(&mut ctx, vec![(1i8, 1i8), (1i8, 2i8)]);
+  source_1.insert_untagged(&ctx, vec![(0i8, 1i8), (1i8, 2i8)]);
+  source_2.insert_untagged(&ctx, vec![(1i8, 1i8), (1i8, 2i8)]);
 
   // To allow source_2 for computation, we need it to be a collection
   while source_2.changed(&ctx, rt.get_default_scheduler()) {}
@@ -40,7 +40,7 @@ where
       &ctx,
       &DynamicDataflow::dynamic_relation(&source_1)
         .difference(DynamicDataflow::dynamic_recent_sorted_collection(&source_2_coll), &ctx),
-      &mut rt,
+      &rt,
     )
   }
 

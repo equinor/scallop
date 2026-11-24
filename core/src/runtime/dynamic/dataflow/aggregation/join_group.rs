@@ -42,15 +42,11 @@ impl<'a, Prov: Provenance> DynamicAggregationJoinGroupDataflow<'a, Prov> {
 
 impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicAggregationJoinGroupDataflow<'a, Prov> {
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
-    let mut group_by_c = if let Some(b1) = self.d1.iter_recent().next_batch() {
-      b1
-    } else {
+    let Some(mut group_by_c) = self.d1.iter_recent().next_batch() else {
       return DynamicBatches::empty();
     };
 
-    let mut main_c = if let Some(b2) = self.d2.iter_recent().next_batch() {
-      b2
-    } else {
+    let Some(mut main_c) = self.d2.iter_recent().next_batch() else {
       return DynamicBatches::empty();
     };
 
@@ -112,7 +108,7 @@ impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicAggregationJoinGroupDat
 
     let result: DynamicElements<Prov> = groups
       .into_iter()
-      .map(|(group_key, group_by_vals, to_agg_vals)| {
+      .flat_map(|(group_key, group_by_vals, to_agg_vals)| {
         let to_agg_tups = to_agg_vals
           .iter()
           .map(|e| DynamicElement::new(e.tuple[1].clone(), e.tag.clone()))
@@ -127,7 +123,6 @@ impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicAggregationJoinGroupDat
           })
           .collect::<Vec<_>>()
       })
-      .flatten()
       .collect::<Vec<_>>();
 
     DynamicBatches::single(ElementsBatch::new(result))

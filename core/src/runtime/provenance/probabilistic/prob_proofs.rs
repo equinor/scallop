@@ -21,7 +21,7 @@ impl ProbProof {
 
 impl AsBooleanFormula for ProbProof {
   fn as_boolean_formula(&self) -> sdd::BooleanFormula {
-    sdd::bf_conjunction(self.facts.iter().map(|f| sdd::bf_pos(f.clone())))
+    sdd::bf_conjunction(self.facts.iter().map(|f| sdd::bf_pos(*f)))
   }
 }
 
@@ -65,14 +65,13 @@ impl ProbProofs {
 
   pub fn union(t1: &Self, t2: &Self) -> Self {
     Self {
-      proofs: vec![t1.proofs.clone(), t2.proofs.clone()].concat(),
+      proofs: [t1.proofs.clone(), t2.proofs.clone()].concat(),
     }
   }
 
   pub fn cartesian_product(t1: &Self, t2: &Self) -> Self {
     Self {
       proofs: iproduct!(&t1.proofs, &t2.proofs)
-        .into_iter()
         .map(|(p1, p2)| ProbProof::merge(p1, p2))
         .collect(),
     }
@@ -130,7 +129,7 @@ impl<P: PointerFamily> Provenance for ProbProofsProvenance<P> {
   type OutputTag = f64;
 
   fn name(&self) -> String {
-    format!("prob-proofs")
+    "prob-proofs".to_string()
   }
 
   fn tagging_fn(&self, input_tag: Self::InputTag) -> Self::Tag {

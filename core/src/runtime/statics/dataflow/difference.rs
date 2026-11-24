@@ -230,7 +230,9 @@ where
             }
           }
           Ordering::Greater => {
-            self.i2_curr = self.i2.search_ahead(|i2_next| i2_next < &i1_curr.tuple);
+            self.i2_curr = self
+              .i2
+              .search_ahead(|i2_next| i2_next.cmp_tuple(&i1_curr.tuple).is_lt());
           }
         },
         (Some(i1_curr), None) => {

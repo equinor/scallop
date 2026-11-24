@@ -31,8 +31,8 @@ impl ForeignFunction for StringCharAt {
 
   fn execute(&self, args: Vec<Value>) -> Option<Value> {
     match (&args[0], &args[1]) {
-      (Value::String(s), Value::USize(i)) => s.chars().skip(*i).next().map(Value::Char),
-      (Value::Str(s), Value::USize(i)) => s.chars().skip(*i).next().map(Value::Char),
+      (Value::String(s), Value::USize(i)) => s.chars().nth(*i).map(Value::Char),
+      (Value::Str(s), Value::USize(i)) => s.chars().nth(*i).map(Value::Char),
       _ => None,
     }
   }

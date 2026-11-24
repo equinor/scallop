@@ -69,7 +69,7 @@ impl Provenance for RealTropicalProofsProvenance {
   type OutputTag = RealTropicalProofsTag;
 
   fn name(&self) -> String {
-    format!("realtropicalproofs")
+    "realtropicalproofs".to_string()
   }
 
   fn tagging_fn(&self, ext_tag: Self::InputTag) -> Self::Tag {
@@ -93,7 +93,7 @@ impl Provenance for RealTropicalProofsProvenance {
     if t.real.is_infinite() {
       return true;
     }
-    return t.proof.is_empty();
+    t.proof.is_empty()
   }
 
   fn weight(&self, tag: &Self::Tag) -> f64 {

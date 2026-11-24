@@ -52,7 +52,7 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticCollection<Tup, Prov> {
       to_keep += 1;
       index += 1;
       while index < elements.len() {
-        if &elements[index].tuple == &elements[last_index].tuple {
+        if elements[index].tuple == elements[last_index].tuple {
           let new_tag = ctx.add(&elements[last_index].tag, &elements[index].tag);
           elements[last_index].tag = new_tag;
         } else {
@@ -84,10 +84,6 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticCollection<Tup, Prov> {
 
   pub fn iter(&self) -> impl Iterator<Item = &StaticElement<Tup, Prov>> {
     self.elements.iter()
-  }
-
-  pub fn into_iter(self) -> impl IntoIterator<Item = StaticElement<Tup, Prov>> {
-    self.elements.into_iter()
   }
 
   pub fn recover(self, ctx: &Prov) -> StaticOutputCollection<Tup, Prov> {
@@ -124,7 +120,7 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticCollection<Tup, Prov> {
 
     // Fast path for when all the new elements are after the exiting ones
     if elements1[elements1.len() - 1] < elements2[0] {
-      elements1.extend(elements2.into_iter());
+      elements1.extend(elements2);
       return Self { elements: elements1 };
     }
 
@@ -155,6 +151,15 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticCollection<Tup, Prov> {
     elements.extend(elements2);
 
     Self { elements }
+  }
+}
+
+impl<Tup: StaticTupleTrait, Prov: Provenance> IntoIterator for StaticCollection<Tup, Prov> {
+  type Item = StaticElement<Tup, Prov>;
+  type IntoIter = std::vec::IntoIter<Self::Item>;
+
+  fn into_iter(self) -> Self::IntoIter {
+    self.elements.into_iter()
   }
 }
 

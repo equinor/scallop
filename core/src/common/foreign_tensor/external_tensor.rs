@@ -47,8 +47,8 @@ impl std::cmp::PartialEq for DynamicExternalTensor {
 impl std::cmp::Eq for DynamicExternalTensor {}
 
 impl std::cmp::PartialOrd for DynamicExternalTensor {
-  fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
-    Some(std::cmp::Ordering::Equal)
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    Some(self.cmp(other))
   }
 }
 

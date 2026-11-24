@@ -146,7 +146,6 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicCollectionIter<'a, Prov> {
     match self {
       Self::Sorted(s) => s.next(),
       Self::IndexedVec(s) => s.next(),
-      Self::DenseMatrix(s) => s.next(),
     }
   }
 }

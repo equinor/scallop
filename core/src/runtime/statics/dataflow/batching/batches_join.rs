@@ -64,19 +64,12 @@ where
 
   fn next(&mut self) -> Option<Self::Item> {
     loop {
-      match &self.b1_curr {
-        Some(b1_curr) => match self.b2.next() {
-          Some(b2_curr) => {
-            let result = self.op.apply(b1_curr.clone(), b2_curr);
-            return Some(result);
-          }
-          None => {
-            self.b1_curr = self.b1.next();
-            self.b2 = self.b2_source.clone();
-          }
-        },
-        None => return None,
+      let b1_curr = self.b1_curr.as_ref()?;
+      if let Some(b2_curr) = self.b2.next() {
+        return Some(self.op.apply(b1_curr.clone(), b2_curr));
       }
+      self.b1_curr = self.b1.next();
+      self.b2 = self.b2_source.clone();
     }
   }
 }

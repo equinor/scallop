@@ -21,7 +21,7 @@ impl RangeBBF {
   }
 
   /// Compute the numbers between
-  fn range<T: Integer>(begin: &Value, end: &Value) -> impl Iterator<Item = T>
+  fn range<T: Integer>(begin: &Value, end: &Value) -> impl Iterator<Item = T> + use<T>
   where
     Value: TryInto<T>,
   {

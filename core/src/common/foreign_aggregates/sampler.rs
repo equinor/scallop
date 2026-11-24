@@ -30,9 +30,9 @@ impl Clone for DynamicSampleAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for DynamicSampleAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::Sampler(self)
+impl From<DynamicSampleAggregate> for DynamicAggregate {
+  fn from(val: DynamicSampleAggregate) -> Self {
+    DynamicAggregate::Sampler(val)
   }
 }
 

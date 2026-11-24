@@ -28,10 +28,10 @@ pub fn parse_date_time_string(input: &str) -> Option<Timestamp> {
     }
   }
 
-  if let Ok((date, end)) = BrokenDownTime::parse_prefix("%Y-%m-%d", input) {
-    if let Some(offset) = parse_offset(input[end..].trim_start()) {
-      return offset.to_timestamp(date.to_datetime().ok()?).ok();
-    }
+  if let Ok((date, end)) = BrokenDownTime::parse_prefix("%Y-%m-%d", input)
+    && let Some(offset) = parse_offset(input[end..].trim_start())
+  {
+    return offset.to_timestamp(date.to_datetime().ok()?).ok();
   }
 
   let (input, offset) = input

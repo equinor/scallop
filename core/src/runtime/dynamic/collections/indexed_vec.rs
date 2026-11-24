@@ -3,16 +3,18 @@ use crate::common::tuple::Tuple;
 use crate::common::value_type::ValueType;
 use crate::runtime::provenance::*;
 
+type IndexedSlot<Prov> = Option<(Tuple, <Prov as Provenance>::Tag)>;
+
 #[derive(Clone)]
 pub struct DynamicIndexedVecCollection<Prov: Provenance> {
   index_type: ValueType,
-  vec: Vec<Option<(Tuple, Prov::Tag)>>,
+  vec: Vec<IndexedSlot<Prov>>,
   length: usize,
 }
 
-impl<Prov: Provenance> Into<DynamicCollection<Prov>> for DynamicIndexedVecCollection<Prov> {
-  fn into(self) -> DynamicCollection<Prov> {
-    DynamicCollection::IndexedVec(self)
+impl<Prov: Provenance> From<DynamicIndexedVecCollection<Prov>> for DynamicCollection<Prov> {
+  fn from(val: DynamicIndexedVecCollection<Prov>) -> Self {
+    DynamicCollection::IndexedVec(val)
   }
 }
 
@@ -36,8 +38,7 @@ impl<Prov: Provenance> DynamicIndexedVecCollection<Prov> {
       let first_tuple = &elements[0].tuple;
       if let Some(index_type) = first_tuple[0].value_type() {
         // Initialize a storage and reserve a capacity
-        let mut vec = Vec::new();
-        vec.reserve(elements.len());
+        let mut vec = Vec::with_capacity(elements.len());
 
         // Initialize a length
         let mut length = 0;
@@ -109,17 +110,22 @@ impl<Prov: Provenance> DynamicIndexedVecCollection<Prov> {
     }
   }
 
-  pub fn into_iter(self) -> DynamicIndexedVecCollectionIntoIter<Prov> {
-    DynamicIndexedVecCollectionIntoIter {
-      index_type: self.index_type.clone(),
-      vec_iter: self.vec.into_iter().enumerate(),
-    }
-  }
-
   pub fn drain<'a>(&'a mut self) -> DynamicIndexedVecCollectionDrainer<'a, Prov> {
     DynamicIndexedVecCollectionDrainer {
       index_type: self.index_type.clone(),
       vec_drainer: self.vec.drain(..).enumerate(),
+    }
+  }
+}
+
+impl<Prov: Provenance> IntoIterator for DynamicIndexedVecCollection<Prov> {
+  type Item = DynamicElement<Prov>;
+  type IntoIter = DynamicIndexedVecCollectionIntoIter<Prov>;
+
+  fn into_iter(self) -> Self::IntoIter {
+    DynamicIndexedVecCollectionIntoIter {
+      index_type: self.index_type,
+      vec_iter: self.vec.into_iter().enumerate(),
     }
   }
 }
@@ -152,14 +158,14 @@ where
 #[derive(Clone)]
 pub struct DynamicIndexedVecCollectionIter<'a, Prov: Provenance> {
   index_type: ValueType,
-  vec_iter: std::iter::Enumerate<core::slice::Iter<'a, Option<(Tuple, Prov::Tag)>>>,
+  vec_iter: std::iter::Enumerate<core::slice::Iter<'a, IndexedSlot<Prov>>>,
 }
 
 impl<'a, Prov: Provenance> Iterator for DynamicIndexedVecCollectionIter<'a, Prov> {
   type Item = DynamicElement<Prov>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    while let Some((index, curr_elem)) = self.vec_iter.next() {
+    for (index, curr_elem) in self.vec_iter.by_ref() {
       if let Some((tail_tup, tag)) = curr_elem {
         return Some(construct_dyn_elem(
           &self.index_type,
@@ -175,14 +181,14 @@ impl<'a, Prov: Provenance> Iterator for DynamicIndexedVecCollectionIter<'a, Prov
 
 pub struct DynamicIndexedVecCollectionIntoIter<Prov: Provenance> {
   index_type: ValueType,
-  vec_iter: std::iter::Enumerate<std::vec::IntoIter<Option<(Tuple, Prov::Tag)>>>,
+  vec_iter: std::iter::Enumerate<std::vec::IntoIter<IndexedSlot<Prov>>>,
 }
 
 impl<Prov: Provenance> Iterator for DynamicIndexedVecCollectionIntoIter<Prov> {
   type Item = DynamicElement<Prov>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    while let Some((index, curr_elem)) = self.vec_iter.next() {
+    for (index, curr_elem) in self.vec_iter.by_ref() {
       if let Some((tail_tup, tag)) = curr_elem {
         return Some(construct_dyn_elem(&self.index_type, index, tail_tup, tag));
       }
@@ -193,14 +199,14 @@ impl<Prov: Provenance> Iterator for DynamicIndexedVecCollectionIntoIter<Prov> {
 
 pub struct DynamicIndexedVecCollectionDrainer<'a, Prov: Provenance> {
   index_type: ValueType,
-  vec_drainer: std::iter::Enumerate<std::vec::Drain<'a, Option<(Tuple, Prov::Tag)>>>,
+  vec_drainer: std::iter::Enumerate<std::vec::Drain<'a, IndexedSlot<Prov>>>,
 }
 
 impl<'a, Prov: Provenance> Iterator for DynamicIndexedVecCollectionDrainer<'a, Prov> {
   type Item = DynamicElement<Prov>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    while let Some((index, curr_elem)) = self.vec_drainer.next() {
+    for (index, curr_elem) in self.vec_drainer.by_ref() {
       if let Some((tail_tup, tag)) = curr_elem {
         return Some(construct_dyn_elem(&self.index_type, index, tail_tup, tag));
       }
@@ -219,6 +225,6 @@ fn construct_dyn_elem<Prov: Provenance>(
     .value_from_usize(index)
     .expect("Expect a value type that can be casted from usize");
   let tup = Tuple::from_values(std::iter::once(index_value).chain(tail.in_order_values()));
-  let complete_elem = DynamicElement::<Prov>::new(tup, tag.clone());
-  return complete_elem;
+
+  DynamicElement::<Prov>::new(tup, tag.clone())
 }

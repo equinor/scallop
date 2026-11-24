@@ -56,6 +56,12 @@ impl<T: StaticTupleTrait, Prov: Provenance> SortedOp<T, Prov> {
   }
 }
 
+impl<T: StaticTupleTrait, Prov: Provenance> Default for SortedOp<T, Prov> {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl<I, T, Prov> BatchUnaryOp<I> for SortedOp<T, Prov>
 where
   T: StaticTupleTrait,

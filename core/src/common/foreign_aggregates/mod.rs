@@ -32,4 +32,18 @@ pub use top_k::*;
 pub use uniform::*;
 pub use weighted_sum_avg::*;
 
+use crate::runtime::dynamic::DynamicElement;
+use crate::runtime::provenance::Provenance;
+
 use super::foreign_aggregate::*;
+
+fn chosen_set_tag<P: Provenance>(prov: &P, batch: &[DynamicElement<P>], chosen: &[usize]) -> Option<P::Tag> {
+  batch.iter().enumerate().try_fold(prov.one(), |acc, (i, elem)| {
+    if chosen.contains(&i) {
+      Some(prov.mult(&acc, &elem.tag))
+    } else {
+      let negated = prov.negate(&elem.tag)?;
+      Some(prov.mult(&acc, &negated))
+    }
+  })
+}

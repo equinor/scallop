@@ -22,5 +22,5 @@ where
       result.push(v.clone());
     }
   }
-  return result;
+  result
 }

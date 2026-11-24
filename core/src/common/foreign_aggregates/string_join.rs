@@ -9,7 +9,7 @@ use crate::utils;
 
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct StringJoinAggregate;
 
 impl StringJoinAggregate {
@@ -18,9 +18,9 @@ impl StringJoinAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for StringJoinAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::StringJoin(self)
+impl From<StringJoinAggregate> for DynamicAggregate {
+  fn from(val: StringJoinAggregate) -> Self {
+    DynamicAggregate::StringJoin(val)
   }
 }
 
@@ -44,7 +44,6 @@ impl Aggregate for StringJoinAggregate {
       input_type: BindingTypes::value_type(ValueType::String),
       output_type: BindingTypes::value_type(ValueType::String),
       allow_exclamation_mark: true,
-      ..Default::default()
     }
   }
 
@@ -55,7 +54,7 @@ impl Aggregate for StringJoinAggregate {
       use_all_args: info.named_params.get("all").map(|v| v.as_bool()).unwrap_or(false),
       separator: info
         .pos_params
-        .get(0)
+        .first()
         .map(|v| v.as_str().to_string())
         .unwrap_or("".to_string()),
     }
@@ -141,16 +140,7 @@ impl StringJoinAggregator {
     let mut result = vec![];
     for chosen_set in (0..batch.len()).powerset() {
       let res = self.perform_string_join(chosen_set.iter().map(|i| &batch[*i].tuple));
-      let maybe_tag = batch.iter().enumerate().fold(Some(prov.one()), |maybe_acc, (i, elem)| {
-        maybe_acc.and_then(|acc| {
-          if chosen_set.contains(&i) {
-            Some(prov.mult(&acc, &elem.tag))
-          } else {
-            prov.negate(&elem.tag).map(|neg_tag| prov.mult(&acc, &neg_tag))
-          }
-        })
-      });
-      if let Some(tag) = maybe_tag {
+      if let Some(tag) = super::chosen_set_tag(prov, &batch, &chosen_set) {
         result.push(DynamicElement::new(res, tag));
       }
     }
