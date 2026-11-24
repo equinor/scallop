@@ -418,9 +418,7 @@ impl Dataflow {
           false
         }
       }
-      Self::ForeignPredicateGround(_, _) | Self::UntaggedVec(_) => {
-        false
-      },
+      Self::ForeignPredicateGround(_, _) | Self::UntaggedVec(_) => false,
     }
   }
 }
@@ -447,9 +445,7 @@ impl ReduceGroupByType {
 
   pub fn substitute_relation(&mut self, source: &str, target: &str) -> bool {
     match self {
-      Self::None | Self::Implicit => {
-        false
-      }
+      Self::None | Self::Implicit => false,
       Self::Join(s) => {
         if s == source {
           *s = target.to_string();

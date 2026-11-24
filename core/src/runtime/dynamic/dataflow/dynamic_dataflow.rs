@@ -146,7 +146,11 @@ impl<'a, Prov: Provenance> DynamicDataflow<'a, Prov> {
   }
 
   pub fn join_indexed_vec(self, indexed_vec: &'a DynamicIndexedVecCollection<Prov>, ctx: &'a Prov) -> Self {
-    Self::new(DynamicJoinIndexedVecDataflow { d1: self, indexed_vec, ctx })
+    Self::new(DynamicJoinIndexedVecDataflow {
+      d1: self,
+      indexed_vec,
+      ctx,
+    })
   }
 
   pub fn foreign_predicate_ground(

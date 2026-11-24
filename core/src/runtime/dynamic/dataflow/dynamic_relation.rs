@@ -152,7 +152,11 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicRelationRecentBatch<'a, Pr
   }
 }
 
-fn search_ahead_variable_helper<Prov, F>(collection: &DynamicSortedCollection<Prov>, elem_id: &mut usize, mut cmp: F) -> bool
+fn search_ahead_variable_helper<Prov, F>(
+  collection: &DynamicSortedCollection<Prov>,
+  elem_id: &mut usize,
+  mut cmp: F,
+) -> bool
 where
   Prov: Provenance,
   F: FnMut(&Tuple) -> bool,

@@ -305,9 +305,10 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
   }
 
   fn create_relation(&mut self, relation: &ram::Relation) {
-    self.extensional_relations.entry(relation.predicate.clone()).or_insert_with(|| {
-      ExtensionalRelation::new_with_metadata(relation.storage.clone())
-    });
+    self
+      .extensional_relations
+      .entry(relation.predicate.clone())
+      .or_insert_with(|| ExtensionalRelation::new_with_metadata(relation.storage.clone()));
   }
 }
 

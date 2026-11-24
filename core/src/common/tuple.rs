@@ -2,8 +2,8 @@
 
 use super::generic_tuple::GenericTuple;
 use super::tuple_type::TupleType;
-use super::value_type::ValueType;
 use super::value::Value;
+use super::value_type::ValueType;
 
 pub type Tuple = GenericTuple<Value>;
 
@@ -64,7 +64,7 @@ impl Tuple {
           all.extend(elem.in_order_values().into_iter())
         }
         all
-      },
+      }
     }
   }
 

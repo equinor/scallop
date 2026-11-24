@@ -119,7 +119,7 @@ impl<Prov: Provenance> DynamicIndexedVecCollection<Prov> {
   pub fn drain<'a>(&'a mut self) -> DynamicIndexedVecCollectionDrainer<'a, Prov> {
     DynamicIndexedVecCollectionDrainer {
       index_type: self.index_type.clone(),
-      vec_drainer: self.vec.drain(..).enumerate()
+      vec_drainer: self.vec.drain(..).enumerate(),
     }
   }
 }
@@ -161,7 +161,12 @@ impl<'a, Prov: Provenance> Iterator for DynamicIndexedVecCollectionIter<'a, Prov
   fn next(&mut self) -> Option<Self::Item> {
     while let Some((index, curr_elem)) = self.vec_iter.next() {
       if let Some((tail_tup, tag)) = curr_elem {
-        return Some(construct_dyn_elem(&self.index_type, index, tail_tup.clone(), tag.clone()))
+        return Some(construct_dyn_elem(
+          &self.index_type,
+          index,
+          tail_tup.clone(),
+          tag.clone(),
+        ));
       }
     }
     None
@@ -179,7 +184,7 @@ impl<Prov: Provenance> Iterator for DynamicIndexedVecCollectionIntoIter<Prov> {
   fn next(&mut self) -> Option<Self::Item> {
     while let Some((index, curr_elem)) = self.vec_iter.next() {
       if let Some((tail_tup, tag)) = curr_elem {
-        return Some(construct_dyn_elem(&self.index_type, index, tail_tup, tag))
+        return Some(construct_dyn_elem(&self.index_type, index, tail_tup, tag));
       }
     }
     None
@@ -197,7 +202,7 @@ impl<'a, Prov: Provenance> Iterator for DynamicIndexedVecCollectionDrainer<'a, P
   fn next(&mut self) -> Option<Self::Item> {
     while let Some((index, curr_elem)) = self.vec_drainer.next() {
       if let Some((tail_tup, tag)) = curr_elem {
-        return Some(construct_dyn_elem(&self.index_type, index, tail_tup, tag))
+        return Some(construct_dyn_elem(&self.index_type, index, tail_tup, tag));
       }
     }
     None
@@ -210,8 +215,10 @@ fn construct_dyn_elem<Prov: Provenance>(
   tail: Tuple,
   tag: Prov::Tag,
 ) -> DynamicElement<Prov> {
-  let index_value = index_type.value_from_usize(index).expect("Expect a value type that can be casted from usize");
+  let index_value = index_type
+    .value_from_usize(index)
+    .expect("Expect a value type that can be casted from usize");
   let tup = Tuple::from_values(std::iter::once(index_value).chain(tail.in_order_values()));
   let complete_elem = DynamicElement::<Prov>::new(tup, tag.clone());
-  return complete_elem
+  return complete_elem;
 }

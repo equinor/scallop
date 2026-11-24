@@ -22,19 +22,16 @@ impl AttributeTrait for SchedulerAttribute {
     match &self.scheduler {
       Scheduler::LFP => {
         vec!["\"lfp\"".to_string()]
-      },
+      }
       Scheduler::AStar => {
         vec!["\"a-star\"".to_string()]
-      },
+      }
       Scheduler::DFS => {
         vec!["\"dfs\"".to_string()]
-      },
+      }
       Scheduler::Beam { beam_size } => {
-        vec![
-          "\"beam\"".to_string(),
-          format!("beam_size={beam_size}"),
-        ]
-      },
+        vec!["\"beam\"".to_string(), format!("beam_size={beam_size}")]
+      }
     }
   }
 }

@@ -14,7 +14,10 @@ impl From<Vec<Attribute>> for Attributes {
   }
 }
 
-impl<T> From<T> for Attributes where T: AttributeTrait {
+impl<T> From<T> for Attributes
+where
+  T: AttributeTrait,
+{
   fn from(t: T) -> Self {
     let attr = Attribute::new(t);
     Self {
@@ -25,9 +28,7 @@ impl<T> From<T> for Attributes where T: AttributeTrait {
 
 impl Attributes {
   pub fn new() -> Self {
-    Self {
-      attrs: BTreeMap::new(),
-    }
+    Self { attrs: BTreeMap::new() }
   }
 
   pub fn insert<T: AttributeTrait>(&mut self, t: T) {
@@ -47,7 +48,10 @@ pub struct Attribute {
   attr: Box<dyn AttributeTrait>,
 }
 
-impl<T> From<T> for Attribute where T: AttributeTrait {
+impl<T> From<T> for Attribute
+where
+  T: AttributeTrait,
+{
   fn from(t: T) -> Self {
     Self::new(t)
   }
@@ -55,9 +59,7 @@ impl<T> From<T> for Attribute where T: AttributeTrait {
 
 impl Attribute {
   pub fn new<T: AttributeTrait>(t: T) -> Self {
-    Self {
-      attr: Box::new(t),
-    }
+    Self { attr: Box::new(t) }
   }
 
   pub fn name(&self) -> String {
@@ -86,7 +88,10 @@ impl std::cmp::PartialEq for Attribute {
 
 impl std::fmt::Debug for Attribute {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.debug_struct("Attribute").field("name", &self.name()).field("args", &self.args()).finish()
+    f.debug_struct("Attribute")
+      .field("name", &self.name())
+      .field("args", &self.args())
+      .finish()
   }
 }
 

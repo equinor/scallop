@@ -53,30 +53,20 @@ pub enum Scheduler {
   AStar,
 
   /// Beam Search Algorithm with beam size
-  Beam {
-    beam_size: usize
-  },
+  Beam { beam_size: usize },
 }
 
 impl Scheduler {
   pub fn from_args(scheduler: Option<String>, beam_size: Option<usize>) -> Result<Option<Self>, String> {
     if let Some(scheduler) = scheduler {
       match scheduler.as_str() {
-        "lfp" | "bfs" => {
-          Ok(Some(Self::LFP))
-        },
-        "dfs" => {
-          Ok(Some(Self::DFS))
-        },
-        "a-star" | "astar" => {
-          Ok(Some(Self::AStar))
-        },
-        "beam" => {
-          Ok(Some(Self::Beam { beam_size: beam_size.unwrap_or(3) }))
-        },
-        s => {
-          Err(format!("Unknown scheduler `{s}`"))
-        }
+        "lfp" | "bfs" => Ok(Some(Self::LFP)),
+        "dfs" => Ok(Some(Self::DFS)),
+        "a-star" | "astar" => Ok(Some(Self::AStar)),
+        "beam" => Ok(Some(Self::Beam {
+          beam_size: beam_size.unwrap_or(3),
+        })),
+        s => Err(format!("Unknown scheduler `{s}`")),
       }
     } else {
       Ok(None)

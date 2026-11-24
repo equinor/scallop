@@ -1,11 +1,11 @@
 mod collection;
+mod collections;
 pub mod dataflow;
 mod element;
 mod incremental;
 mod iteration;
 mod output_collection;
 mod relation;
-mod collections;
 
 pub use collection::*;
 pub use collections::*;

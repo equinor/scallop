@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
   "core",
 
@@ -32,3 +32,6 @@ default-members = [
   "etc/scli",
   "etc/sclrepl",
 ]
+
+[workspace.package]
+edition = "2024"

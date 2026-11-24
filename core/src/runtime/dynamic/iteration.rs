@@ -1,10 +1,10 @@
 use std::collections::*;
 
 use crate::compiler::ram;
+use crate::runtime::database::*;
 use crate::runtime::env::*;
 use crate::runtime::monitor::*;
 use crate::runtime::provenance::*;
-use crate::runtime::database::*;
 
 use super::dataflow::*;
 use super::*;
@@ -78,7 +78,9 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
   }
 
   pub fn add_output_relation_with_default_storage(&mut self, name: &str) {
-    self.output_relations.push((name.to_string(), StorageMetadata::default()))
+    self
+      .output_relations
+      .push((name.to_string(), StorageMetadata::default()))
   }
 
   pub fn add_output_relation(&mut self, name: &str, metadata: &StorageMetadata) {
@@ -304,7 +306,7 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
   fn unsafe_get_input_dynamic_index_vec_collection(&self, name: &str) -> &'a DynamicIndexedVecCollection<Prov> {
     match self.unsafe_get_input_dynamic_collection(name) {
       DynamicCollectionRef::IndexedVec(i) => i,
-      _ => panic!("Relation `{}` is not stored as indexed vector; aborting", name)
+      _ => panic!("Relation `{}` is not stored as indexed vector; aborting", name),
     }
   }
 
@@ -381,9 +383,7 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
           .build_dynamic_dataflow(env, ctx, d1)
           .dynamic_exclusion(self.build_dynamic_dataflow(env, ctx, d2), ctx, env)
       }
-      ram::Dataflow::Sorted(d) => {
-        self.build_dynamic_dataflow(env, ctx, d).sorted()
-      }
+      ram::Dataflow::Sorted(d) => self.build_dynamic_dataflow(env, ctx, d).sorted(),
       ram::Dataflow::Filter(d, e) => {
         let internal_filter = env
           .internalize_expr(e)

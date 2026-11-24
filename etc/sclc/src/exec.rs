@@ -94,7 +94,7 @@ pub fn generate_exec_rust_project(
 
   // Create a temporary directory holding the cargo project
   fs::create_dir_all(&tmp_dir).unwrap();
-  fs::create_dir_all(&tmp_dir.join("src")).unwrap();
+  fs::create_dir_all(tmp_dir.join("src")).unwrap();
 
   // Create a Cargo.toml file
   let mut cargo_toml_file = File::create(tmp_dir.join("Cargo.toml")).unwrap();
@@ -104,7 +104,7 @@ pub fn generate_exec_rust_project(
         r#"[package]
 name = "{}"
 version = "1.0.0"
-edition = "2018"
+edition = "2024"
 [dependencies]
 scallop-core = {{ path = "{}/core" }}
 clap = {{ version = "4.6", features = ["derive"] }}
@@ -125,7 +125,7 @@ clap = {{ version = "4.6", features = ["derive"] }}
 }
 
 fn cmd_line_option_struct(opt: &Options, program_name: &str) -> TokenStream {
-  if let Some(_) = opt.provenance {
+  if opt.provenance.is_some() {
     quote! {}
   } else {
     quote! {
