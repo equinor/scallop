@@ -78,3 +78,26 @@ fn monitored_incremental_execution_reports_strata_in_order() {
   assert!(exec.idb.has_relation("selected"));
   assert_eq!(*monitor.0.borrow(), (0..stratum_count).collect::<Vec<_>>());
 }
+
+#[test]
+fn monitored_execution_derives_facts_for_new_entities() {
+  let mut exec = scallop_core::integrate::InterpretContext::<_, RcFamily>::new(
+    r#"
+    type Expr = Const(i32) | Add(Expr, Expr)
+    rel expr($parse_entity("Const(42)"))
+    rel result(v) = expr(e) and case e is Const(v)
+    query result
+    "#
+    .to_owned(),
+    unit::UnitProvenance,
+  )
+  .unwrap();
+  exec.run_with_monitor(&()).unwrap();
+
+  let idb = exec.idb();
+  let result = idb.get_output_collection_ref("result").unwrap();
+  assert_eq!(
+    result.iter().map(|(_, tuple)| tuple[0].as_i32()).collect::<Vec<_>>(),
+    [42]
+  );
+}

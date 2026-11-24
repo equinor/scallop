@@ -519,18 +519,9 @@ impl ForeignFunctionRegistry {
     registry.register(ffs::Abs).unwrap();
     registry.register(ffs::Floor).unwrap();
     registry.register(ffs::Ceil).unwrap();
-    registry.register(ffs::Exp).unwrap();
-    registry.register(ffs::Exp2).unwrap();
-    registry.register(ffs::Log).unwrap();
-    registry.register(ffs::Log2).unwrap();
+    ffs::register_unary_float_functions(&mut registry);
     registry.register(ffs::Pow).unwrap();
     registry.register(ffs::Powf).unwrap();
-    registry.register(ffs::Sin).unwrap();
-    registry.register(ffs::Cos).unwrap();
-    registry.register(ffs::Tan).unwrap();
-    registry.register(ffs::Asin).unwrap();
-    registry.register(ffs::Acos).unwrap();
-    registry.register(ffs::Atan).unwrap();
     registry.register(ffs::Atan2).unwrap();
     registry.register(ffs::Sign).unwrap();
 

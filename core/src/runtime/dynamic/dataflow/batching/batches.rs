@@ -18,24 +18,28 @@ impl<'a, Prov: Provenance> DynamicBatches<'a, Prov> {
     Self(Box::new(b))
   }
 
+  pub fn from_iterator(iter: impl Iterator<Item = DynamicBatch<'a, Prov>> + Clone + 'a) -> Self {
+    Self::new(IteratorBatches(iter))
+  }
+
   pub fn empty() -> Self {
-    Self::new(EmptyBatches)
+    Self::from_iterator(std::iter::empty())
   }
 
   pub fn single<B: Batch<'a, Prov>>(b: B) -> Self {
-    Self::new(SingleBatch::new(b))
+    Self::from_iterator(std::iter::once(DynamicBatch::new(b)))
   }
 
   pub fn chain(bs: Vec<DynamicBatches<'a, Prov>>) -> Self {
-    Self::new(DynamicBatchesChain::new(bs))
+    Self::from_iterator(bs.into_iter().flatten())
   }
 
   pub fn binary<Op: BatchBinaryOp<'a, Prov>>(self, b2: Self, op: Op) -> Self {
     Self::new(DynamicBatchesBinary::new(self, b2, op))
   }
 
-  pub fn unary<Op: BatchUnaryOp<'a, Prov>>(self, op: Op) -> Self {
-    Self::new(DynamicBatchesUnary::new(self, op))
+  pub fn unary<Op: BatchUnaryOp<'a, Prov> + Clone>(self, op: Op) -> Self {
+    Self::from_iterator(self.map(move |batch| op.apply(batch)))
   }
 }
 
@@ -54,69 +58,15 @@ impl<'a, Prov: Provenance> Iterator for DynamicBatches<'a, Prov> {
 }
 
 #[derive(Clone)]
-pub struct EmptyBatches;
+struct IteratorBatches<I>(I);
 
-impl<'a, Prov: Provenance> Batches<'a, Prov> for EmptyBatches {
+impl<'a, Prov, I> Batches<'a, Prov> for IteratorBatches<I>
+where
+  Prov: Provenance,
+  I: Iterator<Item = DynamicBatch<'a, Prov>> + Clone + 'a,
+{
   fn next_batch(&mut self) -> Option<DynamicBatch<'a, Prov>> {
-    None
-  }
-}
-
-#[derive(Clone)]
-pub struct SingleBatch<'a, Prov: Provenance>(Option<DynamicBatch<'a, Prov>>);
-
-impl<'a, Prov: Provenance> SingleBatch<'a, Prov> {
-  pub fn new<B: Batch<'a, Prov>>(b: B) -> Self {
-    Self(Some(DynamicBatch::new(b)))
-  }
-}
-
-impl<'a, Prov: Provenance> Batches<'a, Prov> for SingleBatch<'a, Prov> {
-  fn next_batch(&mut self) -> Option<DynamicBatch<'a, Prov>> {
-    self.0.take()
-  }
-}
-
-#[allow(unused)]
-#[derive(Clone)]
-pub struct DynamicBatchesOptional<'a, Prov: Provenance> {
-  optional_batches: Option<DynamicBatches<'a, Prov>>,
-}
-
-impl<'a, Prov: Provenance> Batches<'a, Prov> for DynamicBatchesOptional<'a, Prov> {
-  fn next_batch(&mut self) -> Option<DynamicBatch<'a, Prov>> {
-    match &mut self.optional_batches {
-      Some(b) => b.next_batch(),
-      None => None,
-    }
-  }
-}
-
-#[derive(Clone)]
-pub struct DynamicBatchesChain<'a, Prov: Provenance> {
-  bs: Vec<DynamicBatches<'a, Prov>>,
-  id: usize,
-}
-
-impl<'a, Prov: Provenance> DynamicBatchesChain<'a, Prov> {
-  pub fn new(bs: Vec<DynamicBatches<'a, Prov>>) -> Self {
-    Self { bs, id: 0 }
-  }
-}
-
-impl<'a, Prov: Provenance> Batches<'a, Prov> for DynamicBatchesChain<'a, Prov> {
-  fn next_batch(&mut self) -> Option<DynamicBatch<'a, Prov>> {
-    while self.id < self.bs.len() {
-      match self.bs[self.id].next_batch() {
-        Some(batch) => {
-          return Some(batch);
-        }
-        None => {
-          self.id += 1;
-        }
-      }
-    }
-    None
+    self.0.next()
   }
 }
 
@@ -157,26 +107,5 @@ impl<'a, Prov: Provenance> Batches<'a, Prov> for DynamicBatchesBinary<'a, Prov> 
       self.b1_curr = self.b1.next_batch();
       self.b2 = self.b2_source.clone();
     }
-  }
-}
-
-#[derive(Clone)]
-pub struct DynamicBatchesUnary<'a, Prov: Provenance> {
-  batches: DynamicBatches<'a, Prov>,
-  op: DynamicBatchUnaryOp<'a, Prov>,
-}
-
-impl<'a, Prov: Provenance> DynamicBatchesUnary<'a, Prov> {
-  pub fn new<Op: BatchUnaryOp<'a, Prov>>(b: DynamicBatches<'a, Prov>, op: Op) -> Self {
-    Self {
-      batches: b,
-      op: DynamicBatchUnaryOp::new(op),
-    }
-  }
-}
-
-impl<'a, Prov: Provenance> Batches<'a, Prov> for DynamicBatchesUnary<'a, Prov> {
-  fn next_batch(&mut self) -> Option<DynamicBatch<'a, Prov>> {
-    self.batches.next_batch().map(|b| self.op.apply(b))
   }
 }

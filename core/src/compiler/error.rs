@@ -1,19 +1,12 @@
 use super::back::BackCompileError;
 use super::front::FrontCompileError;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum CompileError {
+  #[error(transparent)]
   Front(FrontCompileError),
+  #[error(transparent)]
   Back(BackCompileError),
-}
-
-impl std::fmt::Display for CompileError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::Front(e) => std::fmt::Display::fmt(e, f),
-      Self::Back(e) => std::fmt::Display::fmt(e, f),
-    }
-  }
 }
 
 pub type CompileErrors = Vec<CompileError>;

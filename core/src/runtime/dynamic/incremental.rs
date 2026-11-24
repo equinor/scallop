@@ -101,7 +101,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
 
   /// Directly execute the program stored in the file
   pub fn execute(&mut self, runtime: &RuntimeEnvironment, ctx: &mut Prov) -> Result<(), RuntimeError> {
-    self.incremental_execute_helper(None, runtime, ctx)
+    self.execute_inner::<()>(None, runtime, ctx, None)
   }
 
   pub fn incremental_execute(
@@ -110,14 +110,38 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     runtime: &RuntimeEnvironment,
     ctx: &Prov,
   ) -> Result<(), RuntimeError> {
-    self.incremental_execute_helper(Some(program), runtime, ctx)
+    self.execute_inner::<()>(Some(program), runtime, ctx, None)
   }
 
-  fn incremental_execute_helper(
+  /// Directly execute the program stored in the file
+  pub fn execute_with_monitor<M>(&mut self, runtime: &RuntimeEnvironment, ctx: &Prov, m: &M) -> Result<(), RuntimeError>
+  where
+    M: Monitor<Prov>,
+  {
+    self.execute_inner(None, runtime, ctx, Some(m))?;
+    m.observe_finish_execution();
+    Ok(())
+  }
+
+  pub fn incremental_execute_with_monitor<M>(
+    &mut self,
+    program: ram::Program,
+    runtime: &RuntimeEnvironment,
+    ctx: &Prov,
+    m: &M,
+  ) -> Result<(), RuntimeError>
+  where
+    M: Monitor<Prov>,
+  {
+    self.execute_inner(Some(program), runtime, ctx, Some(m))
+  }
+
+  fn execute_inner<M: Monitor<Prov>>(
     &mut self,
     maybe_new_program: Option<ram::Program>,
     runtime: &RuntimeEnvironment,
     ctx: &Prov,
+    monitor: Option<&M>,
   ) -> Result<(), RuntimeError> {
     // Pull the IDB
     let mut incremental_result = IntentionalDatabase::default();
@@ -155,7 +179,11 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     };
 
     // Internalize EDB relations
-    self.edb.internalize(runtime, ctx);
+    if let Some(m) = monitor {
+      self.edb.internalize_with_monitor(runtime, ctx, m);
+    } else {
+      self.edb.internalize(runtime, ctx);
+    }
 
     // Generate stratum information
     let strata_info = stratum_inputs_outputs(program_ref);
@@ -176,7 +204,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     // Go through each stratum
     for i in 0..program_ref.strata.len() {
       // Run the stratum to get the result
-      let result = self.execute_stratum(i, &incremental_result, &execution)?;
+      let result = self.execute_stratum(i, &incremental_result, &execution, monitor)?;
 
       // Extend the incremental result with the relations within their lifespan
       incremental_result.extend(result.into_iter().filter(|(name, _)| {
@@ -225,11 +253,12 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     Ok(())
   }
 
-  fn execute_stratum(
+  fn execute_stratum<M: Monitor<Prov>>(
     &mut self,
     stratum_id: usize,
     current_idb: &IntentionalDatabase<Prov, Ptr>,
     execution: &StratumExecution<'_, Prov>,
+    monitor: Option<&M>,
   ) -> Result<IntentionalDatabase<Prov, Ptr>, RuntimeError> {
     let StratumExecution {
       ram_program,
@@ -238,6 +267,20 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       ctx,
     } = *execution;
     let stratum = &ram_program.strata[stratum_id];
+    if let Some(m) = monitor {
+      m.observe_executing_stratum(stratum_id);
+    }
+    let observe_load = |relation: &str, from_edb: bool| {
+      if let Some(m) = monitor {
+        m.observe_loading_relation(relation);
+        if from_edb {
+          m.observe_loading_relation_from_edb(relation);
+        } else {
+          m.observe_loading_relation_from_idb(relation);
+        }
+      }
+    };
+
     let dyn_relas = stratum
       .relations
       .iter()
@@ -257,10 +300,12 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     if self.options.incremental_maintain {
       for (rel, col) in &self.edb.extensional_relations {
         if ram_program.relation(rel).map(|r| r.immutable).unwrap_or(false) {
+          observe_load(rel, true);
           iter.add_input_dynamic_collection(rel, col.internal.as_ref());
         }
       }
       for (rel, col) in current_idb {
+        observe_load(rel, false);
         iter.add_input_dynamic_collection(rel, col.internal_facts.as_ref());
       }
     } else {
@@ -269,6 +314,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       // First add dynamic collection for every immutable relations in the stratum
       for (predicate, relation) in &stratum.relations {
         if relation.immutable {
+          observe_load(predicate, true);
           iter.add_input_dynamic_collection(predicate, self.edb.get_dynamic_collection(predicate).unwrap());
         }
       }
@@ -277,9 +323,11 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       if let Some(stratum_inputs) = strata_info.stratum_inputs.get(&stratum_id) {
         for (rel, _) in stratum_inputs {
           if ram_program.relation_unchecked(rel).immutable {
+            observe_load(rel, true);
             // The collection could be immutable and thus will be from EDB
             iter.add_input_dynamic_collection(rel, self.edb.get_dynamic_collection(rel).unwrap());
           } else {
+            observe_load(rel, false);
             // Otherwise it will be computed by previous stratum and thus from IDB
             iter.add_input_dynamic_collection(rel, current_idb.get_internal_collection(rel).unwrap());
           }
@@ -312,13 +360,13 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
         iter.add_goal_relation(rela);
       }
 
-      // Add relation specific scheduler
-      if let Some(scheduler) = &ram_program.relation(rela).unwrap().scheduler {
+      if let Some(scheduler) = &ram_program.relation_unchecked(rela).scheduler {
         iter.add_relation_scheduler(rela, scheduler.clone());
       }
 
       // Load external facts
       if let Some(facts) = self.edb.get_dynamic_collection(rela) {
+        observe_load(rela, true);
         // Mutable relations need their EDB facts to go into dynamic relation
         let dataflow = dataflow::DynamicDataflow::dynamic_recent_collection(facts);
         iter
@@ -335,290 +383,11 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     }
 
     // Run!
-    let result = iter.run(ctx, runtime);
-
-    // Success!
-    Ok(IntentionalDatabase::from_dynamic_collections(result.into_iter()))
-  }
-
-  /// Directly execute the program stored in the file
-  pub fn execute_with_monitor<M>(&mut self, runtime: &RuntimeEnvironment, ctx: &Prov, m: &M) -> Result<(), RuntimeError>
-  where
-    M: Monitor<Prov>,
-  {
-    self.incremental_execute_with_monitor_helper(None, runtime, ctx, m)?;
-    m.observe_finish_execution();
-    Ok(())
-  }
-
-  pub fn incremental_execute_with_monitor<M>(
-    &mut self,
-    program: ram::Program,
-    runtime: &RuntimeEnvironment,
-    ctx: &Prov,
-    m: &M,
-  ) -> Result<(), RuntimeError>
-  where
-    M: Monitor<Prov>,
-  {
-    self.incremental_execute_with_monitor_helper(Some(program), runtime, ctx, m)
-  }
-
-  fn incremental_execute_with_monitor_helper<M>(
-    &mut self,
-    maybe_new_program: Option<ram::Program>,
-    runtime: &RuntimeEnvironment,
-    ctx: &Prov,
-    m: &M,
-  ) -> Result<(), RuntimeError>
-  where
-    M: Monitor<Prov>,
-  {
-    // Pull the IDB
-    let mut incremental_result = IntentionalDatabase::default();
-    std::mem::swap(&mut self.idb, &mut incremental_result);
-
-    // Persistent relations
-    let mut temp_program = ram::Program::new();
-    std::mem::swap(&mut self.program, &mut temp_program);
-    let program_ref = if let Some(new_program) = &maybe_new_program {
-      // Process the EDB; populate using program facts
-      self.edb.populate_program_facts(runtime, new_program)?;
-
-      // If need to incrementalize, remove such computed results
-      let edb_need_update_relations = self.edb.need_update_relations();
-
-      // If a new program is provided, compute the persistent relations that we can re-use
-      let pers = if edb_need_update_relations.is_empty() {
-        self.program.persistent_relations(new_program)
-      } else {
-        self
-          .program
-          .persistent_relations_with_need_update_relations(new_program, &edb_need_update_relations)
-      };
-
-      // Keep the relations only in the set of persistent relations
-      incremental_result.retain_relations(&pers);
-
-      // Return this new program
-      new_program
+    let result = if let Some(m) = monitor {
+      iter.run_with_monitor(ctx, runtime, m)
     } else {
-      self
-        .edb
-        .populate_program_facts(runtime, &temp_program)
-        .expect("Since there is no new program, no error should be raised during program facts population");
-
-      // If there is no new program, we directly take our current program
-      &temp_program
+      iter.run(ctx, runtime)
     };
-
-    // Internalize EDB relations
-    // !SPECIAL MONITORING!
-    self.edb.internalize_with_monitor(runtime, ctx, m);
-
-    // Generate stratum information
-    let strata_info = stratum_inputs_outputs(program_ref);
-
-    // Make sure that all immutable relations are existed in the edb
-    for relation in program_ref.relations() {
-      if relation.immutable {
-        self.edb.tap_relation(&relation.predicate);
-      }
-    }
-
-    let execution = StratumExecution {
-      ram_program: program_ref,
-      strata_info: &strata_info,
-      runtime,
-      ctx,
-    };
-    // Go through each stratum
-    for i in 0..program_ref.strata.len() {
-      // Run the stratum to get the result
-      let result = self.execute_stratum_with_monitor(i, &incremental_result, &execution, m)?;
-
-      // Extend the incremental result with the relations within their lifespan
-      incremental_result.extend(result.into_iter().filter(|(name, _)| {
-        // Check if the relation is a hidden one
-        if program_ref.relation_unchecked(name).output.is_hidden() {
-          // If it is hidden, additionally check if it is going to be used later
-          if let Some(last_stratum) = strata_info.relation_lifespan.get(name) {
-            // If the last stratum that this relation is used is later than current, then keep; otherwise drop
-            return *last_stratum > i;
-          }
-        }
-        true
-      }));
-    }
-
-    // Store the result
-    self.idb = incremental_result;
-
-    // See if any EDB relations need to directly go into IDB
-    for relation in program_ref.relations() {
-      if relation.output.is_not_hidden() && !self.idb.has_relation(&relation.predicate) {
-        if self.options.incremental_maintain {
-          if let Some(edb_collection) = self.edb.get_dynamic_collection(&relation.predicate) {
-            self
-              .idb
-              .insert_dynamic_collection(relation.predicate.clone(), edb_collection.clone_internal());
-          }
-        } else {
-          if let Some(edb_collection) = self.edb.pop_dynamic_collection(&relation.predicate) {
-            self
-              .idb
-              .insert_dynamic_collection(relation.predicate.clone(), edb_collection.clone());
-          }
-        }
-      }
-    }
-
-    // Update the program
-    if let Some(new_program) = maybe_new_program {
-      self.program = new_program;
-    } else {
-      self.program = temp_program;
-    }
-
-    // Success!
-    Ok(())
-  }
-
-  fn execute_stratum_with_monitor<M>(
-    &mut self,
-    stratum_id: usize,
-    current_idb: &IntentionalDatabase<Prov, Ptr>,
-    execution: &StratumExecution<'_, Prov>,
-    m: &M,
-  ) -> Result<IntentionalDatabase<Prov, Ptr>, RuntimeError>
-  where
-    M: Monitor<Prov>,
-  {
-    let StratumExecution {
-      ram_program,
-      strata_info,
-      runtime,
-      ctx,
-    } = *execution;
-    let stratum = &ram_program.strata[stratum_id];
-    // !SPECIAL MONITORING!
-    m.observe_executing_stratum(stratum_id);
-
-    let dyn_relas = stratum
-      .relations
-      .iter()
-      .filter(|(r, _)| !current_idb.has_relation(r))
-      .map(|(r, _)| r.clone())
-      .collect::<HashSet<_>>();
-
-    // Check if we need to compute anything new
-    if dyn_relas.is_empty() {
-      return Ok(IntentionalDatabase::new());
-    }
-
-    // Otherwise, do computation
-    let mut iter = DynamicIteration::<Prov>::new();
-
-    // Add input collections
-    if self.options.incremental_maintain {
-      for (rel, col) in &self.edb.extensional_relations {
-        if ram_program.relation(rel).map(|r| r.immutable).unwrap_or(false) {
-          // !SPECIAL MONITOR!
-          m.observe_loading_relation(rel);
-          m.observe_loading_relation_from_edb(rel);
-
-          iter.add_input_dynamic_collection(rel, col.internal.as_ref());
-        }
-      }
-      for (rel, col) in current_idb {
-        // !SPECIAL MONITOR!
-        m.observe_loading_relation(rel);
-        m.observe_loading_relation_from_idb(rel);
-
-        iter.add_input_dynamic_collection(rel, col.internal_facts.as_ref());
-      }
-    } else {
-      // Non-incremental version:
-
-      // First add dynamic collection for every immutable relations in the stratum
-      for (predicate, relation) in &stratum.relations {
-        if relation.immutable {
-          // !SPECIAL MONITOR!
-          m.observe_loading_relation(predicate);
-          m.observe_loading_relation_from_edb(predicate);
-
-          iter.add_input_dynamic_collection(predicate, self.edb.get_dynamic_collection(predicate).unwrap());
-        }
-      }
-
-      // Then add dynamic collection for every input relations in the stratum
-      if let Some(stratum_inputs) = strata_info.stratum_inputs.get(&stratum_id) {
-        for (rel, _) in stratum_inputs {
-          if ram_program.relation_unchecked(rel).immutable {
-            // !SPECIAL MONITOR!
-            m.observe_loading_relation(rel);
-            m.observe_loading_relation_from_edb(rel);
-
-            // The collection could be immutable and thus will be from EDB
-            iter.add_input_dynamic_collection(rel, self.edb.get_dynamic_collection(rel).unwrap());
-          } else {
-            // !SPECIAL MONITOR!
-            m.observe_loading_relation(rel);
-            m.observe_loading_relation_from_idb(rel);
-
-            // Otherwise it will be computed by previous stratum and thus from IDB
-            iter.add_input_dynamic_collection(rel, current_idb.get_internal_collection(rel).unwrap());
-          }
-        }
-      }
-    }
-
-    // Create dynamic relations; all of them will be in the output
-    // Note: Unwrap is ok since the relation in stratum must be in the ram program
-    for rela in dyn_relas
-      .iter()
-      .filter(|r| !ram_program.relation_unchecked(r).immutable)
-    {
-      iter.create_dynamic_relation(rela);
-
-      // Check if we need it to be output
-      if self.options.incremental_maintain
-        || strata_info.stratum_outputs[&stratum_id].contains(rela)
-        || ram_program.relation_unchecked(rela).output.is_not_hidden()
-      {
-        let storage = &ram_program.relation_unchecked(rela).storage;
-        iter.add_output_relation(rela, storage);
-      }
-
-      // Check if we need it to be a goal
-      if ram_program.relation(rela).unwrap().is_goal {
-        iter.add_goal_relation(rela);
-      }
-
-      // Load external facts
-      if let Some(facts) = self.edb.get_dynamic_collection(rela) {
-        // !SPECIAL MONITOR!
-        m.observe_loading_relation(rela);
-        m.observe_loading_relation_from_edb(rela);
-
-        // Mutable relations need their EDB facts to go into dynamic relation
-        let dataflow = dataflow::DynamicDataflow::dynamic_recent_collection(facts);
-        iter
-          .get_dynamic_relation_unsafe(rela)
-          .insert_dataflow_recent(ctx, &dataflow, runtime);
-      }
-    }
-
-    // Add updates
-    for update in &stratum.updates {
-      if dyn_relas.contains(&update.target) {
-        iter.add_update(update.clone());
-      }
-    }
-
-    // Run!
-    // !SPECIAL MONITORING!
-    let result = iter.run_with_monitor(ctx, runtime, m);
 
     // Success!
     Ok(IntentionalDatabase::from_dynamic_collections(result.into_iter()))

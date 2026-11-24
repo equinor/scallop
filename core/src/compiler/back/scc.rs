@@ -8,7 +8,7 @@ use std::collections::*;
 
 use crate::compiler::back::attributes::GoalAttribute;
 
-use super::{ast::*, BackCompileError};
+use super::ast::*;
 
 /// The type of a dependency graph edge: positive, negative, or aggregation
 #[derive(Debug, Clone)]
@@ -185,33 +185,14 @@ pub struct Stratum {
   pub is_recursive: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum SCCError {
+  #[error("{} Cannot stratify program: {edge} cycle detected between predicate `{pred_1}` and `{pred_2}`", "[Error]".red())]
   CannotStratify {
     pred_1: String,
     pred_2: String,
     edge: DependencyGraphEdge,
   },
-}
-
-impl std::fmt::Display for SCCError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::CannotStratify { pred_1, pred_2, edge } => f.write_fmt(format_args!(
-        "{} Cannot stratify program: {} cycle detected between predicate `{}` and `{}`",
-        "[Error]".red(),
-        edge,
-        pred_1,
-        pred_2
-      )),
-    }
-  }
-}
-
-impl From<SCCError> for BackCompileError {
-  fn from(e: SCCError) -> Self {
-    Self::SCCError(e)
-  }
 }
 
 impl std::fmt::Debug for DependencyGraph {

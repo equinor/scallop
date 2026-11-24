@@ -1,16 +1,9 @@
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum BackCompileError {
-  SCCError(SCCError),
-  DemandTransformError(optimizations::DemandTransformError),
-}
-
-impl std::fmt::Display for BackCompileError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::SCCError(e) => std::fmt::Display::fmt(e, f),
-      Self::DemandTransformError(e) => std::fmt::Display::fmt(e, f),
-    }
-  }
+  #[error(transparent)]
+  SCCError(#[from] SCCError),
+  #[error(transparent)]
+  DemandTransformError(#[from] optimizations::DemandTransformError),
 }
