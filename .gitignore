@@ -7,6 +7,7 @@ target
 
 # Python
 /.env
+.venv/
 __pycache__
 
 # VSCode

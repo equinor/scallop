@@ -1,10 +1,14 @@
 from typing import Optional
-import os
+from pathlib import Path
 import subprocess
 import re
 import argparse
 
 PY_PROJECT_SRC = """\
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "scallop-{dashed_name}"
 version = "{version}"
@@ -19,14 +23,16 @@ where = ["src"]
 
 
 MAKEFILE_SRC = """\
+.PHONY: build install develop clean
+
 develop:
-\tpip install --editable .
+\tuv pip install --editable .
 
 install: build
-\tfind dist -name "*.whl" -print | xargs pip install --force-reinstall
+\tuv pip install --reinstall-package scallop-{dashed_name} dist/*.whl
 
 build:
-\tpython -m build
+\tuv build --clear
 
 clean:
 \trm -rf dist
@@ -35,6 +41,7 @@ clean:
 
 GITIGNORE_SRC = """\
 *.egg-info
+.venv/
 dist
 """
 
@@ -80,13 +87,13 @@ def do_prompt_and_get_answer(
     prompt: str,
     require_non_empty: bool = True,
     default_value: Optional[str] = None,
-    pattern: Optional[re.Pattern[str]] = None,
+    pattern: Optional[str | re.Pattern[str]] = None,
     empty_string_print: str = "[Error] The answer cannot be empty; please try again",
     pattern_fail_print: str = "[Error] Does not match the pattern {pattern}",
     failed_print: str = "[Error] Failed to get a proper answer; please try `create-scallopy-plugin` again",
     trim_whitespace: bool = True,
     num_try: Optional[int] = 3
-):
+) -> Optional[str]:
   try_count = 0
   while num_try is None or try_count < num_try:
     try_count += 1
@@ -99,7 +106,7 @@ def do_prompt_and_get_answer(
       else:
         return default_value
     else:
-      if re.search(pattern, ans) is not None:
+      if pattern is None or re.search(pattern, ans) is not None:
         return ans
       else:
         print(pattern_fail_print.format(pattern=str(pattern)))
@@ -107,10 +114,9 @@ def do_prompt_and_get_answer(
   exit(1)
 
 
-def is_git_repo():
-  """Check whether this is a git repo"""
-  with open(os.devnull, "w") as d:
-    return not bool(subprocess.call('git rev-parse', shell=True, stdout=d, stderr=d))
+def is_git_repo(directory: Path) -> bool:
+  result = subprocess.run(["git", "rev-parse"], cwd=directory, capture_output=True)
+  return result.returncode == 0
 
 
 def main():
@@ -120,14 +126,11 @@ def main():
   args = parser.parse_args()
 
   # Check whether path is provided in the arguments
-  if args.path is not None:
-    subprocess.run(["mkdir", "-p", args.path])
-    cwd = args.path
-  else:
-    cwd = "."
+  cwd = Path(args.path) if args.path is not None else Path.cwd()
+  cwd.mkdir(parents=True, exist_ok=True)
 
   # Check if the current folder does not contain `pyproject.toml`, `makefile`, and `src`
-  curr_dir_objs = set(os.listdir(cwd))
+  curr_dir_objs = {entry.name for entry in cwd.iterdir()}
   disallowed_dir_objs = curr_dir_objs.difference(ALLOWED_DIR_OBJS)
   if len(disallowed_dir_objs) > 0:
     print(f"Cannot create a scallopy plugin in non-empty directory. Found object `{disallowed_dir_objs.pop()}`")
@@ -138,31 +141,28 @@ def main():
   print("Please help answer the following questions:")
   name = do_prompt_and_get_answer("Plugin Name: scallop-", pattern=r"^[a-zA-Z][a-zA-Z\-0-9]*$")
   version = do_prompt_and_get_answer("Version (1.0.0): ", pattern=r"^\d+\.\d+\.\d+$", require_non_empty=False, default_value="1.0.0")
+  assert name is not None and version is not None
 
   # Run git init
-  if not is_git_repo():
-    with open(os.devnull, "w") as d:
-      subprocess.call("git init", shell=True, stdout=d, stderr=d, cwd=cwd)
+  if not is_git_repo(cwd):
+    subprocess.run(["git", "init", "--quiet"], cwd=cwd, check=True)
 
   # Write .gitignore file
-  with open(os.path.join(cwd, ".gitignore"), "w") as gitignore_file:
-    gitignore_file.write(GITIGNORE_SRC)
+  (cwd / ".gitignore").write_text(GITIGNORE_SRC, encoding="utf-8")
 
   # Create pyproject.toml
   underscore_name = name.replace("-", "_")
   plugin_name = "".join([part.title() for part in name.split("-")])
   py_project_src = PY_PROJECT_SRC.format(dashed_name=name, underscore_name=underscore_name, plugin_name=plugin_name, version=version)
-  with open(os.path.join(cwd, "pyproject.toml"), "w") as pyproject_file:
-    pyproject_file.write(py_project_src)
+  (cwd / "pyproject.toml").write_text(py_project_src, encoding="utf-8")
 
   # Create makefile
-  with open(os.path.join(cwd, "makefile"), "w") as makefile_file:
-    makefile_file.write(MAKEFILE_SRC)
+  (cwd / "makefile").write_text(MAKEFILE_SRC.format(dashed_name=name), encoding="utf-8")
 
   # Create folders
-  subprocess.run(["mkdir", "-p", f"src/scallop_{name}"], cwd=cwd)
-  with open(os.path.join(cwd, "src", f"scallop_{name}", "__init__.py"), "w") as init_file:
-    init_file.write(INIT_SRC.format(plugin_name=plugin_name))
+  package = cwd / "src" / f"scallop_{underscore_name}"
+  package.mkdir(parents=True, exist_ok=True)
+  (package / "__init__.py").write_text(INIT_SRC.format(plugin_name=plugin_name), encoding="utf-8")
 
   # Final prints
-  print(DONE_PRINT.format(path=os.path.abspath(os.path.join(cwd))))
+  print(DONE_PRINT.format(path=cwd.absolute()))

@@ -30,37 +30,35 @@ build-sclrepl:
 ## Scallopy
 
 install-scallopy:
-	maturin build --release --manifest-path etc/scallopy/Cargo.toml --out target/wheels/current
-	find target/wheels/current -name "*.whl" -print | xargs pip install --force-reinstall
-	rm -rf target/wheels/current
+	uv pip install --reinstall-package scallopy ./etc/scallopy
 
 build-scallopy:
-	maturin build --release --manifest-path etc/scallopy/Cargo.toml --out target/wheels
+	uv build --wheel --out-dir target/wheels etc/scallopy
 
 develop-scallopy:
-	cd etc/scallopy; maturin develop --release
+	$(MAKE) -C etc/scallopy develop-scallopy
 
 ## Scallop CLI
 
 install-scallop-cli:
-	make -C etc/scallop-cli install
+	$(MAKE) -C etc/scallop-cli install
 
 build-scallop-cli:
-	make -C etc/scallop-cli build
+	$(MAKE) -C etc/scallop-cli build
 
 develop-scallop-cli:
-	make -C etc/scallop-cli develop
+	$(MAKE) -C etc/scallop-cli develop
 
 ## Scallopy Plugins
 
 install-scallopy-plugins:
-	make -C etc/scallopy-plugins install
+	$(MAKE) -C etc/scallopy-plugins install
 
 build-scallopy-plugins:
-	make -C etc/scallopy-plugins build
+	$(MAKE) -C etc/scallopy-plugins build
 
 develop-scallopy-plugins:
-	make -C etc/scallopy-plugins develop
+	$(MAKE) -C etc/scallopy-plugins develop
 
 # =================================================
 # === Collect wheels and packages to distribute ===
@@ -89,15 +87,13 @@ run-wasm-demo:
 	cd etc/scallop-wasm/demo; python3 -m http.server
 
 # ==========================================
-# === Scallop vitrual environment ===
+# === Scallop virtual environment ===
 
 init-venv:
-	python3 -m venv .env
-	.env/bin/pip install --upgrade pip
-	.env/bin/pip install maturin torch torchvision transformers gymnasium scikit-learn opencv-python tqdm matplotlib
+	uv sync --locked --inexact
 
 clear-venv:
-	rm -rf .env
+	rm -rf .venv
 
 # =============================
 # === Scallop VSCode Plugin ===
@@ -137,7 +133,7 @@ test-cargo-ignored:
 	cargo test --workspace -- --ignored
 
 test-scallopy: develop-scallopy
-	python3 etc/scallopy/tests/test.py
+	uv run --no-project python etc/scallopy/tests/test.py
 
 # ======================
 # === Documentations ===
