@@ -86,32 +86,32 @@ impl Constant {
   }
 
   pub fn can_unify(&self, ty: &ValueType) -> bool {
-    match (self, ty) {
+    matches!(
+      (self, ty),
       (Self::Integer(_), ValueType::I8)
-      | (Self::Integer(_), ValueType::I16)
-      | (Self::Integer(_), ValueType::I32)
-      | (Self::Integer(_), ValueType::I64)
-      | (Self::Integer(_), ValueType::I128)
-      | (Self::Integer(_), ValueType::ISize)
-      | (Self::Integer(_), ValueType::U8)
-      | (Self::Integer(_), ValueType::U16)
-      | (Self::Integer(_), ValueType::U32)
-      | (Self::Integer(_), ValueType::U64)
-      | (Self::Integer(_), ValueType::U128)
-      | (Self::Integer(_), ValueType::USize)
-      | (Self::Integer(_), ValueType::F32)
-      | (Self::Integer(_), ValueType::F64)
-      | (Self::Float(_), ValueType::F32)
-      | (Self::Float(_), ValueType::F64)
-      | (Self::Char(_), ValueType::Char)
-      | (Self::Boolean(_), ValueType::Bool)
-      | (Self::String(_), ValueType::String)
-      | (Self::Symbol(_), ValueType::Symbol)
-      | (Self::DateTime(_), ValueType::DateTime)
-      | (Self::Duration(_), ValueType::Duration)
-      | (Self::Entity(_), ValueType::Entity) => true,
-      _ => false,
-    }
+        | (Self::Integer(_), ValueType::I16)
+        | (Self::Integer(_), ValueType::I32)
+        | (Self::Integer(_), ValueType::I64)
+        | (Self::Integer(_), ValueType::I128)
+        | (Self::Integer(_), ValueType::ISize)
+        | (Self::Integer(_), ValueType::U8)
+        | (Self::Integer(_), ValueType::U16)
+        | (Self::Integer(_), ValueType::U32)
+        | (Self::Integer(_), ValueType::U64)
+        | (Self::Integer(_), ValueType::U128)
+        | (Self::Integer(_), ValueType::USize)
+        | (Self::Integer(_), ValueType::F32)
+        | (Self::Integer(_), ValueType::F64)
+        | (Self::Float(_), ValueType::F32)
+        | (Self::Float(_), ValueType::F64)
+        | (Self::Char(_), ValueType::Char)
+        | (Self::Boolean(_), ValueType::Bool)
+        | (Self::String(_), ValueType::String)
+        | (Self::Symbol(_), ValueType::Symbol)
+        | (Self::DateTime(_), ValueType::DateTime)
+        | (Self::Duration(_), ValueType::Duration)
+        | (Self::Entity(_), ValueType::Entity)
+    )
   }
 
   pub fn to_value(&self, ty: &ValueType) -> Value {
@@ -119,7 +119,7 @@ impl Constant {
       (Self::Integer(i), ValueType::I8) => Value::I8(*i.int() as i8),
       (Self::Integer(i), ValueType::I16) => Value::I16(*i.int() as i16),
       (Self::Integer(i), ValueType::I32) => Value::I32(*i.int() as i32),
-      (Self::Integer(i), ValueType::I64) => Value::I64(*i.int() as i64),
+      (Self::Integer(i), ValueType::I64) => Value::I64(*i.int()),
       (Self::Integer(i), ValueType::I128) => Value::I128(*i.int() as i128),
       (Self::Integer(i), ValueType::ISize) => Value::ISize(*i.int() as isize),
       (Self::Integer(i), ValueType::U8) => Value::U8(*i.int() as u8),
@@ -130,10 +130,10 @@ impl Constant {
       (Self::Integer(i), ValueType::USize) => Value::USize(*i.int() as usize),
       (Self::Integer(i), ValueType::F32) => Value::F32(*i.int() as f32),
       (Self::Integer(i), ValueType::F64) => Value::F64(*i.int() as f64),
-      (Self::Float(f), ValueType::F32) => Value::F32(f.float().clone() as f32),
-      (Self::Float(f), ValueType::F64) => Value::F64(f.float().clone()),
+      (Self::Float(f), ValueType::F32) => Value::F32(*f.float() as f32),
+      (Self::Float(f), ValueType::F64) => Value::F64(*f.float()),
       (Self::Char(c), ValueType::Char) => Value::Char(c.parse_char()),
-      (Self::Boolean(b), ValueType::Bool) => Value::Bool(b.value().clone()),
+      (Self::Boolean(b), ValueType::Bool) => Value::Bool(*b.value()),
       (Self::String(_), ValueType::Str) => panic!("Cannot cast dynamic string into static string"),
       (Self::String(s), ValueType::String) => Value::String(s.string().clone()),
       (Self::Symbol(s), ValueType::Symbol) => Value::SymbolString(s.symbol().clone()),
@@ -143,7 +143,7 @@ impl Constant {
       (Self::Duration(d), ValueType::Duration) => {
         Value::Duration(crate::utils::parse_duration_string(d.duration()).expect("Cannot have invalid duration"))
       }
-      (Self::Entity(u), ValueType::Entity) => Value::Entity(u.symbol().clone()),
+      (Self::Entity(u), ValueType::Entity) => Value::Entity(*u.symbol()),
       _ => panic!("Cannot convert front Constant `{:?}` to Type `{}`", self, ty),
     }
   }
@@ -188,6 +188,6 @@ impl Identifier {
 
 impl std::fmt::Debug for _Identifier {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("{:?}", &self.name))
+    f.write_fmt(format_args!("{:?}", self.name))
   }
 }

@@ -38,7 +38,7 @@ impl TorchTensorRegistry {
         TorchTensor::new(result)
       }
       TensorExpr::Add(a, b) => {
-        let (ta, tb) = (self.eval_expr_torch(&a), self.eval_expr_torch(&b));
+        let (ta, tb) = (self.eval_expr_torch(a), self.eval_expr_torch(b));
         let result: Py<PyAny> = ta
           .internal()
           .getattr(py, "__add__")
@@ -50,7 +50,7 @@ impl TorchTensorRegistry {
         TorchTensor::new(result)
       }
       TensorExpr::Sub(a, b) => {
-        let (ta, tb) = (self.eval_expr_torch(&a), self.eval_expr_torch(&b));
+        let (ta, tb) = (self.eval_expr_torch(a), self.eval_expr_torch(b));
         let result: Py<PyAny> = ta
           .internal()
           .getattr(py, "__sub__")
@@ -62,7 +62,7 @@ impl TorchTensorRegistry {
         TorchTensor::new(result)
       }
       TensorExpr::Mul(a, b) => {
-        let (ta, tb) = (self.eval_expr_torch(&a), self.eval_expr_torch(&b));
+        let (ta, tb) = (self.eval_expr_torch(a), self.eval_expr_torch(b));
         let result: Py<PyAny> = ta
           .internal()
           .getattr(py, "__mul__")
@@ -74,7 +74,7 @@ impl TorchTensorRegistry {
         TorchTensor::new(result)
       }
       TensorExpr::Dot(a, b) => {
-        let (ta, tb) = (self.eval_expr_torch(&a), self.eval_expr_torch(&b));
+        let (ta, tb) = (self.eval_expr_torch(a), self.eval_expr_torch(b));
         let result: Py<PyAny> = ta
           .internal()
           .getattr(py, "dot")

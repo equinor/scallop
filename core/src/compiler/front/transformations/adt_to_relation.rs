@@ -18,14 +18,11 @@ impl<'a> Transformation<'a> for TransformAlgebraicDataType<'a> {
 
 impl<'a> NodeVisitor<TypeDecl> for TransformAlgebraicDataType<'a> {
   fn visit_mut(&mut self, type_decl: &mut TypeDecl) {
-    match type_decl {
-      TypeDecl::Algebraic(adt_decl) => {
-        let location = adt_decl.location().clone();
-        let name = adt_decl.name().clone();
-        let new_decl = TypeDecl::alias(AliasTypeDecl::new_with_loc(vec![], name, Type::entity(), location));
-        *type_decl = new_decl;
-      }
-      _ => {}
+    if let TypeDecl::Algebraic(adt_decl) = type_decl {
+      let location = adt_decl.location().clone();
+      let name = adt_decl.name().clone();
+      let new_decl = TypeDecl::alias(AliasTypeDecl::new_with_loc(vec![], name, Type::entity(), location));
+      *type_decl = new_decl;
     }
   }
 }
@@ -64,8 +61,8 @@ impl<'a> TransformAlgebraicDataType<'a> {
               false
             };
             let constant = Constant::boolean(BoolLiteral::new(arg_is_entity));
-            let attr_arg = AttributeValue::constant(constant);
-            attr_arg
+
+            AttributeValue::constant(constant)
           })
           .collect();
         let adt_attr = Attribute::new(
@@ -93,9 +90,6 @@ impl<'a> TransformAlgebraicDataType<'a> {
   }
 
   pub fn retain(&self, item: &Item) -> bool {
-    match item {
-      Item::TypeDecl(TypeDecl::Algebraic(_)) => false,
-      _ => true,
-    }
+    !matches!(item, Item::TypeDecl(TypeDecl::Algebraic(_)))
   }
 }

@@ -155,10 +155,12 @@ impl ForeignPredicate for PythonForeignPredicate {
       // Turn the result back to Scallop values
       if let Some(result) = maybe_result {
         let output_tuple_type = self.output_tuple_type();
-        let elements: Vec<(Bound<'_, PyAny>, Bound<'_, PyAny>)> = result.extract(py).expect(&format!(
-          "Cannot extract into list of elements during evaluation of {}",
-          self.name
-        ));
+        let elements: Vec<(Bound<'_, PyAny>, Bound<'_, PyAny>)> = result.extract(py).unwrap_or_else(|_| {
+          panic!(
+            "Cannot extract into list of elements during evaluation of {}",
+            self.name
+          )
+        });
         let internal: Vec<_> = elements
           .into_iter()
           .filter_map(|(py_tag, py_tup)| {

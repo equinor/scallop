@@ -45,19 +45,19 @@ fn main() -> rustyline::Result<()> {
   // Initialize provenance context and run
   match cmd_args.provenance.as_str() {
     "unit" => {
-      let ctx = runtime::provenance::unit::UnitProvenance::default();
+      let ctx = runtime::provenance::unit::UnitProvenance;
       run(cmd_args, ctx)
     }
     "bool" => {
-      let ctx = runtime::provenance::boolean::BooleanProvenance::default();
+      let ctx = runtime::provenance::boolean::BooleanProvenance;
       run(cmd_args, ctx)
     }
     "tropical" => {
-      let ctx = runtime::provenance::tropical::TropicalProvenance::default();
+      let ctx = runtime::provenance::tropical::TropicalProvenance;
       run(cmd_args, ctx)
     }
     "realtropical" => {
-      let ctx = runtime::provenance::real_tropical::RealTropicalProvenance::default();
+      let ctx = runtime::provenance::real_tropical::RealTropicalProvenance;
       run(cmd_args, ctx)
     }
     "minmaxprob" => {
@@ -120,7 +120,7 @@ where
           for item in &items {
             println!("{}", item);
           }
-          println!("");
+          println!();
         }
 
         // Collect the queries
@@ -156,7 +156,7 @@ where
           if options.debug || options.debug_back {
             println!("======== Back Program ========");
             println!("{}", back_ir);
-            println!("");
+            println!();
           }
 
           // Compile the back ir into ram

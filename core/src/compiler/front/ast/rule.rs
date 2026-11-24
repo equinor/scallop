@@ -7,12 +7,12 @@ pub struct _Rule {
   pub body: Formula,
 }
 
-impl Into<Vec<Item>> for Rule {
-  fn into(self) -> Vec<Item> {
+impl From<Rule> for Vec<Item> {
+  fn from(val: Rule) -> Self {
     vec![Item::RelationDecl(RelationDecl::Rule(RuleDecl::new(
       Attributes::new(),
       None,
-      self,
+      val,
     )))]
   }
 }

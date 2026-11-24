@@ -21,52 +21,54 @@ impl StorageAttributeAnalysis {
     self.storage_attrs.get(rel)
   }
 
-  pub fn find_storage_attr<'a>(&mut self, attrs: &'a Vec<Attribute>) -> Option<StorageMetadata> {
+  pub fn find_storage_attr(&mut self, attrs: &[Attribute]) -> Option<StorageMetadata> {
     if let Some(attr) = attrs.iter().find(|attr| attr.attr_name() == "storage") {
       if let Some(storage_arg) = attr.pos_arg(0) {
         match storage_arg.as_string() {
           Some(storage_name) => {
             use std::str::FromStr;
             match StorageMetadata::from_str(&storage_name) {
-              Ok(metadata) => {
-                return Some(metadata);
-              }
+              Ok(metadata) => Some(metadata),
               Err(_) => {
                 self.errors.push(
                   FrontCompileErrorMessage::error()
-                    .msg(&format!(
+                    .msg(format!(
                       "Cannot parse storage type `{}` for @storage. Choose from {}",
                       storage_name,
                       StorageMetadata::choices_string()
                     ))
                     .src(storage_arg.location().clone()),
                 );
-                return None;
+                None
               }
             }
           }
           None => {
             self.errors.push(
               FrontCompileErrorMessage::error()
-                .msg(&format!(
-                  "Expected a string for the first positional argument for @storage"
-                ))
+                .msg("Expected a string for the first positional argument for @storage".to_string())
                 .src(attr.location().clone()),
             );
-            return None;
+            None
           }
         }
       } else {
         self.errors.push(
           FrontCompileErrorMessage::error()
-            .msg(&format!("Needs at least one positional argument for @storage"))
+            .msg("Needs at least one positional argument for @storage".to_string())
             .src(attr.location().clone()),
         );
-        return None;
+        None
       }
     } else {
-      return None;
+      None
     }
+  }
+}
+
+impl Default for StorageAttributeAnalysis {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
@@ -79,7 +81,7 @@ impl NodeVisitor<RelationDecl> for StorageAttributeAnalysis {
         } else {
           self.errors.push(
             FrontCompileErrorMessage::error()
-              .msg(&format!("@storage double specified on relation `{}`", pred))
+              .msg(format!("@storage double specified on relation `{}`", pred))
               .src(node.location().clone()),
           );
           return;
@@ -99,7 +101,7 @@ impl NodeVisitor<RelationTypeDecl> for StorageAttributeAnalysis {
         } else {
           self.errors.push(
             FrontCompileErrorMessage::error()
-              .msg(&format!("@storage double specified on relation `{}`", pred))
+              .msg(format!("@storage double specified on relation `{}`", pred))
               .src(node.location().clone()),
           );
           return;

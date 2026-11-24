@@ -132,15 +132,13 @@ impl Context {
     // Check provenance type
     match provenance {
       "unit" => Ok(Self {
-        ctx: ContextEnum::Unit(IntegrateContext::new_incremental(unit::UnitProvenance::default())),
+        ctx: ContextEnum::Unit(IntegrateContext::new_incremental(unit::UnitProvenance)),
       }),
       "proofs" => Ok(Self {
         ctx: ContextEnum::Proofs(IntegrateContext::new_incremental(proofs::ProofsProvenance::default())),
       }),
       "tropical" => Ok(Self {
-        ctx: ContextEnum::Tropical(IntegrateContext::new_incremental(
-          tropical::TropicalProvenance::default(),
-        )),
+        ctx: ContextEnum::Tropical(IntegrateContext::new_incremental(tropical::TropicalProvenance)),
       }),
       "minmaxprob" => Ok(Self {
         ctx: ContextEnum::MinMaxProb(IntegrateContext::new_incremental(
@@ -240,7 +238,7 @@ impl Context {
         ctx: ContextEnum::Unit(match_context_except_custom!(
           &self.ctx,
           c,
-          c.clone_with_new_provenance(unit::UnitProvenance::default())
+          c.clone_with_new_provenance(unit::UnitProvenance)
         )?),
       }),
       "proofs" => Ok(Self {
@@ -427,7 +425,7 @@ impl Context {
       ..Default::default()
     };
     let compile_opt = compiler::CompileOptions::default();
-    sclc_core::pylib::create_pylib(&opt, compile_opt, &ram).expect("Compile Error");
+    sclc_core::pylib::create_pylib(&opt, compile_opt, ram).expect("Compile Error");
 
     // Return result
     Ok(())
@@ -534,15 +532,12 @@ impl Context {
     // Get the attributes
     let mut attrs = Vec::new();
 
-    // Load the load csv file
     if let Some(obj) = load_csv {
-      if let Ok(csv_file) = obj.extract::<CSVFileOptions>() {
-        attrs.push(csv_file.into());
-      } else if let Ok(path) = obj.extract::<String>() {
-        attrs.push(CSVFileOptions::new(path).into());
-      } else {
-        return Err(BindingError::InvalidLoadCSVArg);
-      }
+      let csv_file = obj
+        .extract::<CSVFileOptions>()
+        .or_else(|_| obj.extract::<String>().map(CSVFileOptions::new))
+        .map_err(|_| BindingError::InvalidLoadCSVArg)?;
+      attrs.push(csv_file.into());
     }
 
     // Demand attribute
@@ -661,7 +656,7 @@ impl Context {
     }
 
     // Sanity check: all input facts share the same batch size
-    if !is_all_equal(inputs.iter().map(|(_, batch)| batch.len())) {
+    if !is_all_equal(inputs.values().map(|batch| batch.len())) {
       return Err(BindingError::InvalidBatchSize);
     }
 
@@ -686,7 +681,7 @@ impl Context {
     let (maybe_coll_enum, env) = match_context!(&mut self.ctx, c, {
       (get_output_collection(c, r), c.runtime_environment())
     });
-    maybe_coll_enum.map(|c| c.to_collection(env))
+    maybe_coll_enum.map(|c| c.into_collection(env))
   }
 
   /// Get the output collection of the relation, while monitoring the provenance and tags
@@ -698,7 +693,7 @@ impl Context {
     let (maybe_coll_enum, env) = match_context!(&mut self.ctx, c, {
       (get_output_collection_monitor(c, &m, r), c.runtime_environment())
     });
-    maybe_coll_enum.map(|c| c.to_collection(env))
+    maybe_coll_enum.map(|c| c.into_collection(env))
   }
 
   /// Check if the context contains a relation
@@ -811,7 +806,7 @@ where
     c.add_facts(relation, tuples, false)?;
     Ok(())
   } else {
-    Err(BindingError::UnknownRelation(relation.to_string()).into())
+    Err(BindingError::UnknownRelation(relation.to_string()))
   }
 }
 
@@ -826,7 +821,7 @@ where
   if let Some(tuple_type) = c.relation_type(relation) {
     Ok(from_python_tuple(py_tup, &tuple_type, &c.runtime_environment().into()).is_ok())
   } else {
-    Err(BindingError::UnknownRelation(relation.to_string()).into())
+    Err(BindingError::UnknownRelation(relation.to_string()))
   }
 }
 
@@ -846,15 +841,17 @@ where
     }
     Ok(true)
   } else {
-    Err(BindingError::UnknownRelation(relation.to_string()).into())
+    Err(BindingError::UnknownRelation(relation.to_string()))
   }
 }
+
+type BatchedRelationInputs<Tag> = Vec<(String, Vec<Vec<(Option<Tag>, Tuple)>>)>;
 
 fn process_batched_inputs<P, G>(
   inputs: HashMap<String, Vec<Bound<'_, PyList>>>,
   env: &RuntimeEnvironment,
   get_relation_type: G,
-) -> PyResult<Vec<(String, Vec<Vec<(Option<P::InputTag>, Tuple)>>)>>
+) -> PyResult<BatchedRelationInputs<P::InputTag>>
 where
   P: PythonProvenance,
   G: Fn(&str) -> Option<TupleType>,
@@ -875,7 +872,7 @@ where
 fn run_batch_parallel<C>(
   integrate_context: &IntegrateContext<C, AF>,
   batch_size: usize,
-  inputs: Vec<(String, Vec<Vec<(Option<C::InputTag>, Tuple)>>)>,
+  inputs: BatchedRelationInputs<C::InputTag>,
   batch_output_relations: Vec<Vec<String>>,
 ) -> Result<Vec<Vec<Collection>>, BindingError>
 where
@@ -904,7 +901,7 @@ where
                 .computed_relation(r)
                 .ok_or(BindingError::RelationNotComputed(r.to_string()))?;
               let collection_enum = C::to_collection_enum(computed, temp_ctx.provenance_context());
-              let collection = collection_enum.to_collection(&temp_ctx.runtime_env);
+              let collection = collection_enum.into_collection(&temp_ctx.runtime_env);
               Ok(collection)
             })
             .collect::<Result<Vec<Collection>, _>>()
@@ -926,14 +923,10 @@ where
   C: PythonProvenance,
 {
   if c.has_relation(r) {
-    if let Some(collection) = c.computed_relation(r) {
-      Ok(C::to_collection_enum(
-        ArcFamily::clone_rc(&collection),
-        c.provenance_context(),
-      ))
-    } else {
-      Err(BindingError::RelationNotComputed(r.to_string()))
-    }
+    let collection = c
+      .computed_relation(r)
+      .ok_or_else(|| BindingError::RelationNotComputed(r.to_string()))?;
+    Ok(C::to_collection_enum(collection, c.provenance_context()))
   } else {
     Err(BindingError::UnknownRelation(r.to_string()))
   }
@@ -949,14 +942,10 @@ where
   M: monitor::Monitor<C>,
 {
   if c.has_relation(r) {
-    if let Some(collection) = c.computed_relation_with_monitor(r, m) {
-      Ok(C::to_collection_enum(
-        ArcFamily::clone_rc(&collection),
-        c.provenance_context(),
-      ))
-    } else {
-      Err(BindingError::RelationNotComputed(r.to_string()))
-    }
+    let collection = c
+      .computed_relation_with_monitor(r, m)
+      .ok_or_else(|| BindingError::RelationNotComputed(r.to_string()))?;
+    Ok(C::to_collection_enum(collection, c.provenance_context()))
   } else {
     Err(BindingError::UnknownRelation(r.to_string()))
   }

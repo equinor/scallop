@@ -57,7 +57,7 @@ fn edb_edge_path_both_program_and_external() {
 
 #[test]
 fn edb_cannot_incremental_update_program_facts() {
-  let prov = unit::UnitProvenance::default();
+  let prov = unit::UnitProvenance;
   let mut ctx = IntegrateContext::<_, RcFamily>::new(prov);
 
   // First interpret a program with edge facts declared in program
@@ -89,7 +89,7 @@ fn edb_cannot_incremental_update_program_facts() {
 
 #[test]
 fn edb_edge_path_incremental_update() {
-  let prov = unit::UnitProvenance::default();
+  let prov = unit::UnitProvenance;
   let mut ctx = IntegrateContext::<_, RcFamily>::new(prov);
 
   // First interpret a program with edge facts declared in program
@@ -153,7 +153,7 @@ fn edb_fib_1() {
 
 #[test]
 fn edb_edge_path_persistent_relation() {
-  let prov = unit::UnitProvenance::default();
+  let prov = unit::UnitProvenance;
   let mut ctx = IntegrateContext::<_, RcFamily>::new(prov);
 
   // First interpret a program with edge facts declared in program

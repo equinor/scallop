@@ -68,13 +68,10 @@ impl DesugarReduceRule {
 
 impl NodeVisitor<RelationDecl> for DesugarReduceRule {
   fn visit_mut(&mut self, relation_decl: &mut RelationDecl) {
-    match relation_decl {
-      RelationDecl::ReduceRule(r) => {
-        if let Some(f) = self.desugar(r) {
-          *relation_decl = RelationDecl::Rule(f);
-        }
-      }
-      _ => {}
+    if let RelationDecl::ReduceRule(r) = relation_decl
+      && let Some(f) = self.desugar(r)
+    {
+      *relation_decl = RelationDecl::Rule(f);
     }
   }
 }

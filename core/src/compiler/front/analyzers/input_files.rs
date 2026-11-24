@@ -195,6 +195,12 @@ impl InputFilesAnalysis {
   }
 }
 
+impl Default for InputFilesAnalysis {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<RelationTypeDecl> for InputFilesAnalysis {
   fn visit(&mut self, rela_type_decl: &RelationTypeDecl) {
     for rela_type in rela_type_decl.rel_types() {

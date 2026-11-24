@@ -11,7 +11,7 @@ mod edge_path {
 
 fn main() {
   // First set the unit context
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
 
   // Then create an edb and populate facts inside of it
   let mut edb = edge_path::create_edb::<unit::UnitProvenance>();

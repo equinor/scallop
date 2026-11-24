@@ -43,7 +43,7 @@ fn codegen_edge_path_with_edb_2() {
     .expect("Cannot add edge");
 
   // Run with edb
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = edge_path::run_with_edb(&mut ctx, edb);
   expect_static_output_collection(&result.path, vec![(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]);
 }

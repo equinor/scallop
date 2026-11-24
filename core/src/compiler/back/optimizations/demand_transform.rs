@@ -34,7 +34,7 @@ impl Program {
   }
 }
 
-fn collect_adornments(relations: &Vec<Relation>) -> Result<HashMap<String, Adornment>, DemandTransformError> {
+fn collect_adornments(relations: &[Relation]) -> Result<HashMap<String, Adornment>, DemandTransformError> {
   let mut adornments = HashMap::new();
   for relation in relations {
     if let Some(demand_attr) = relation.attributes.get::<DemandAttribute>() {
@@ -78,7 +78,7 @@ fn demand_transform_with_ctx(
   }
 
   // Return all the rules combined
-  Ok(vec![transformed_rules, demand_rules, other_rules].concat())
+  Ok([transformed_rules, demand_rules, other_rules].concat())
 }
 
 fn transform_on_demand_rule(rule: &Rule, adornment: &Adornment) -> Rule {
@@ -164,7 +164,7 @@ fn generate_demand_rules(rule: &Rule, adornments: &HashMap<String, Adornment>) -
   }
 }
 
-fn generate_demand_rule(base: &Vec<Literal>, goal: &Atom, adm: &Adornment) -> Option<Rule> {
+fn generate_demand_rule(base: &[Literal], goal: &Atom, adm: &Adornment) -> Option<Rule> {
   let base = remove_ungrounded_literals(base);
   if is_identity_demand_rule(&base, goal) {
     None
@@ -233,7 +233,7 @@ fn generate_sips_with_max_num_atoms_per_layer(
   Some(arcs)
 }
 
-fn compute_grounded_variables(base: &Vec<Literal>) -> HashSet<Variable> {
+fn compute_grounded_variables(base: &[Literal]) -> HashSet<Variable> {
   let mut grounded = base
     .iter()
     .flat_map(|lit| match lit {
@@ -272,7 +272,7 @@ fn compute_grounded_variables(base: &Vec<Literal>) -> HashSet<Variable> {
   }
 }
 
-fn remove_ungrounded_literals(base: &Vec<Literal>) -> Vec<Literal> {
+fn remove_ungrounded_literals(base: &[Literal]) -> Vec<Literal> {
   let grounded = compute_grounded_variables(base);
   base
     .iter()
@@ -295,15 +295,8 @@ fn remove_ungrounded_literals(base: &Vec<Literal>) -> Vec<Literal> {
     .collect()
 }
 
-fn is_identity_demand_rule(base: &Vec<Literal>, goal: &Atom) -> bool {
-  if base.len() == 1 {
-    if let Literal::Atom(a) = &base[0] {
-      if a == goal {
-        return true;
-      }
-    }
-  }
-  false
+fn is_identity_demand_rule(base: &[Literal], goal: &Atom) -> bool {
+  matches!(base, [Literal::Atom(a)] if a == goal)
 }
 
 #[derive(Clone, Debug)]
@@ -314,10 +307,7 @@ enum Boundness {
 
 impl Boundness {
   fn is_bound(&self) -> bool {
-    match self {
-      Self::Bound => true,
-      _ => false,
-    }
+    matches!(self, Self::Bound)
   }
 
   fn from_char(c: char) -> Option<Self> {
@@ -341,16 +331,21 @@ impl Boundness {
 #[derive(Clone, Debug)]
 struct Pattern(Box<[Boundness]>);
 
-impl Pattern {
-  fn to_string(&self) -> String {
-    self.0.iter().map(|b| Boundness::to_char(b)).collect()
+impl std::fmt::Display for Pattern {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    for boundness in &self.0 {
+      write!(f, "{}", boundness.to_char())?;
+    }
+    Ok(())
   }
+}
 
+impl Pattern {
   fn len(&self) -> usize {
     self.0.len()
   }
 
-  fn get_bounded_args(&self, args: &Vec<Term>) -> Vec<Term> {
+  fn get_bounded_args(&self, args: &[Term]) -> Vec<Term> {
     args
       .iter()
       .zip(self.0.iter())
@@ -358,7 +353,7 @@ impl Pattern {
       .collect()
   }
 
-  fn get_bounded_vars(&self, args: &Vec<Term>) -> HashSet<Variable> {
+  fn get_bounded_vars(&self, args: &[Term]) -> HashSet<Variable> {
     args
       .iter()
       .zip(self.0.iter())
@@ -402,7 +397,7 @@ impl Adornment {
     }
 
     // Create demand predicate
-    let demand_predicate = format!("d#{}#{}", relation.predicate.clone(), pattern.to_string());
+    let demand_predicate = format!("d#{}#{pattern}", relation.predicate);
     Ok(Self {
       predicate: relation.predicate.clone(),
       types: relation.arg_types.clone(),

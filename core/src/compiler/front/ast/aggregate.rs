@@ -2,6 +2,7 @@ use super::*;
 
 /// An aggregation operation, e.g. `n = count(p: person(p))`
 #[derive(Clone, Debug, PartialEq, Serialize, AstNode)]
+#[ast_node_no_span_constructor]
 #[doc(hidden)]
 pub struct _Reduce {
   pub left: Vec<VariableOrWildcard>,
@@ -60,7 +61,7 @@ pub struct _ForallExistsReduce {
 
 impl ForallExistsReduce {
   pub fn is_negated(&self) -> bool {
-    self.negate().clone()
+    *self.negate()
   }
 
   pub fn iter_binding_names(&self) -> impl Iterator<Item = &String> {

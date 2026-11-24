@@ -38,7 +38,7 @@ impl PythonForeignAttribute {
         let py_actions: Vec<Py<PyAny>> = result.getattr(py, "actions").unwrap().extract(py).unwrap();
         let actions = py_actions
           .into_iter()
-          .map(|py_action| self.process_action(py.clone(), py_action))
+          .map(|py_action| self.process_action(py, py_action))
           .collect();
         AttributeAction::Multiple(actions)
       }

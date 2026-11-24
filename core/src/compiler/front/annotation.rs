@@ -23,6 +23,12 @@ impl NodeIdAnnotator {
   }
 }
 
+impl Default for NodeIdAnnotator {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<NodeLocation> for NodeIdAnnotator {
   fn visit_mut(&mut self, loc: &mut NodeLocation) {
     if loc.id.is_none() {

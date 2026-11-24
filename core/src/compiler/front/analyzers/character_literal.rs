@@ -14,13 +14,19 @@ impl CharacterLiteralAnalysis {
   }
 }
 
+impl Default for CharacterLiteralAnalysis {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<CharLiteral> for CharacterLiteralAnalysis {
   fn visit(&mut self, c: &CharLiteral) {
     let s = c.character();
     let loc = c.location().clone();
     if s.len() == 1 {
       // OK
-    } else if s.len() == 0 {
+    } else if s.is_empty() {
       self.errors.push(CharacterLiteralAnalysisError::EmptyCharacter { loc })
     } else {
       self

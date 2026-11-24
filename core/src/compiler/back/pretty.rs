@@ -266,7 +266,7 @@ impl Display for Reduce {
       f.write_fmt(format_args!("{} := ", self.left_vars[0].name))?;
     }
     f.write_str(&self.aggregator)?;
-    if self.params.len() > 0 {
+    if !self.params.is_empty() {
       let params = self.params.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ");
       f.write_str(&params)?;
     }
@@ -304,7 +304,7 @@ impl Display for Reduce {
         .join(", ");
       format!(" where {}: {}", group_by_vars, group_by_atom)
     } else {
-      format!("")
+      String::new()
     };
     let to_agg_vars = self
       .to_aggregate_vars

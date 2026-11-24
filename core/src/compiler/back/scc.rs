@@ -31,10 +31,7 @@ impl std::fmt::Display for DependencyGraphEdge {
 impl DependencyGraphEdge {
   /// Check if the edge needs to be stratified
   pub fn needs_stratification(&self) -> bool {
-    match self {
-      Self::Positive => false,
-      _ => true,
-    }
+    !matches!(self, Self::Positive)
   }
 }
 
@@ -59,7 +56,7 @@ impl DependencyGraph {
   /// Add a predicate to the dependency graph
   pub fn add_predicate(&mut self, predicate: &String) -> NodeIndex {
     if let Some(ni) = self.predicate_to_node_id.get(predicate) {
-      ni.clone()
+      *ni
     } else {
       let node_id = self.graph.add_node(predicate.clone());
       self.predicate_to_node_id.insert(predicate.clone(), node_id);
@@ -69,7 +66,7 @@ impl DependencyGraph {
 
   /// Get the node id of a predicate
   pub fn predicate_node(&self, predicate: &String) -> NodeIndex {
-    self.predicate_to_node_id.get(predicate).unwrap().clone()
+    *self.predicate_to_node_id.get(predicate).unwrap()
   }
 
   /// Add a dependency between two predicates
@@ -150,14 +147,13 @@ impl DependencyGraph {
       // Finally add the connected component to the end
       for edge in scc_graph.edges_directed(scc, Incoming) {
         let next_node = edge.source();
-        if !visited.contains(&next_node) {
-          if scc_graph
+        if !visited.contains(&next_node)
+          && scc_graph
             .edges_directed(next_node, Outgoing)
             .all(|e| visited.contains(&e.target()))
-          {
-            visited.insert(edge.source());
-            fringe.push_back(edge.source());
-          }
+        {
+          visited.insert(edge.source());
+          fringe.push_back(edge.source());
         }
       }
     }
@@ -165,7 +161,7 @@ impl DependencyGraph {
     Ok(stratas)
   }
 
-  fn has_cycle(&self, domain: &Vec<String>) -> bool {
+  fn has_cycle(&self, domain: &[String]) -> bool {
     if domain.is_empty() {
       false
     } else if domain.len() == 1 {
@@ -174,6 +170,12 @@ impl DependencyGraph {
     } else {
       true
     }
+  }
+}
+
+impl Default for DependencyGraph {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
@@ -250,15 +252,15 @@ impl Program {
       let head_predicate = rule.head_predicate();
 
       // Step 1. Deal with the dependencies between goal predicate and its dependencies
-      if let Some(head_relation) = self.relation_of_predicate(head_predicate) {
-        if head_relation.attributes.get::<GoalAttribute>().is_some() {
-          for atom in rule.body_literals() {
-            match atom {
-              Literal::Atom(a) if !self.predicate_registry.contains(&a.predicate) => {
-                graph.add_dependency(&a.predicate, head_predicate, E::Positive);
-              }
-              _ => {}
+      if let Some(head_relation) = self.relation_of_predicate(head_predicate)
+        && head_relation.attributes.get::<GoalAttribute>().is_some()
+      {
+        for atom in rule.body_literals() {
+          match atom {
+            Literal::Atom(a) if !self.predicate_registry.contains(&a.predicate) => {
+              graph.add_dependency(&a.predicate, head_predicate, E::Positive);
             }
+            _ => {}
           }
         }
       }

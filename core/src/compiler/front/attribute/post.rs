@@ -77,8 +77,14 @@ impl PostProcessingContext {
     }
 
     items.retain_with_index(|id, _| !to_remove_item_index.contains(&id));
-    items.extend(new_items.into_iter());
+    items.extend(new_items);
 
     Ok(())
+  }
+}
+
+impl Default for PostProcessingContext {
+  fn default() -> Self {
+    Self::new()
   }
 }

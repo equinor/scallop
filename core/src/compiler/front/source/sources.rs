@@ -22,17 +22,23 @@ impl Sources {
   }
 }
 
+impl Default for Sources {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl Clone for Sources {
   fn clone(&self) -> Self {
     Self {
-      sources: self.sources.iter().map(|s| Rc::clone(s)).collect(),
+      sources: self.sources.iter().map(Rc::clone).collect(),
     }
   }
 }
 
 impl std::fmt::Debug for Sources {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.debug_set().entries(self.sources.iter().map(|s| &*s)).finish()
+    f.debug_set().entries(self.sources.iter()).finish()
   }
 }
 

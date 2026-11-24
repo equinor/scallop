@@ -201,26 +201,32 @@ pub struct CannotUnifyTypes {
   pub loc: Option<Loc>,
 }
 
-impl Into<FrontCompileErrorMessage> for CannotUnifyTypes {
-  fn into(self) -> FrontCompileErrorMessage {
-    if let Some(l) = self.loc {
+impl From<CannotUnifyTypes> for FrontCompileErrorMessage {
+  fn from(error: CannotUnifyTypes) -> Self {
+    if let Some(l) = error.loc {
       FrontCompileErrorMessage::error()
-        .msg(format!("cannot unify types `{}` and `{}` in", &self.t1, &self.t2))
+        .msg(format!("cannot unify types `{}` and `{}` in", error.t1, error.t2))
         .src(l)
         .msg("where the first is inferred here")
-        .src(self.t1.location().clone())
+        .src(error.t1.location().clone())
         .msg("and the second is inferred here")
-        .src(self.t2.location().clone())
+        .src(error.t2.location().clone())
     } else {
       FrontCompileErrorMessage::error()
         .msg(format!(
           "cannot unify types `{}` and `{}`, where the first is declared here",
-          &self.t1, &self.t2
+          error.t1, error.t2
         ))
-        .src(self.t1.location().clone())
+        .src(error.t1.location().clone())
         .msg("and the second is declared here")
-        .src(self.t2.location().clone())
+        .src(error.t2.location().clone())
     }
+  }
+}
+
+impl From<Box<CannotUnifyTypes>> for FrontCompileErrorMessage {
+  fn from(error: Box<CannotUnifyTypes>) -> Self {
+    (*error).into()
   }
 }
 

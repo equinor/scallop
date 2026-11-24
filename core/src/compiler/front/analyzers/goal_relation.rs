@@ -20,7 +20,7 @@ impl GoalRelationAnalysis {
     self.goal_relations.contains_key(rel)
   }
 
-  pub fn get_goal_attr<'a>(&self, attrs: &'a Vec<Attribute>) -> Option<&'a Attribute> {
+  pub fn get_goal_attr<'a>(&self, attrs: &'a [Attribute]) -> Option<&'a Attribute> {
     attrs.iter().find(|attr| attr.attr_name() == "goal")
   }
 
@@ -57,14 +57,20 @@ impl GoalRelationAnalysis {
     )
   }
 
-  pub fn add_goal_relation(&mut self, pred: &String, loc: &NodeLocation) {
-    self.goal_relations.insert(pred.clone(), loc.clone());
+  pub fn add_goal_relation(&mut self, pred: &str, loc: &NodeLocation) {
+    self.goal_relations.insert(pred.to_owned(), loc.clone());
+  }
+}
+
+impl Default for GoalRelationAnalysis {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
 impl NodeVisitor<RuleDecl> for GoalRelationAnalysis {
   fn visit(&mut self, node: &RuleDecl) {
-    if let Some(_) = self.get_goal_attr(node.attrs()) {
+    if self.get_goal_attr(node.attrs()).is_some() {
       match node.rule().head() {
         RuleHead::Atom(atom) => {
           if atom.num_args() != 0 {
@@ -75,9 +81,7 @@ impl NodeVisitor<RuleDecl> for GoalRelationAnalysis {
         }
         _ => self.errors.push(
           FrontCompileErrorMessage::error()
-            .msg(format!(
-              "@goal annotated rule cannot have a head other than simple atom"
-            ))
+            .msg("@goal annotated rule cannot have a head other than simple atom".to_string())
             .src(node.rule().head().location().clone()),
         ),
       }
@@ -87,7 +91,7 @@ impl NodeVisitor<RuleDecl> for GoalRelationAnalysis {
 
 impl NodeVisitor<RelationTypeDecl> for GoalRelationAnalysis {
   fn visit(&mut self, node: &RelationTypeDecl) {
-    if let Some(_) = self.get_goal_attr(node.attrs()) {
+    if self.get_goal_attr(node.attrs()).is_some() {
       for relation_type in node.rel_types() {
         if relation_type.num_arg_bindings() != 0 {
           self.add_incorrect_relation_arity_error(

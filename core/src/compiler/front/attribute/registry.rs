@@ -5,7 +5,7 @@ use crate::compiler::front::FrontContext;
 use super::super::ast;
 use super::*;
 
-const RESERVED_ATTRIBUTES: [&'static str; 8] = [
+const RESERVED_ATTRIBUTES: [&str; 8] = [
   "hidden",
   "file",
   "demand",
@@ -52,7 +52,7 @@ impl AttributeProcessorRegistry {
     }
   }
 
-  pub fn analyze(&self, items: &Vec<ast::Item>) -> Result<PostProcessingContext, AttributeError> {
+  pub fn analyze(&self, items: &[ast::Item]) -> Result<PostProcessingContext, AttributeError> {
     let mut post_proc_ctx = PostProcessingContext::new();
     for (item_index, item) in items.iter().enumerate() {
       for attr in item.attrs() {
@@ -73,5 +73,11 @@ impl AttributeProcessorRegistry {
   pub fn analyze_and_process(&self, ctx: &mut FrontContext, items: &mut Vec<ast::Item>) -> Result<(), AttributeError> {
     let attr_pos_proc = self.analyze(items)?;
     attr_pos_proc.process(ctx, items)
+  }
+}
+
+impl Default for AttributeProcessorRegistry {
+  fn default() -> Self {
+    Self::new()
   }
 }

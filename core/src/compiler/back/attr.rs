@@ -40,7 +40,13 @@ impl Attributes {
   }
 
   pub fn iter(&self) -> impl Iterator<Item = &Attribute> {
-    self.attrs.iter().map(|(_, a)| a)
+    self.attrs.values()
+  }
+}
+
+impl Default for Attributes {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

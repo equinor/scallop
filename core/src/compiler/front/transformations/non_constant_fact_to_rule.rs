@@ -59,7 +59,7 @@ impl NodeVisitor<RelationDecl> for TransformNonConstantFactToRule {
             e.clone()
           } else {
             let var = Variable::new(Identifier::new(format!("fnc#{}", i)));
-            Expr::Variable(var.into())
+            Expr::Variable(var)
           }
         })
         .collect(),

@@ -218,10 +218,7 @@ impl TypeSet {
   }
 
   pub fn is_base_type(&self) -> bool {
-    match self {
-      Self::BaseType(_, _) => true,
-      _ => false,
-    }
+    matches!(self, Self::BaseType(_, _))
   }
 
   pub fn get_base_type(&self) -> Option<ValueType> {
@@ -267,41 +264,41 @@ impl TypeSet {
   }
 
   pub fn has_same_kind(&self, other: &Self) -> bool {
-    match (self, other) {
-      (Self::BaseType(_, _), Self::BaseType(_, _)) => true,
-      (Self::Numeric(_), Self::Numeric(_)) => true,
-      (Self::Arith(_), Self::Arith(_)) => true,
-      (Self::Integer(_), Self::Integer(_)) => true,
-      (Self::SignedInteger(_), Self::SignedInteger(_)) => true,
-      (Self::UnsignedInteger(_), Self::UnsignedInteger(_)) => true,
-      (Self::Float(_), Self::Float(_)) => true,
-      (Self::String(_), Self::String(_)) => true,
-      (Self::Any(_), Self::Any(_)) => true,
-      _ => false,
-    }
+    matches!(
+      (self, other),
+      (Self::BaseType(_, _), Self::BaseType(_, _))
+        | (Self::Numeric(_), Self::Numeric(_))
+        | (Self::Arith(_), Self::Arith(_))
+        | (Self::Integer(_), Self::Integer(_))
+        | (Self::SignedInteger(_), Self::SignedInteger(_))
+        | (Self::UnsignedInteger(_), Self::UnsignedInteger(_))
+        | (Self::Float(_), Self::Float(_))
+        | (Self::String(_), Self::String(_))
+        | (Self::Any(_), Self::Any(_))
+    )
   }
 
-  pub fn unify_type_sets(tss: Vec<&TypeSet>) -> Result<TypeSet, CannotUnifyTypes> {
+  pub fn unify_type_sets(tss: Vec<&TypeSet>) -> Result<TypeSet, Box<CannotUnifyTypes>> {
     let mut ty = tss[0].clone();
     for curr_ty in tss {
-      match ty.unify(curr_ty) {
-        Ok(new_ty) => ty = new_ty,
-        Err(err) => return Err(err),
+      {
+        let new_ty = ty.unify(curr_ty)?;
+        ty = new_ty
       }
     }
     Ok(ty)
   }
 
-  pub fn unify(&self, other: &Self) -> Result<Self, CannotUnifyTypes> {
+  pub fn unify(&self, other: &Self) -> Result<Self, Box<CannotUnifyTypes>> {
     use std::cmp::Ordering::*;
     match self.partial_cmp(other) {
       Some(Equal) | Some(Less) => Ok(self.clone()),
       Some(Greater) => Ok(other.clone()),
-      None => Err(CannotUnifyTypes {
+      None => Err(Box::new(CannotUnifyTypes {
         t1: self.clone(),
         t2: other.clone(),
         loc: None,
-      }),
+      })),
     }
   }
 

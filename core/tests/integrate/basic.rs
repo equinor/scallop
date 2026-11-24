@@ -784,7 +784,7 @@ fn test_not_exists_1() {
       rel color = {(0, "red"), (1, "green")}
       rel result() :- not exists(o: color(o, "blue"))
     "#,
-    ("result", vec![()].into()),
+    ("result", vec![()]),
   )
 }
 

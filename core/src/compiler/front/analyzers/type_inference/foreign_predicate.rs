@@ -31,6 +31,10 @@ impl PredicateType {
     self.arguments.len()
   }
 
+  pub fn is_empty(&self) -> bool {
+    self.arguments.is_empty()
+  }
+
   pub fn iter<'a>(&'a self) -> std::slice::Iter<'a, ValueType> {
     self.arguments.iter()
   }

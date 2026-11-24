@@ -12,7 +12,7 @@ fn codegen_edge_path_left_recursion() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = edge_path::run(&mut ctx);
   expect_static_output_collection(&result.edge, vec![(0, 1), (1, 2)]);
   expect_static_output_collection(&result.path, vec![(0, 1), (1, 2), (0, 2)]);
@@ -29,7 +29,7 @@ fn codegen_edge_path_right_recursion() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = edge_path::run(&mut ctx);
   expect_static_output_collection(&result.edge, vec![(0, 1), (1, 2)]);
   expect_static_output_collection(&result.path, vec![(0, 1), (1, 2), (0, 2)]);
@@ -46,7 +46,7 @@ fn codegen_edge_path_binary_recursion() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = edge_path::run(&mut ctx);
   expect_static_output_collection(&result.edge, vec![(0, 1), (1, 2)]);
   expect_static_output_collection(&result.path, vec![(0, 1), (1, 2), (0, 2)]);
@@ -63,7 +63,7 @@ fn codegen_odd_even() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = odd_even::run(&mut ctx);
   expect_static_output_collection(&result.odd, vec![(1,), (3,), (5,), (7,), (9,)]);
   expect_static_output_collection(&result.even, vec![(0,), (2,), (4,), (6,), (8,)]);
@@ -80,7 +80,7 @@ fn codegen_difference_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = difference_1::run(&mut ctx);
   expect_static_output_collection(&result.s, vec![(0, 1)]);
 }
@@ -103,7 +103,7 @@ fn codegen_bmi_test_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = bmi_test_1::run(&mut ctx);
   expect_static_output_collection(&result.height, vec![(1, 185), (2, 175), (3, 165)]);
   expect_static_output_collection(&result.weight, vec![(1, 80), (2, 70), (3, 55)]);
@@ -130,7 +130,7 @@ fn codegen_bmi_test_2() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = bmi_test_2::run(&mut ctx);
   expect_static_output_collection(&result.height, vec![(1, 185.0), (2, 175.0), (3, 165.0)]);
   expect_static_output_collection(&result.weight, vec![(1, 80.0), (2, 70.0), (3, 55.0)]);
@@ -147,7 +147,7 @@ fn codegen_const_fold_test_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = const_fold_test_1::run(&mut ctx);
   expect_static_output_collection(&result.R, vec![(4i32, 1i32)]);
 }
@@ -165,7 +165,7 @@ fn codegen_digit_sum_test_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = digit_sum_test_1::run(&mut ctx);
   expect_static_output_collection(
     &result.sum_2,
@@ -196,7 +196,7 @@ fn codegen_digit_sum_test_2() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = digit_sum_test_2::run(&mut ctx);
   expect_static_output_collection(
     &result.sum_2,
@@ -231,7 +231,7 @@ fn codegen_expr_test_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = expr_test_1::run(&mut ctx);
   expect_static_output_collection(&result.result, vec![(0,)])
 }
@@ -246,7 +246,7 @@ fn codegen_fib_test_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = fib_test_1::run(&mut ctx);
   expect_static_output_collection(
     &result.fib,
@@ -264,7 +264,7 @@ fn codegen_count_edge_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = count_edge::run(&mut ctx);
   expect_static_output_collection(&result.num_edges, vec![(2,)]);
 }
@@ -279,7 +279,7 @@ fn codegen_out_degree_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = out_degree::run(&mut ctx);
   expect_static_output_collection(&result.out_degree, vec![(0, 1), (1, 1)]);
 }
@@ -295,7 +295,7 @@ fn codegen_out_degree_2() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = out_degree::run(&mut ctx);
   expect_static_output_collection(&result.out_degree, vec![(0, 1), (1, 1), (2, 0)]);
 }
@@ -312,7 +312,7 @@ fn codegen_exists_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = exists_1::run(&mut ctx);
   expect_static_output_collection(&result.result1, vec![(true,)]);
   expect_static_output_collection(&result.result2, vec![(false,)]);
@@ -328,7 +328,7 @@ fn codegen_sum_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = sum_1::run(&mut ctx);
   expect_static_output_collection(&result.num_obj, vec![(10,)]);
 }
@@ -343,7 +343,7 @@ fn codegen_max_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = max_1::run(&mut ctx);
   expect_static_output_collection(&result.max_num_per_color, vec![(6,)]);
 }
@@ -358,7 +358,7 @@ fn codegen_min_1() {
     }
   }
 
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = min_1::run(&mut ctx);
   expect_static_output_collection(&result.min_num_per_color, vec![(1,)]);
 }
@@ -372,7 +372,7 @@ fn codegen_simple_test_1() {
       rel path(a, b) = edge(a, b)
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = simple_test::run(&mut ctx);
   expect_static_output_collection(&result.path, vec![(0, 1), (1, 2)]);
 }
@@ -386,7 +386,7 @@ fn codegen_simple_test_2() {
       rel self_edge(a, a) :- edge(a, a)
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = simple_test::run(&mut ctx);
   expect_static_output_collection(&result.self_edge, vec![(2, 2)]);
 }
@@ -400,7 +400,7 @@ fn codegen_simple_test_3() {
       rel something(a, 2) :- edge(a, b)
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = simple_test::run(&mut ctx);
   expect_static_output_collection(&result.something, vec![(0, 2), (1, 2)]);
 }
@@ -414,7 +414,7 @@ fn codegen_simple_test_4() {
       rel something(a, 2) :- edge(a, b), b > 1
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = simple_test::run(&mut ctx);
   expect_static_output_collection(&result.something, vec![(1, 2)]);
 }
@@ -429,7 +429,7 @@ fn codegen_simple_test_5() {
       rel O(a, b) = S(b, a), R(a, b)
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = simple_test::run(&mut ctx);
   expect_static_output_collection(&result.O, vec![(4, 3)]);
 }
@@ -444,7 +444,7 @@ fn codegen_simple_test_6() {
       rel O(a, b) = S(b, a), S(a, b), R(a, b), R(b, a)
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = simple_test::run(&mut ctx);
   expect_static_output_collection(&result.O, vec![(3, 4), (4, 3)]);
 }
@@ -459,7 +459,7 @@ fn codegen_simple_test_7() {
       rel O(a, b) = S(a, b), ~R(b)
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = simple_test::run(&mut ctx);
   expect_static_output_collection(&result.O, vec![(2, 3)]);
 }
@@ -474,7 +474,7 @@ fn codegen_simple_test_8() {
       rel O(a, b) = S(a, b), ~R(b, c)
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = simple_test::run(&mut ctx);
   expect_static_output_collection(&result.O, vec![(2, 3)]);
 }
@@ -489,7 +489,7 @@ fn codegen_simple_test_9() {
       rel O(a, b) = S(a, b), ~R(a, a)
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = simple_test::run(&mut ctx);
   expect_static_output_collection(&result.O, vec![(0, 1), (1, 2)]);
 }
@@ -527,7 +527,7 @@ fn codegen_srl_1() {
       rel how_many_play_soccer(c) = c := count(n: plays_soccer(n))
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = srl_1_test::run(&mut ctx);
   expect_static_output_collection(&result.how_many_play_soccer, vec![(2,)]);
 }
@@ -549,7 +549,7 @@ fn codegen_class_student_grade_1() {
       rel class_top_student(c, s) = s := argmax[s](g: class_student_grade(c, s, g))
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = srl_1_test::run(&mut ctx);
   expect_static_output_collection(
     &result.class_top_student,
@@ -569,7 +569,7 @@ fn codegen_remove_unused_relation() {
       query sum_2
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = test::run(&mut ctx);
   expect_static_output_collection(&result.sum_2, vec![(4,)]);
 }
@@ -584,7 +584,7 @@ fn codegen_negate_query_1() {
       rel Q() = A(a, b), ~B(a, b, "O")
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = test::run(&mut ctx);
   expect_static_output_collection(&result.Q, vec![]);
 }
@@ -599,7 +599,7 @@ fn codegen_negate_query_2() {
       query A
     }
   }
-  let mut ctx = unit::UnitProvenance::default();
+  let mut ctx = unit::UnitProvenance;
   let result = test::run(&mut ctx);
   expect_static_output_collection(&result.A, vec![]);
 }

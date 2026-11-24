@@ -9,6 +9,6 @@ pub struct _ImportDecl {
 
 impl ImportDecl {
   pub fn import_file_path(&self) -> &String {
-    &self.import_file().string()
+    self.import_file().string()
   }
 }

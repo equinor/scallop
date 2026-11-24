@@ -124,7 +124,7 @@ fn main() -> Result<(), String> {
   let opt = Options::parse();
 
   // Integration options
-  let default_scheduler = env::Scheduler::from_args(opt.scheduler.clone(), opt.beam_size.clone())?;
+  let default_scheduler = env::Scheduler::from_args(opt.scheduler.clone(), opt.beam_size)?;
   let integrate_opt = integrate::IntegrateOptions {
     compiler_options: compiler::CompileOptions {
       debug: opt.debug,
@@ -162,11 +162,11 @@ fn main() -> Result<(), String> {
   // Use the specified provenance
   match opt.provenance.as_str() {
     "unit" => {
-      let ctx = provenance::unit::UnitProvenance::default();
+      let ctx = provenance::unit::UnitProvenance;
       interpret(ctx, &opt.input, integrate_opt, predicate_set, monitor_options)
     }
     "bool" => {
-      let ctx = provenance::boolean::BooleanProvenance::default();
+      let ctx = provenance::boolean::BooleanProvenance;
       interpret(ctx, &opt.input, integrate_opt, predicate_set, monitor_options)
     }
     "proofs" => {
@@ -174,11 +174,11 @@ fn main() -> Result<(), String> {
       interpret(ctx, &opt.input, integrate_opt, predicate_set, monitor_options)
     }
     "tropical" => {
-      let ctx = provenance::tropical::TropicalProvenance::default();
+      let ctx = provenance::tropical::TropicalProvenance;
       interpret(ctx, &opt.input, integrate_opt, predicate_set, monitor_options)
     }
     "realtropical" => {
-      let ctx = provenance::real_tropical::RealTropicalProvenance::default();
+      let ctx = provenance::real_tropical::RealTropicalProvenance;
       interpret(ctx, &opt.input, integrate_opt, predicate_set, monitor_options)
     }
     "minmaxprob" => {

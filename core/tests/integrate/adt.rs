@@ -118,7 +118,7 @@ fn adt_binary_tree_w_destruct_1() {
   )
 }
 
-const RE_PROGRAM: &'static str = r#"
+const RE_PROGRAM: &str = r#"
   type RE = Char(char) | Nil() | Con(RE, RE) | Or(RE, RE) | Star(RE)
 
   rel match(r, i, i)     = case r is Nil(), string_chars(s, i, _), input_string(s)
@@ -131,7 +131,7 @@ const RE_PROGRAM: &'static str = r#"
   rel match(r, s, e)     = case r is Star(r1), match(r1, s, m), match(r, m, e)
 "#;
 
-const RE_PROGRAM_W_DESTRUCT: &'static str = r#"
+const RE_PROGRAM_W_DESTRUCT: &str = r#"
   type RE = Char(char) | Nil() | Con(RE, RE) | Or(RE, RE) | Star(RE)
 
   rel match(Nil(), i, i)       = string_chars(s, i, _), input_string(s)
@@ -204,7 +204,7 @@ fn adt_regex_w_destruct_2() {
   )
 }
 
-const CLEVR_PROGRAM: &'static str = r#"
+const CLEVR_PROGRAM: &str = r#"
   type Color = RED | GREEN | BLUE
   type Size = LARGE | SMALL
   type SpatialRela = LEFT | RIGHT
@@ -237,7 +237,7 @@ fn adt_clevr_1() {
   )
 }
 
-const EQSAT_1_PROGRAM: &'static str = r#"
+const EQSAT_1_PROGRAM: &str = r#"
   // The language for simple symbolic arithmetic expression
   type Expr = Const(i32)
             | Var(String)
@@ -301,7 +301,7 @@ fn equality_saturation_2() {
   )
 }
 
-const TYPE_INF_1_PROGRAM: &'static str = r#"
+const TYPE_INF_1_PROGRAM: &str = r#"
   type Op = EQ | NEQ | GEQ | LEQ | GT | LT | AND | OR | XOR | ADD | SUB | MUL | DIV | NEG | NOT
 
   type Expr = Number(i32)
@@ -485,7 +485,7 @@ fn foreign_predicate_dynamic_adt_1() {
   }
 
   // Initialize a context
-  let prov_ctx = provenance::unit::UnitProvenance::default();
+  let prov_ctx = provenance::unit::UnitProvenance;
   let mut ctx = integrate::IntegrateContext::<_, RcFamily>::new(prov_ctx);
 
   // Register the foreign predicate
