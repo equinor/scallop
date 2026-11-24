@@ -1,3 +1,21 @@
 [build-system]
-requires = ['setuptools>=42']
-build-backend = 'setuptools.build_meta'
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scallop"
+version = "0.2.5"
+description = "Scallop CLI"
+readme = "readme.md"
+requires-python = ">=3.10"
+authors = [{ name = "Ziyang Li", email = "liby99@seas.upenn.edu" }]
+dependencies = [
+  "prompt-toolkit>=3.0.53,<4",
+  "tabulate>=0.10,<1",
+]
+
+[project.scripts]
+scallop = "scallop.cli:main"
+
+[tool.setuptools]
+packages = ["scallop"]

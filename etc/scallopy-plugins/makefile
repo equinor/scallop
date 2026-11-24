@@ -1,22 +1,24 @@
-DIRECTORY = $(patsubst %/, %, $(sort $(dir $(wildcard */.))))
+DIRECTORY = $(sort $(patsubst %/pyproject.toml,%,$(wildcard */pyproject.toml)))
 DEVELOP_TARGETS = $(patsubst %,develop-%,$(DIRECTORY))
 INSTALL_TARGETS = $(patsubst %,install-%,$(DIRECTORY))
 BUILD_TARGETS = $(patsubst %,build-%,$(DIRECTORY))
 
+.PHONY: develop install build clean $(DEVELOP_TARGETS) $(INSTALL_TARGETS) $(BUILD_TARGETS)
+
 develop: $(DEVELOP_TARGETS)
 
-develop-%:
-	cd $*; pip install --editable .
+$(DEVELOP_TARGETS): develop-%:
+	cd $* && uv pip install --editable .
 
 install: $(INSTALL_TARGETS)
 
-install-%: build-%
-	cd $*; find dist -name "*.whl" -print | xargs pip install --force-reinstall
+$(INSTALL_TARGETS): install-%: build-%
+	cd $* && uv pip install --reinstall-package scallop-$* dist/*.whl
 
 build: $(BUILD_TARGETS)
 
-build-%:
-	cd $*; python -m build
+$(BUILD_TARGETS): build-%:
+	cd $* && uv build --clear
 
 clean:
-	cd $*; rm -rf dist
+	rm -rf $(addsuffix /dist,$(DIRECTORY))

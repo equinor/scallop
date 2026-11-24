@@ -1,11 +1,13 @@
+.PHONY: develop-scallopy develop-scallopy-plus test clean
+
 develop-scallopy:
-	maturin develop --release
+	uv pip install --reinstall-package scallopy --editable .
 
 develop-scallopy-plus:
-	maturin develop --release --features "torch-tensor"
+	uv pip install --reinstall-package scallopy --editable . --config-setting build-args="--features torch-tensor"
 
 test:
-	python3 tests/test.py
+	uv run --no-project python tests/test.py
 
 clean:
 	rm -f scallopy/scallopy.cpython*

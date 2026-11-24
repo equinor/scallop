@@ -165,40 +165,16 @@ class MNISTSum2Net(nn.Module):
     return self.sum_2(digit_1=a_distrs, digit_2=b_distrs)
 ```
 
-To install, please do the following (also specified [here](etc/scallopy/readme.md)):
-
-Assume you are inside of the root `scallop` directory.
-First, we need to create a virtual environment for Scallop to operate in.
+To build Scallopy from source, install [uv](https://docs.astral.sh/uv/getting-started/installation/) and the Rust toolchain.
+Then run these commands from the repository root:
 
 ``` bash
-# Mac/Linux (venv, requirement: Python 3.8)
-$ make py-venv # create a python virtual environment
-$ source .env/bin/activate # if you are using fish, use .env/bin/activate.fish
-
-# Linux (Conda)
-$ conda create --name scallop-lab python=3.8 # change the name to whatever you want
-$ conda activate scallop-lab
+uv venv --python 3.14
+make install-scallopy
+uv run --no-project python etc/scallopy/examples/edge_path.py
 ```
 
-And let's install the core dependencies
-
-``` bash
-$ pip install maturin
-```
-
-With this, we can build our `scallopy` library
-
-``` bash
-$ make install-scallopy
-```
-
-If succeed, please run some examples just to confirm that `scallopy` is indeed installed successfully.
-When doing so (and all of the above), please make sure that you are inside of the virtual environment or
-conda environment.
-
-``` bash
-$ python etc/scallopy/examples/edge_path.py
-```
+For the locked test environment and optional experiment dependencies, see the [Scallopy README](etc/scallopy/readme.md).
 
 ### Scallop VSCode Plugin
 
