@@ -9,6 +9,7 @@ members = [
   "etc/scli",
   "etc/sclrepl",
   "etc/scallopy",
+  "etc/scallopy-interop",
   # "etc/scallop-node",
   "etc/scallop-wasm",
 

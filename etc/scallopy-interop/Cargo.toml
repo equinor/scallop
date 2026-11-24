@@ -1,0 +1,9 @@
+[package]
+name = "scallopy-interop"
+version = "0.2.5"
+edition.workspace = true
+publish = false
+
+[dependencies]
+pyo3 = "0.30.1"
+scallop-core = { path = "../../core" }

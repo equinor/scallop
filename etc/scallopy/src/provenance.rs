@@ -10,6 +10,7 @@ use scallop_core::runtime::dynamic::*;
 use scallop_core::runtime::env::*;
 use scallop_core::runtime::provenance::*;
 use scallop_core::utils::*;
+use scallopy_interop::{diff_exclusive_probability_tag, diff_probability_tag};
 
 use super::collection::*;
 use super::custom_tag;
@@ -203,9 +204,7 @@ fn extract_diff_probability(tag: &Bound<'_, PyAny>) -> PyResult<f64> {
 
 impl PythonProvenance for diff_min_max_prob::DiffMinMaxProbProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let prob = extract_diff_probability(tag)?;
-    let tag: ExtTag = tag.into();
-    Ok(Some((prob, Some(tag)).into()))
+    diff_probability_tag(tag, extract_diff_probability)
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, ctx: &Self) -> CollectionEnum<ArcFamily> {
@@ -226,9 +225,7 @@ impl PythonProvenance for diff_min_max_prob::DiffMinMaxProbProvenance<ExtTag, Ar
 
 impl PythonProvenance for diff_add_mult_prob::DiffAddMultProbProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let prob = extract_diff_probability(tag)?;
-    let tag: ExtTag = tag.into();
-    Ok(Some((prob, Some(tag)).into()))
+    diff_probability_tag(tag, extract_diff_probability)
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, ctx: &Self) -> CollectionEnum<ArcFamily> {
@@ -245,9 +242,7 @@ impl PythonProvenance for diff_add_mult_prob::DiffAddMultProbProvenance<ExtTag, 
 
 impl PythonProvenance for diff_nand_mult_prob::DiffNandMultProbProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let prob = extract_diff_probability(tag)?;
-    let tag: ExtTag = tag.into();
-    Ok(Some((prob, Some(tag)).into()))
+    diff_probability_tag(tag, extract_diff_probability)
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, ctx: &Self) -> CollectionEnum<ArcFamily> {
@@ -264,9 +259,7 @@ impl PythonProvenance for diff_nand_mult_prob::DiffNandMultProbProvenance<ExtTag
 
 impl PythonProvenance for diff_max_mult_prob::DiffMaxMultProbProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let prob = extract_diff_probability(tag)?;
-    let tag: ExtTag = tag.into();
-    Ok(Some((prob, Some(tag)).into()))
+    diff_probability_tag(tag, extract_diff_probability)
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, ctx: &Self) -> CollectionEnum<ArcFamily> {
@@ -283,9 +276,7 @@ impl PythonProvenance for diff_max_mult_prob::DiffMaxMultProbProvenance<ExtTag, 
 
 impl PythonProvenance for diff_nand_min_prob::DiffNandMinProbProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let prob = extract_diff_probability(tag)?;
-    let tag: ExtTag = tag.into();
-    Ok(Some((prob, Some(tag)).into()))
+    diff_probability_tag(tag, extract_diff_probability)
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, ctx: &Self) -> CollectionEnum<ArcFamily> {
@@ -302,14 +293,7 @@ impl PythonProvenance for diff_nand_min_prob::DiffNandMinProbProvenance<ExtTag, 
 
 impl PythonProvenance for diff_sample_k_proofs::DiffSampleKProofsProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
-    if !tag_disj_id.0.is_none() {
-      let prob = extract_diff_probability(&tag_disj_id.0)?;
-      let tag: ExtTag = (&tag_disj_id.0).into();
-      Ok(Some((prob, tag, tag_disj_id.1).into()))
-    } else {
-      Ok(None)
-    }
+    diff_exclusive_probability_tag(tag, extract_diff_probability)
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, ctx: &Self) -> CollectionEnum<ArcFamily> {
@@ -326,14 +310,7 @@ impl PythonProvenance for diff_sample_k_proofs::DiffSampleKProofsProvenance<ExtT
 
 impl PythonProvenance for diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
-    if !tag_disj_id.0.is_none() {
-      let prob = extract_diff_probability(&tag_disj_id.0)?;
-      let tag: ExtTag = (&tag_disj_id.0).into();
-      Ok(Some((prob, tag, tag_disj_id.1).into()))
-    } else {
-      Ok(None)
-    }
+    diff_exclusive_probability_tag(tag, extract_diff_probability)
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, ctx: &Self) -> CollectionEnum<ArcFamily> {
@@ -350,14 +327,7 @@ impl PythonProvenance for diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, Ar
 
 impl PythonProvenance for diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance<ExtTag, ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
-    if !tag_disj_id.0.is_none() {
-      let prob = extract_diff_probability(&tag_disj_id.0)?;
-      let tag: ExtTag = (&tag_disj_id.0).into();
-      Ok(Some((prob, tag, tag_disj_id.1).into()))
-    } else {
-      Ok(None)
-    }
+    diff_exclusive_probability_tag(tag, extract_diff_probability)
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, ctx: &Self) -> CollectionEnum<ArcFamily> {
