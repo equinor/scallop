@@ -1,8 +1,59 @@
+import subprocess
+import sys
+from textwrap import dedent
 import unittest
 
 import scallopy
 
 class BasicTests(unittest.TestCase):
+  def test_optional_torch_import(self):
+    for missing_module in ("torch", "torch_dependency"):
+      with self.subTest(missing_module=missing_module):
+        result = subprocess.run(
+          [sys.executable, "-c", dedent("""
+            import sys
+
+            missing_module = sys.argv[1]
+            attempts = []
+
+            class BlockTorch:
+              def find_spec(self, fullname, path=None, target=None):
+                if fullname == "torch":
+                  attempts.append(fullname)
+                  raise ModuleNotFoundError(name=missing_module)
+
+            sys.meta_path.insert(0, BlockTorch())
+            import scallopy
+            from scallopy import torch_importer
+
+            ctx = scallopy.Context()
+            ctx.add_program("rel numbers = {1, 2}")
+            ctx.run()
+            assert list(ctx.relation("numbers")) == [(1,), (2,)]
+            assert not attempts, "ordinary Scallop use tried to load Torch"
+
+            if missing_module == "torch":
+              assert not torch_importer.has_pytorch()
+              try:
+                scallopy.Module
+              except ModuleNotFoundError as error:
+                assert error.name == "torch" and "install torch" in str(error)
+              else:
+                raise AssertionError("Using a Torch feature should fail")
+              assert len(attempts) == 1, "Torch absence wasn't cached"
+            else:
+              try:
+                torch_importer.has_pytorch()
+              except ModuleNotFoundError as error:
+                assert error.name == missing_module
+              else:
+                raise AssertionError("A broken Torch install should surface its error")
+          """), missing_module],
+          capture_output=True,
+          text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
   def test_native_collection_iterator_can_be_reiterated(self):
     ctx = scallopy.ScallopContext()
     ctx.add_relation("numbers", int)
@@ -60,6 +111,35 @@ class BasicTests(unittest.TestCase):
     ctx.add_rule("sum_2(a + b) = digit1(a), digit2(b)")
     ctx.run()
     self.assertEqual(list(ctx.relation("sum_2")), [(i,) for i in range(19)])
+
+  def test_run_batch(self):
+    ctx = scallopy.Context()
+    ctx.add_relation("digit", int)
+    ctx.add_rule("successor(x + 1) = digit(x)")
+    ctx.compile()
+    inputs = {"digit": [[1], [(4,)]]}
+
+    for parallel in (False, True):
+      with self.subTest(parallel=parallel):
+        batches = ctx.run_batch(inputs, "successor", parallel=parallel)
+        self.assertEqual([list(batch) for batch in batches], [[(2,)], [(5,)]])
+        batches = ctx.run_batch(inputs, ["digit", "successor"], parallel=parallel)
+        self.assertEqual([list(batch) for batch in batches], [[(1,)], [(5,)]])
+
+    with self.assertRaisesRegex(ValueError, "Expected 2 output relations"):
+      ctx.run_batch(inputs, ["digit"])
+
+  def test_run_batch_with_disjunctions(self):
+    ctx = scallopy.Context(provenance="topkproofs")
+    ctx.add_relation("choice", int)
+    ctx.add_rule("both(x) = choice(x), choice(y), x != y")
+    ctx.compile()
+    facts = [(0.5, (1,)), (0.5, (2,))]
+    inputs = {"choice": [facts, (facts, [[0, 1]])]}
+
+    independent, exclusive = ctx.run_batch(inputs, "both")
+    self.assertEqual(list(independent), [(0.25, (1,)), (0.25, (2,))])
+    self.assertEqual(list(exclusive), [])
 
   def test_softmax(self):
     ctx = scallopy.ScallopContext(provenance="minmaxprob")

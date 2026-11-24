@@ -1,9 +1,10 @@
 from typing import Optional
 
 from . import AstNode, NodeLocation
+from .ast_node import AstValue
 
 class AstEnumNode(AstNode):
-  def __init__(self, loc: NodeLocation, key: str, internal: Optional[AstNode]):
+  def __init__(self, loc: NodeLocation, key: str, internal: Optional[AstValue]):
     self._loc = loc
     self._key = key
     self._internal = internal

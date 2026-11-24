@@ -107,15 +107,13 @@ TagType = TypeVar("TagType")
 
 TupleType = TypeVar("TupleType")
 
-Facts: TypeAlias = ClassVar[
-  Generator[
-    Union[
-      Tuple[TagType, TupleType],
-      TupleType,
-    ],
-    None,
-    None,
-  ]
+Facts: TypeAlias = Generator[
+  Union[
+    Tuple[TagType, TupleType],
+    TupleType,
+  ],
+  None,
+  None,
 ]
 
 
@@ -212,7 +210,7 @@ def foreign_predicate(
   """
 
   # Get the function name
-  func_name = func.__name__ if not name else name
+  func_name = getattr(func, "__name__", type(func).__name__) if not name else name
 
   # Get the function signature
   signature = inspect.signature(func)
@@ -273,19 +271,14 @@ def foreign_predicate(
 
 
 def _extract_facts_return_type(return_type):
-  if get_origin(return_type) is not ClassVar:
+  # Older predicates may still wrap their generator annotation in ClassVar.
+  if get_origin(return_type) is ClassVar:
+    return_type, = get_args(return_type)
+
+  if get_origin(return_type) is not Generator:
     raise TypeError("Return type must be Facts")
 
-  generator_args = get_args(return_type)
-
-  if len(generator_args) != 1:
-    raise TypeError("Return type must be Facts")
-
-  generator_type = generator_args[0]
-  if get_origin(generator_type) is not Generator:
-    raise TypeError("Return type must be Facts")
-
-  generator_type_args = get_args(generator_type)
+  generator_type_args = get_args(return_type)
   if len(generator_type_args) != 3:
     raise TypeError("Return type must be Facts")
 

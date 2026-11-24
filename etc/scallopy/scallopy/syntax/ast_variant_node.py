@@ -1,17 +1,18 @@
-from typing import List
+from typing import List, Optional
 
 from . import AstNode, NodeLocation, AstTypeNode
+from .ast_node import AstValue
 
 class AstVariantNode(AstNode):
-  def __init__(self, key: str, internal: AstNode):
+  def __init__(self, key: str, internal: AstValue):
     self._key = key
     self._internal = internal
 
   def key(self) -> str:
     return self._key
 
-  def loc(self) -> NodeLocation:
-    return self._internal.loc()
+  def loc(self) -> Optional[NodeLocation]:
+    return self._internal.loc() if isinstance(self._internal, AstNode) else None
 
   def is_function_decl(self) -> bool:
     return self.is_typedecl() and self.as_typedecl().is_function()

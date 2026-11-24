@@ -48,6 +48,23 @@ class TestForeignFunction(unittest.TestCase):
     ctx.run()
     self.assertEqual(list(ctx.relation("R")), [(0,), (6,)])
 
+  def test_explicit_unsigned_and_optional_string_arguments(self):
+    @scallopy.foreign_function(arg_types=[scallopy.u32])
+    def format_id(value: int, prefix: str | None = None) -> str:
+      return f"{prefix or ''}{value}"
+
+    ctx = scallopy.Context()
+    ctx.register_foreign_function(format_id)
+    ctx.add_program("""
+      type ids(u32)
+      rel ids = {7}
+      rel plain($format_id(id)) = ids(id)
+      rel prefixed($format_id(id, "ID-")) = ids(id)
+    """)
+    ctx.run()
+    self.assertEqual(list(ctx.relation("plain")), [("7",)])
+    self.assertEqual(list(ctx.relation("prefixed")), [("ID-7",)])
+
   @unittest.expectedFailure
   def test_register_non_foreign_function(self):
     def my_sum(a, b): return a + b
