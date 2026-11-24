@@ -70,7 +70,7 @@ if __name__ == "__main__":
   # Start environment
   env = AvoidingArena((args.grid_x, args.grid_y), args.cell_size, args.dpi, args.num_enemies)
   done, reward = False, 0
-  env.reset()
+  env.reset(seed=args.seed)
 
   # Print or show image
   if args.print_arena: env.print_state()
@@ -81,9 +81,10 @@ if __name__ == "__main__":
     if not args.manual:
       action = random.randint(0, 3)
       print(f"Taking action: {env.string_of_action(action)}")
-      _, done, reward, _ = env.step(action)
+      _, reward, terminated, truncated, _ = env.step(action)
     else:
-      _, done, reward, _ = result
+      _, reward, terminated, truncated, _ = result
+    done = terminated or truncated
 
     # If finished
     if done: print("Success!" if reward > 0 else "Failed!")

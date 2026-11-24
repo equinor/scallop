@@ -72,7 +72,6 @@ pub fn generate_exec_rust_project(
 
   // Generate full executable code
   let full_executable = quote! {
-    use structopt::StructOpt;
     use scallop_core::runtime::provenance::*;
     use scallop_core::utils::*;
     mod scallop_module { #module }
@@ -108,7 +107,7 @@ version = "1.0.0"
 edition = "2018"
 [dependencies]
 scallop-core = {{ path = "{}/core" }}
-structopt = "0.3"
+clap = {{ version = "4.6", features = ["derive"] }}
 [workspace]
 "#,
         program_name, scallop_source_dir,
@@ -130,13 +129,17 @@ fn cmd_line_option_struct(opt: &Options, program_name: &str) -> TokenStream {
     quote! {}
   } else {
     quote! {
-      #[derive(Debug, StructOpt)]
-      #[structopt(name = #program_name)]
+      use clap::Parser;
+
+      #[derive(Debug, Parser)]
+      #[command(name = #program_name, version)]
       struct Options {
-        #[structopt(short, long, default_value = "unit")]
+        #[arg(short, long, default_value = "unit")]
         provenance: String,
-        #[structopt(long, default_value = "3")]
+        #[arg(long, default_value_t = 3)]
         top_k: usize,
+        #[arg(long)]
+        wmc_with_disjunctions: bool,
       }
     }
   }
@@ -163,23 +166,23 @@ fn main_body(opt: &Options) -> TokenStream {
       "topkproofs" => {
         quote! { run(top_k_proofs::TopKProofsProvenance::<RcFamily>::new(#top_k, #wmc_with_disjunctions)); }
       }
-      "samplekproofs" => quote! { run(sample_k_proofs::SampleKProofsContext::new(#top_k)); },
+      "samplekproofs" => quote! { run(sample_k_proofs::SampleKProofsProvenance::<RcFamily>::new(#top_k)); },
       "topbottomkclauses" => {
-        quote! { run(top_bottom_k_clauses::TopBottomKClausesContext::<RcFamily>::new(#top_k, #wmc_with_disjunctions)); }
+        quote! { run(top_bottom_k_clauses::TopBottomKClausesProvenance::<RcFamily>::new(#top_k, #wmc_with_disjunctions)); }
       }
       p => panic!("Unknown provenance `{}`. Aborting", p),
     }
   } else {
     quote! {
-      let opt = Options::from_args();
+      let opt = Options::parse();
       match opt.provenance.as_str() {
         "unit" => run(unit::UnitProvenance::default()),
         "bool" => run(boolean::BooleanProvenance::default()),
         "minmaxprob" => run(min_max_prob::MinMaxProbProvenance::default()),
         "addmultprob" => run(add_mult_prob::AddMultProbProvenance::default()),
         "topkproofs" => run(top_k_proofs::TopKProofsProvenance::<RcFamily>::new(opt.top_k, opt.wmc_with_disjunctions)),
-        "samplekproofs" => run(sample_k_proofs::SampleKProofsProvenance::new(opt.top_k)),
-        "topbottomkclauses" => run(top_bottom_k_clauses::TopBottomKClausesProvenance::<RcFamily>::new(opt.top_k, opt.wmc_with_disjunction)),
+        "samplekproofs" => run(sample_k_proofs::SampleKProofsProvenance::<RcFamily>::new(opt.top_k)),
+        "topbottomkclauses" => run(top_bottom_k_clauses::TopBottomKClausesProvenance::<RcFamily>::new(opt.top_k, opt.wmc_with_disjunctions)),
         p => println!("Unknown provenance `{}`. Aborting", p),
       }
     }

@@ -6,7 +6,7 @@ use std::process::Command;
 fn file_doesnt_exist_1() -> Result<(), Box<dyn std::error::Error>> {
   let mut cmd = Command::cargo_bin("scli")?;
 
-  cmd.arg("test/file/doesnt/exist");
+  cmd.args(["-p", "unit", "-k", "3", "-q", "result", "test/file/doesnt/exist"]);
   cmd
     .assert()
     .failure()

@@ -1,5 +1,7 @@
-import scallopy
 import os
+
+import requests
+import scallopy
 
 from .save_image import _save_image
 
@@ -13,13 +15,19 @@ def _upload_imgur(
     return ""
 
   client_id = os.environ.get("IMGUR_API_ID")
-  client_secret = os.environ.get("IMGUR_API_SECRET")
-  if client_id is None or client_secret is None:
+  if not client_id:
     return ""
 
-  from imgurpython import ImgurClient
+  with open(img_path, "rb") as image:
+    response = requests.post(
+      "https://api.imgur.com/3/image",
+      headers={"Authorization": f"Client-ID {client_id}"},
+      files={"image": image},
+      timeout=30,
+    )
 
-  client = ImgurClient(client_id, client_secret)
-  response = client.upload_from_path(img_path)
-
-  return response["link"]
+  response.raise_for_status()
+  payload = response.json()
+  if not payload.get("success"):
+    raise RuntimeError("Imgur image upload failed")
+  return payload["data"]["link"]

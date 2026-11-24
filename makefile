@@ -94,7 +94,7 @@ run-wasm-demo:
 init-venv:
 	python3 -m venv .env
 	.env/bin/pip install --upgrade pip
-	.env/bin/pip install maturin torch torchvision transformers gym scikit-learn opencv-python tqdm matplotlib
+	.env/bin/pip install maturin torch torchvision transformers gymnasium scikit-learn opencv-python tqdm matplotlib
 
 clear-venv:
 	rm -rf .env

@@ -321,24 +321,21 @@ impl StaticEquals for () {
 }
 
 macro_rules! impl_static_equals_for_tuple {
-  ($($elem:ident),*) => {
+  ($($elem:ident : $index:tt),+) => {
     impl<$($elem,)*> StaticEquals for ($($elem,)*) where $($elem: StaticEquals,)* {
       fn test_static_equals(t1: &Self, t2: &Self) -> bool {
-        paste::item! { let ($( [<$elem:lower 1>],)*) = t1; }
-        paste::item! { let ($( [<$elem:lower 2>],)*) = t2; }
-        $( paste::item! { if !StaticEquals::test_static_equals([<$elem:lower 1>], [<$elem:lower 2>]) { return false; } })*;
-        return true;
+        $( StaticEquals::test_static_equals(&t1.$index, &t2.$index) )&&+
       }
     }
   };
 }
 
-impl_static_equals_for_tuple!(A);
-impl_static_equals_for_tuple!(A, B);
-impl_static_equals_for_tuple!(A, B, C);
-impl_static_equals_for_tuple!(A, B, C, D);
-impl_static_equals_for_tuple!(A, B, C, D, E);
-impl_static_equals_for_tuple!(A, B, C, D, E, F);
-impl_static_equals_for_tuple!(A, B, C, D, E, F, G);
-impl_static_equals_for_tuple!(A, B, C, D, E, F, G, H);
-impl_static_equals_for_tuple!(A, B, C, D, E, F, G, H, I);
+impl_static_equals_for_tuple!(A: 0);
+impl_static_equals_for_tuple!(A: 0, B: 1);
+impl_static_equals_for_tuple!(A: 0, B: 1, C: 2);
+impl_static_equals_for_tuple!(A: 0, B: 1, C: 2, D: 3);
+impl_static_equals_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4);
+impl_static_equals_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5);
+impl_static_equals_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6);
+impl_static_equals_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7);
+impl_static_equals_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8);

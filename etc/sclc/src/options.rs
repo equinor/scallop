@@ -1,36 +1,35 @@
+use clap::Parser;
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 use scallop_core::compiler;
 
-#[derive(Debug, Default, StructOpt)]
-#[structopt(name = "sclc", about = "Scallop Compiler")]
+#[derive(Debug, Default, Parser)]
+#[command(name = "sclc", about = "Scallop Compiler", version)]
 pub struct Options {
-  #[structopt(parse(from_os_str))]
   pub input: PathBuf,
 
-  #[structopt(long)]
+  #[arg(long)]
   pub debug_rs: bool,
 
-  #[structopt(long, default_value = "executable")]
+  #[arg(long, default_value = "executable")]
   pub mode: String,
 
-  #[structopt(long)]
+  #[arg(long)]
   pub do_not_copy_artifact: bool,
 
-  #[structopt(long)]
+  #[arg(long)]
   pub do_not_keep_temporary_directory: bool,
 
-  #[structopt(long)]
+  #[arg(long)]
   pub dump_rs: bool,
 
-  #[structopt(long)]
+  #[arg(long)]
   pub provenance: Option<String>,
 
-  #[structopt(short = "k", long, default_value = "3")]
+  #[arg(short = 'k', long, default_value_t = 3)]
   pub top_k: usize,
 
-  #[structopt(long)]
+  #[arg(long)]
   pub wmc_with_disjunctions: bool,
 }
 

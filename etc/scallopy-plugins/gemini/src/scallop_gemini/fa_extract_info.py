@@ -1,15 +1,11 @@
 from typing import *
 import re
 import json
-from pydantic import ConfigDict
-from google import genai
 from google.genai import types
 import scallopy
-import os
 
 from . import ScallopGeminiPlugin
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 FA_NAME = "gemini_extract_info"
 ERR_HEAD = f"[@{FA_NAME}]"
 
@@ -26,7 +22,7 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
     header: str = "",
     prompts: List[str],
     examples: List[Tuple[List[str], List[List[Tuple[str, ...]]]]] = [],
-    model: str = "gemini-2.0-flash",
+    model: Optional[str] = None,
     cot: List[bool] = None,
     error_retry_limit: int = 1,
     error_retry_message: str = "Sorry, the answer is invalid. We expect you to generate a JSON list.",
@@ -132,6 +128,7 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
       # Check whether we can call gemini
       plugin.assert_can_request()
       plugin.increment_num_performed_request()
+      client = plugin.client()
 
       # The result to return
       result = {}
@@ -166,7 +163,7 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
             model=local_model,
             contents=current_messages + cot_message,
             config=types.GenerateContentConfig(
-              temperature=0,
+              temperature=plugin.temperature(),
               top_k = 1,
               top_p = 0.5,
             ),
@@ -183,7 +180,7 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
           model=local_model,
           contents=current_messages,
           config=types.GenerateContentConfig(
-              temperature=0,
+              temperature=plugin.temperature(),
               top_k = 1,
               top_p = 0.5,
           ),

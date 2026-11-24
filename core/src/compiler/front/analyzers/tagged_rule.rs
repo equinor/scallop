@@ -1,5 +1,5 @@
-use lazy_static::lazy_static;
 use std::collections::*;
+use std::sync::LazyLock;
 
 use crate::common::expr;
 use crate::common::foreign_predicate::*;
@@ -12,12 +12,10 @@ use crate::common::value_type::*;
 use crate::compiler::front::*;
 use crate::runtime::env::*;
 
-lazy_static! {
-  pub static ref TAG_TYPE: Vec<ValueType> = {
-    use ValueType::*;
-    vec![F64, F32, Bool]
-  };
-}
+pub static TAG_TYPE: LazyLock<Vec<ValueType>> = LazyLock::new(|| {
+  use ValueType::*;
+  vec![F64, F32, Bool]
+});
 
 #[derive(Clone, Debug)]
 pub struct TaggedRuleAnalysis {

@@ -1,11 +1,8 @@
-from google import genai
 from google.genai import types
 import scallopy
-import os
 
 from . import ScallopGeminiPlugin
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 def get_gemini(plugin: ScallopGeminiPlugin):
   # A storage for @gemini foreign predicate
   STORAGE = {}
@@ -22,11 +19,11 @@ def get_gemini(plugin: ScallopGeminiPlugin):
       # Memoize the response
       plugin.increment_num_performed_request()
 
-      response = client.models.generate_content(
+      response = plugin.client().models.generate_content(
         model=plugin.model(),
         contents=s,
         config=types.GenerateContentConfig(
-          temperature=0,
+          temperature=plugin.temperature(),
           top_k = 1,
           top_p = 0.5,
         ),

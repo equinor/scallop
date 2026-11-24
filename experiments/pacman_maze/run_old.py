@@ -188,7 +188,7 @@ class Trainer:
     success, failure, optimize_count, sum_loss = 0, 0, 0, 0.0
     iterator = tqdm(range(args.num_train_episodes))
     for episode_i in iterator:
-      _ = self.arena.reset()
+      self.arena.reset(seed=args.seed if epoch == 1 and episode_i == 0 else None)
       curr_raw_image = self.arena.render()
       curr_state_image = self.arena.render_torch_tensor(image=curr_raw_image)
       for _ in range(args.num_steps):
@@ -201,7 +201,8 @@ class Trainer:
         else: action = self.dqn.predict_action(curr_state_image)
 
         # Step the environment
-        _, done, reward, _ = self.arena.step(action[0])
+        _, reward, terminated, truncated, _ = self.arena.step(action[0].item())
+        done = terminated or truncated
 
         # Get the next state
         if done:
@@ -252,7 +253,8 @@ class Trainer:
 
         # Pick an action
         action = self.dqn.predict_action(state_image)
-        _, done, reward, _ = self.arena.step(action[0])
+        _, reward, terminated, truncated, _ = self.arena.step(action[0].item())
+        done = terminated or truncated
         raw_image = self.arena.render()
         state_image = self.arena.render_torch_tensor(image=raw_image)
 

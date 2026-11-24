@@ -8,10 +8,8 @@ use scallop_core::compiler;
 use sclc_core::exec;
 
 pub fn check_compile_exec_from_program_string(program_name: &str, program_string: &str) {
-  let tmp_dir = tempfile::tempdir()
-    .expect("Unable to create temporary directory")
-    .keep();
-  let scl_file_dir = tmp_dir.join(format!("{}.scl", program_name));
+  let tmp_dir = tempfile::tempdir().expect("Unable to create temporary directory");
+  let scl_file_dir = tmp_dir.path().join(format!("{}.scl", program_name));
 
   // Write into file_dir
   let mut file = File::create(&scl_file_dir).expect("Unable to create file in temporary directory");
@@ -27,7 +25,7 @@ pub fn check_compile_exec_from_program_string(program_name: &str, program_string
       for err in errs {
         eprintln!("{}", err);
       }
-      return;
+      panic!("Unable to compile generated executable test program");
     }
   };
   let sclc_opt = sclc_core::options::Options {

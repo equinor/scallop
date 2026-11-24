@@ -1,5 +1,5 @@
+use clap::Parser;
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 use scallop_core::common::constants::*;
 use scallop_core::common::predicate_set::*;
@@ -11,81 +11,80 @@ use scallop_core::runtime::monitor;
 use scallop_core::runtime::provenance;
 use scallop_core::utils::*;
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "scli", about = "Scallop Interpreter")]
+#[derive(Debug, Parser)]
+#[command(name = "scli", about = "Scallop Interpreter", version)]
 struct Options {
   /// The input Scallop file (.scl)
-  #[structopt(parse(from_os_str))]
   input: PathBuf,
 
   /// The provenance to use for evaluating the Scallop program
-  #[structopt(short, long, default_value = "unit")]
+  #[arg(short, long, default_value = "unit")]
   provenance: String,
 
   /// The `k` value for provenances such as top-k proofs
-  #[structopt(short = "k", long, default_value = "3")]
+  #[arg(short = 'k', long, default_value_t = 3)]
   top_k: usize,
 
   /// Whether we perform weighted model counting (WMC) with disjunctions
-  #[structopt(long)]
+  #[arg(long)]
   wmc_with_disjunctions: bool,
 
   /// The name of the relation that we want to query for
-  #[structopt(short = "q", long)]
+  #[arg(short = 'q', long)]
   query: Option<String>,
 
   /// The iteration limit of the execution
-  #[structopt(long)]
+  #[arg(long)]
   iter_limit: Option<usize>,
 
   /// Whether we want to terminate when a goal relation has been derived
-  #[structopt(long)]
+  #[arg(long)]
   stop_at_goal: bool,
 
   /// The default scheduler for the execution
-  #[structopt(long)]
+  #[arg(long)]
   scheduler: Option<String>,
 
-  #[structopt(long)]
+  #[arg(long)]
   beam_size: Option<usize>,
 
-  #[structopt(long)]
+  #[arg(long)]
   seed: Option<u64>,
 
   /// General debug option
-  #[structopt(short, long)]
+  #[arg(short, long)]
   debug: bool,
 
   /// Debug front ir
-  #[structopt(long)]
+  #[arg(long)]
   debug_front: bool,
 
   /// Debug back ir
-  #[structopt(long)]
+  #[arg(long)]
   debug_back: bool,
 
   /// Debug ram program
-  #[structopt(long)]
+  #[arg(long)]
   debug_ram: bool,
 
   /// Monitor tagging
-  #[structopt(long)]
+  #[arg(long)]
   debug_tag: bool,
 
   /// Monitor runtime
-  #[structopt(long)]
+  #[arg(long)]
   debug_runtime: bool,
 
   /// Output all relations (including hidden ones)
-  #[structopt(long)]
+  #[arg(long)]
   output_all: bool,
 
   /// Random seed
-  #[structopt(long)]
+  #[arg(long)]
   no_early_discard: bool,
 
   /// Do not remove unused relations
-  #[structopt(long)]
+  #[arg(long)]
   do_not_remove_unused_relations: bool,
 }
 
@@ -122,7 +121,7 @@ impl MonitorOptions {
 
 fn main() -> Result<(), String> {
   // Command line arguments
-  let opt = Options::from_args();
+  let opt = Options::parse();
 
   // Integration options
   let default_scheduler = env::Scheduler::from_args(opt.scheduler.clone(), opt.beam_size.clone())?;
