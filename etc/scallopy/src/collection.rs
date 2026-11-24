@@ -223,6 +223,10 @@ pub struct CollectionIterator {
 
 #[pymethods]
 impl CollectionIterator {
+  fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+    slf
+  }
+
   fn __next__(mut slf: PyRefMut<Self>) -> Option<Py<PyAny>> {
     while slf.current_index < slf.collection.len() {
       let i = slf.current_index;

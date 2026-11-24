@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pyo3::types::*;
 use pyo3::*;
 
@@ -9,7 +11,7 @@ use crate::foreign_predicate::PythonForeignPredicate;
 
 #[derive(Clone)]
 pub struct PythonForeignAttribute {
-  py_attr: Py<PyAny>,
+  py_attr: Arc<Py<PyAny>>,
   name: String,
 }
 
@@ -23,7 +25,10 @@ impl PythonForeignAttribute {
         .expect("Foreign predicate name cannot be extracted into String")
     });
 
-    Self { py_attr, name }
+    Self {
+      py_attr: py_attr.into(),
+      name,
+    }
   }
 
   pub fn process_action(&self, py: Python, result: Py<PyAny>) -> AttributeAction {

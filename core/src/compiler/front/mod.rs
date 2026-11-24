@@ -13,10 +13,11 @@ mod transform;
 pub mod transformations;
 mod utils;
 
-// Include grammar (generated file)
-// It is okay to have dead code in generated file
-#[allow(dead_code)]
-mod grammar;
+lalrpop_util::lalrpop_mod!(
+  #[allow(dead_code)]
+  grammar,
+  "/compiler/front/grammar.rs"
+);
 
 pub use analysis::*;
 pub use annotation::*;

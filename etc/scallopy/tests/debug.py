@@ -15,13 +15,13 @@ class TestDebugProvenance(unittest.TestCase):
     result = ctx.relation("sum_2")
     for ((prob, proofs), (summation,)) in result:
       if summation == 2:
-        self.assertAlmostEqual(float(prob), 0.09)
+        self.assertAlmostEqual(prob.item(), 0.09)
         self.assertEqual(proofs, [[(True, 1), (True, 3)]])
       elif summation == 3:
-        self.assertAlmostEqual(float(prob), 0.82, 1)
+        self.assertAlmostEqual(prob.item(), 0.82, 1)
         self.assertEqual(proofs, [[(True, 2), (True, 3)], [(True, 1), (True, 4)]])
       elif summation == 4:
-        self.assertAlmostEqual(float(prob), 0.09)
+        self.assertAlmostEqual(prob.item(), 0.09)
         self.assertEqual(proofs, [[(True, 2), (True, 4)]])
 
   def test_debug_forward_1(self):
@@ -45,13 +45,13 @@ class TestDebugProvenance(unittest.TestCase):
 
     for (i, (result,)) in enumerate(mapping):
       if result == 2:
-        self.assertAlmostEqual(float(result_tensor[0][i]), 0.09)
+        self.assertAlmostEqual(result_tensor[0][i].item(), 0.09)
         self.assertEqual(proofs[0][i], [[(True, 1), (True, 3)]])
       if result == 3:
-        self.assertAlmostEqual(float(result_tensor[0][i]), 0.8119, 3)
+        self.assertAlmostEqual(result_tensor[0][i].item(), 0.8119, 3)
         self.assertEqual(proofs[0][i], [[(True, 2), (True, 3)], [(True, 1), (True, 4)]])
       if result == 4:
-        self.assertAlmostEqual(float(result_tensor[0][i]), 0.09)
+        self.assertAlmostEqual(result_tensor[0][i].item(), 0.09)
         self.assertEqual(proofs[0][i], [[(True, 2), (True, 4)]])
 
   def test_debug_forward_2(self):
@@ -74,11 +74,11 @@ class TestDebugProvenance(unittest.TestCase):
 
     (result_tensor, proofs) = fn(digit_a=digit_a, digit_b=digit_b)
 
-    self.assertAlmostEqual(float(result_tensor[0][0]), 0.09)
+    self.assertAlmostEqual(result_tensor[0][0].item(), 0.09)
     self.assertEqual(proofs[0][0], [[(True, 1), (True, 3)]])
-    self.assertAlmostEqual(float(result_tensor[0][1]), 0.8119, 3)
+    self.assertAlmostEqual(result_tensor[0][1].item(), 0.8119, 3)
     self.assertEqual(proofs[0][1], [[(True, 2), (True, 3)], [(True, 1), (True, 4)]])
-    self.assertAlmostEqual(float(result_tensor[0][2]), 0.09)
+    self.assertAlmostEqual(result_tensor[0][2].item(), 0.09)
     self.assertEqual(proofs[0][2], [[(True, 2), (True, 4)]])
 
   @unittest.expectedFailure

@@ -38,3 +38,15 @@ class TestSparseDigitForward(unittest.TestCase):
     # Ensure that there is some gradient
     assert any(p != 0.0 for distr in digit_1_base.grad for p in distr)
     assert any(p != 0.0 for distr in digit_2_base.grad for p in distr)
+
+  def test_backward_with_empty_sparse_jacobian(self):
+    forward = self.ctx.forward_function("sum_2", [19], sparse_jacobian=True)
+    digit_1 = torch.full((1, 10), 0.1, requires_grad=True)
+    digit_2 = torch.full((1, 10), 0.1, requires_grad=True)
+
+    result = forward(digit_1=digit_1, digit_2=digit_2)
+    torch.testing.assert_close(result, torch.zeros_like(result))
+
+    result.sum().backward()
+    torch.testing.assert_close(digit_1.grad, torch.zeros_like(digit_1))
+    torch.testing.assert_close(digit_2.grad, torch.zeros_like(digit_2))

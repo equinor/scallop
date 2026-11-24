@@ -3,6 +3,17 @@ import unittest
 import scallopy
 
 class BasicTests(unittest.TestCase):
+  def test_native_collection_iterator_can_be_reiterated(self):
+    ctx = scallopy.ScallopContext()
+    ctx.add_relation("numbers", int)
+    ctx.add_facts("numbers", [(1,), (2,)])
+    ctx.run()
+
+    iterator = iter(ctx._internal.relation("numbers"))
+    self.assertEqual(next(iterator), (1,))
+    self.assertIs(iter(iterator), iterator)
+    self.assertEqual(list(iterator), [(2,)])
+
   def test_edge_path(self):
     ctx = scallopy.ScallopContext()
     ctx.add_relation("edge", (int, int))

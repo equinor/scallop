@@ -1,9 +1,6 @@
-extern crate lalrpop;
-
 fn main() {
   lalrpop::Configuration::new()
-    .set_in_dir("src")
-    .set_out_dir("src")
+    .use_cargo_dir_conventions()
     .process()
     .unwrap();
 }

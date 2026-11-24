@@ -15,18 +15,19 @@ impl<Prov: Provenance> Monitor<Prov> for DebugTagsMonitor {
     println!("[Tagging Relation] {}", relation)
   }
 
-  fn observe_tagging(&self, tup: &Tuple, input_tag: &Option<Prov::InputTag>, tag: &Prov::Tag) {
-    println!("[Tagging] Tuple: {}, Input Tag: {:?} -> Tag: {:?}", tup, input_tag, tag)
+  fn observe_tagging(&self, _tup: &Tuple, input_tag: &Option<Prov::InputTag>, _tag: &Prov::Tag) {
+    if input_tag.is_some() {
+      println!("[Tagging] Applied an explicit input tag")
+    } else {
+      println!("[Tagging] Applied a default tag")
+    }
   }
 
   fn observe_recovering_relation(&self, relation: &str) {
     println!("[Recover Relation] {}", relation)
   }
 
-  fn observe_recover(&self, tup: &Tuple, tag: &Prov::Tag, output_tag: &Prov::OutputTag) {
-    println!(
-      "[Recover] Tuple: {}, Tag: {:?} -> Output Tag: {:?}",
-      tup, tag, output_tag
-    )
+  fn observe_recover(&self, _tup: &Tuple, _tag: &Prov::Tag, _output_tag: &Prov::OutputTag) {
+    println!("[Recover] Recovered an output tag")
   }
 }

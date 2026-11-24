@@ -2,53 +2,66 @@ name: Scallopy
 
 on:
   push:
-    branches: [ master ]
-    paths:
-      - "**.py"
-      - "**.rs"
+    branches: [main]
   pull_request:
-    branches: [ master ]
-    paths:
-      - "**.py"
-      - "**.rs"
+    branches: [main]
 
-env:
-  SCALLOPDIR: ${{ github.workspace }}
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
-    name: Build and Test
+    name: Scallopy tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 5
+      fail-fast: false
       matrix:
-        python-version:
-          - "3.10"
-
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
-    - uses: actions/checkout@v3
-
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Add conda to system path
-      run: echo $CONDA/bin >> $GITHUB_PATH
-
-    - name: Install PyTorch
-      run: conda install pytorch::pytorch torchvision torchaudio -c pytorch
-
-    - name: Install other dependencies
-      run: conda install maturin tqdm
-
-    - name: Setup rustup toolchain
-      run: |
-        rustup update nightly
-        rustup default nightly
-
-    - name: Install scallopy
-      run: make install-scallopy
-
-    - name: Test
-      run: python3 etc/scallopy/tests/test.py
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/index
+            ~/.cargo/git/db
+            target
+          key: cargo-wheels-${{ runner.os }}-${{ runner.arch }}-python-${{ matrix.python-version }}-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '.github/workflows/scallopy.yml') }}
+          restore-keys: cargo-wheels-${{ runner.os }}-${{ runner.arch }}-python-${{ matrix.python-version }}-${{ hashFiles('rust-toolchain.toml') }}-
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/uv
+          key: python-tests-${{ runner.os }}-${{ runner.arch }}-${{ matrix.python-version }}-${{ hashFiles('.github/workflows/scallopy.yml') }}
+          restore-keys: python-tests-${{ runner.os }}-${{ runner.arch }}-${{ matrix.python-version }}-
+      - name: Install uv
+        run: python -m pip install --disable-pip-version-check uv==0.13.9
+      - name: Build Scallopy wheel
+        run: |
+          uvx maturin@1.16.0 build --release --locked --compatibility linux \
+            --manifest-path etc/scallopy/Cargo.toml --out dist/wheels \
+            --interpreter "$(command -v python)"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: scallopy-linux-python-${{ matrix.python-version }}
+          path: dist/wheels/*.whl
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          overwrite: true
+      - name: Install test dependencies and Scallopy wheel
+        run: |
+          uv venv --python "$(command -v python)"
+          uv pip install "numpy>=2.4.6,<3"
+          uv pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0
+          uv pip install --no-index dist/wheels/*.whl
+      - name: Test
+        run: uv run --no-project python etc/scallopy/tests/test.py

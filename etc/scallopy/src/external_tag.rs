@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pyo3::{prelude::*, IntoPyObjectExt};
 
 use scallop_core::common::foreign_tensor::*;
@@ -6,7 +8,7 @@ use super::tensor::*;
 
 #[derive(Clone)]
 pub struct ExtTag {
-  pub tag: Py<PyAny>,
+  tag: Arc<Py<PyAny>>,
 }
 
 impl FromTensor for ExtTag {
@@ -17,21 +19,19 @@ impl FromTensor for ExtTag {
 
 impl From<Py<PyAny>> for ExtTag {
   fn from(tag: Py<PyAny>) -> Self {
-    Self { tag }
+    Self { tag: tag.into() }
   }
 }
 
 impl From<&Bound<'_, PyAny>> for ExtTag {
   fn from(tag: &Bound<'_, PyAny>) -> Self {
-    Self {
-      tag: tag.clone().unbind(),
-    }
+    tag.clone().unbind().into()
   }
 }
 
 impl Into<Py<PyAny>> for ExtTag {
   fn into(self) -> Py<PyAny> {
-    self.tag
+    Arc::try_unwrap(self.tag).unwrap_or_else(|tag| Python::attach(|py| tag.clone_ref(py)))
   }
 }
 
@@ -43,13 +43,13 @@ pub trait ExtTagVec {
 
 impl ExtTagVec for Vec<ExtTag> {
   fn into_vec(self) -> Vec<Py<PyAny>> {
-    self.into_iter().map(|v| v.tag).collect()
+    self.into_iter().map(Into::into).collect()
   }
 
   fn into_none_prepended_vec(self) -> Vec<Py<PyAny>> {
     let none: Option<Py<PyAny>> = None;
     std::iter::once(Python::attach(|py| none.into_py_any(py).unwrap()))
-      .chain(self.into_iter().map(|v| v.tag))
+      .chain(self.into_iter().map(Into::into))
       .collect()
   }
 }
@@ -60,12 +60,12 @@ pub trait ExtTagOption {
 
 impl ExtTagOption for Option<ExtTag> {
   fn into_option(self) -> Option<Py<PyAny>> {
-    self.map(|v| v.tag)
+    self.map(Into::into)
   }
 }
 
 impl ExtTagOption for Option<&ExtTag> {
   fn into_option(self) -> Option<Py<PyAny>> {
-    self.map(|v| v.tag.clone())
+    self.map(|v| Python::attach(|py| v.tag.clone_ref(py)))
   }
 }

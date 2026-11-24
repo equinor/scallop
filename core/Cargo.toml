@@ -2,7 +2,7 @@
 name = "scallop-core"
 version = "0.2.5"
 authors = ["Ziyang Li <liby99@icloud.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["rlib"]

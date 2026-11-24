@@ -210,7 +210,9 @@ impl Context {
       "custom" => {
         if let Some(py_ctx) = custom_provenance {
           Ok(Self {
-            ctx: ContextEnum::Custom(IntegrateContext::new_incremental(custom_tag::CustomProvenance(py_ctx))),
+            ctx: ContextEnum::Custom(IntegrateContext::new_incremental(custom_tag::CustomProvenance(
+              py_ctx.into(),
+            ))),
           })
         } else {
           Err(BindingError::InvalidCustomProvenance)
@@ -883,28 +885,33 @@ where
   <C as Provenance>::Tag: std::marker::Sync + std::marker::Send,
 {
   let internal = integrate_context.internal_context();
-  (0..batch_size)
-    .into_par_iter()
-    .map(|i| {
-      let output_relations = &batch_output_relations[i];
-      let mut temp_ctx = internal.clone();
-      for (relation, batch) in &inputs {
-        temp_ctx.add_facts(relation, batch[i].clone(), false)?;
-      }
-      temp_ctx.run()?;
-      output_relations
-        .iter()
-        .map(|r| {
-          let computed = temp_ctx
-            .computed_relation(r)
-            .ok_or(BindingError::RelationNotComputed(r.to_string()))?;
-          let collection_enum = C::to_collection_enum(computed, temp_ctx.provenance_context());
-          let collection = collection_enum.to_collection(&temp_ctx.runtime_env);
-          Ok(collection)
+  // Release the caller's GIL while workers may need to invoke Python callbacks.
+  Python::attach(|py| {
+    py.detach(|| {
+      (0..batch_size)
+        .into_par_iter()
+        .map(|i| {
+          let output_relations = &batch_output_relations[i];
+          let mut temp_ctx = internal.clone();
+          for (relation, batch) in &inputs {
+            temp_ctx.add_facts(relation, batch[i].clone(), false)?;
+          }
+          temp_ctx.run()?;
+          output_relations
+            .iter()
+            .map(|r| {
+              let computed = temp_ctx
+                .computed_relation(r)
+                .ok_or(BindingError::RelationNotComputed(r.to_string()))?;
+              let collection_enum = C::to_collection_enum(computed, temp_ctx.provenance_context());
+              let collection = collection_enum.to_collection(&temp_ctx.runtime_env);
+              Ok(collection)
+            })
+            .collect::<Result<Vec<Collection>, _>>()
         })
-        .collect::<Result<Vec<Collection>, _>>()
+        .collect()
     })
-    .collect()
+  })
 }
 
 fn is_all_equal<T: Iterator<Item = usize> + Clone>(i: T) -> bool {

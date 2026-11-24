@@ -5,6 +5,25 @@ import scallopy
 
 class TensorTests(unittest.TestCase):
   @unittest.skipIf(not scallopy.torch_tensor_enabled(), "not supported in this scallopy version")
+  def test_tensor_foreign_function_in_parallel_batch(self):
+    @scallopy.foreign_function
+    def double_tensor(value: scallopy.Tensor) -> scallopy.Tensor:
+      return 2 * value
+
+    ctx = scallopy.Context()
+    ctx.register_foreign_function(double_tensor)
+    ctx.add_relation("batch_input", scallopy.Tensor)
+    ctx.add_rule("result($double_tensor(x)) = batch_input(x)")
+    ctx._internal.compile()
+
+    values = [torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0])]
+    inputs = {"batch_input": [[(value,)] for value in values]}
+    results = ctx._internal.run_batch([["result"], ["result"]], inputs, True)
+    for (collection,), value in zip(results, values, strict=True):
+      [(result,)] = list(collection)
+      torch.testing.assert_close(result, 2 * value)
+
+  @unittest.skipIf(not scallopy.torch_tensor_enabled(), "not supported in this scallopy version")
   def test_tensor_1(self):
     x, y = torch.randn(5), torch.randn(5)
     s = x.dot(y)

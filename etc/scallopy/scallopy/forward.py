@@ -828,12 +828,13 @@ class InternalScallopForwardFunction(torch_importer.Module):
               values.append(weight)
 
       # Convert indices and values into tensors
-      indices = torch_importer.torch.tensor(indices).t() # Transpose to get the correct shape for sparse_coo_tensor
+      indices = torch_importer.torch.tensor(indices, dtype=torch_importer.torch.long).reshape(-1, 3).t()
       values = torch_importer.torch.tensor(values)
 
       # Create the sparse tensor
       mat_w = self._torch_tensor_apply( # making sure that the tensor is on the intended device
-        torch_importer.torch.sparse_coo_tensor(indices, values, (batch_size, num_outputs, num_inputs)))
+        torch_importer.torch.sparse_coo_tensor(
+          indices, values, (batch_size, num_outputs, num_inputs), check_invariants=True))
     else:
       # mat_w: Weight matrix
       mat_w = self._torch_tensor_apply(torch_importer.torch.zeros(batch_size, num_outputs, num_inputs))
