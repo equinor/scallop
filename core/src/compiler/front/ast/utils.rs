@@ -275,42 +275,30 @@ impl<T, V> NodeVisitor<V> for Box<T> {
 }
 
 macro_rules! impl_node_visitor_tuple {
-  ( $($id:ident,)* ) => {
+  ( $($id:ident : $index:tt),+ ) => {
     impl<Node, $($id,)*> NodeVisitor<Node> for ($(&mut $id,)*) {
       default fn visit(&mut self, node: &Node) {
-        paste::item! { let ($( [<$id:lower>],)*) = self; }
-        $( paste::item! { <$id as NodeVisitor<Node>>::visit([<$id:lower>], node); } )*
+        $( <$id as NodeVisitor<Node>>::visit(self.$index, node); )*
       }
       default fn visit_mut(&mut self, node: &mut Node) {
-        paste::item! { let ($( [<$id:lower>],)*) = self; }
-        $( paste::item! { <$id as NodeVisitor<Node>>::visit_mut([<$id:lower>], node); } )*
+        $( <$id as NodeVisitor<Node>>::visit_mut(self.$index, node); )*
       }
     }
   };
 }
 
-impl_node_visitor_tuple!(A,);
-impl_node_visitor_tuple!(A, B,);
-impl_node_visitor_tuple!(A, B, C,);
-impl_node_visitor_tuple!(A, B, C, D,);
-impl_node_visitor_tuple!(A, B, C, D, E,);
-impl_node_visitor_tuple!(A, B, C, D, E, F,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U,);
-impl_node_visitor_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V,);
+macro_rules! impl_node_visitor_tuples {
+  ([$($done:ident : $done_index:tt,)*] $head:ident : $index:tt $(, $tail:ident : $tail_index:tt)*) => {
+    impl_node_visitor_tuple!($($done : $done_index,)* $head : $index);
+    impl_node_visitor_tuples!([$($done : $done_index,)* $head : $index,] $($tail : $tail_index),*);
+  };
+  ([$($done:tt)*]) => {};
+}
+
+impl_node_visitor_tuples!(
+  [] A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9, K: 10,
+  L: 11, M: 12, N: 13, O: 14, P: 15, Q: 16, R: 17, S: 18, T: 19, U: 20, V: 21
+);
 
 #[allow(unused)]
 pub trait AstWalker {

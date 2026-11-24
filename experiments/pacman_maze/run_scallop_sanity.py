@@ -46,12 +46,13 @@ def test_scallop_model():
   success, failure = 0, 0
   iterator = tqdm(range(args.num_episodes))
   for episode_i in iterator:
-    _ = arena.reset()
+    arena.reset(seed=args.seed if episode_i == 0 else None)
     if args.show_run:
       show_image(arena.render())
     for _ in range(args.num_steps):
       action = model(arena.hidden_state())
-      _, done, reward, _ = arena.step(action)
+      _, reward, terminated, truncated, _ = arena.step(action)
+      done = terminated or truncated
       if args.show_run:
         show_image(arena.render())
       if done:

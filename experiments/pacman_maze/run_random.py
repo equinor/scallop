@@ -18,12 +18,13 @@ def test_random_model():
   success, failure = 0, 0
   iterator = tqdm(range(args.num_episodes))
   for episode_i in iterator:
-    state = arena.reset()
+    state, _ = arena.reset()
     for _ in range(args.num_steps):
       if args.show_run:
         show_image(arena.render())
       action = model(state)
-      _, done, reward, _ = arena.step(action)
+      state, reward, terminated, truncated, _ = arena.step(action)
+      done = terminated or truncated
       if done:
         if reward > 0: success += 1
         else: failure += 1

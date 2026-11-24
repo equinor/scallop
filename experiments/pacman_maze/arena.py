@@ -1,14 +1,13 @@
 from typing import *
-import gym
+import gymnasium as gym
 import numpy
 import cv2
-import random
 import torch
 import os
 
 RES_DIR = os.path.abspath(os.path.join(os.path.abspath(__file__), "../res"))
 
-class AvoidingArena(gym.Env):
+class AvoidingArena(gym.Env[int, int]):
   def __init__(
     self,
     grid_dim: Tuple[int, int] =(5, 5),
@@ -37,6 +36,8 @@ class AvoidingArena(gym.Env):
     self.on_success_reward = on_success_reward
     self.on_failure_reward = on_failure_reward
     self.remain_unchanged_reward = remain_unchanged_reward
+    self.action_space = gym.spaces.Discrete(4)
+    self.observation_space = gym.spaces.Discrete(1)  # Keep the arena state hidden.
 
     # Initialize environment states
     self.curr_pos = None
@@ -52,7 +53,9 @@ class AvoidingArena(gym.Env):
     self.goal_image = cv2.imread(os.path.join(RES_DIR, "flag.png"), cv2.IMREAD_UNCHANGED)
     self.agent_image = cv2.imread(os.path.join(RES_DIR, "agent.png"), cv2.IMREAD_UNCHANGED)
 
-  def reset(self):
+  def reset(self, *, seed=None, options=None):
+    super().reset(seed=seed)
+
     # Generate start position
     self.start_pos = self.sample_point()
     self.curr_pos = self.start_pos
@@ -64,7 +67,7 @@ class AvoidingArena(gym.Env):
         goal_y = self.start_pos[1] + off_y
         if 0 <= goal_x < self.grid_x and 0 <= goal_y < self.grid_y:
           possible_positions.append((goal_x, goal_y))
-      self.goal_pos = possible_positions[random.randrange(0, len(possible_positions))]
+      self.goal_pos = possible_positions[int(self.np_random.integers(len(possible_positions)))]
     else:
       # Generate end position
       self.goal_pos = self.sample_point()
@@ -80,10 +83,10 @@ class AvoidingArena(gym.Env):
       try_pos = self.sample_point()
       if self.ok_enemy_position(try_pos):
         self.enemies.append(try_pos)
-        self.enemy_types.append(random.randint(0, 1))
+        self.enemy_types.append(int(self.np_random.integers(2)))
 
     # Return
-    return ()
+    return 0, {}
 
   def step(self, action):
     prev_pos = self.curr_pos
@@ -105,7 +108,7 @@ class AvoidingArena(gym.Env):
     elif self.curr_pos == prev_pos: done, reward = False, self.remain_unchanged_reward # Stay in same position
 
     # Return
-    return ((), done, reward, ())
+    return 0, reward, done, False, {}
 
   def hidden_state(self):
     """
@@ -190,7 +193,7 @@ class AvoidingArena(gym.Env):
     else: raise Exception(f"Unknown action `{action}`")
 
   def sample_point(self):
-    return (random.randint(0, self.grid_x - 1), random.randint(0, self.grid_y - 1))
+    return (int(self.np_random.integers(self.grid_x)), int(self.np_random.integers(self.grid_y)))
 
   def ok_enemy_position(self, pos):
     return self.manhatten_distance(pos, self.start_pos) > 1 and self.manhatten_distance(pos, self.goal_pos) > 1

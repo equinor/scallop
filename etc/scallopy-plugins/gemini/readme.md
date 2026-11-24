@@ -32,6 +32,9 @@ The Scallop Gemini plugin provides the following constructs:
 
 ### Foreign Attribute `@gemini_encoder`
 
+The encoder uses `gemini-embedding-001` by default and returns a 768-element
+embedding tensor. Embeddings from different models are not interchangeable.
+
 ### Foreign Predicate `gemini`
 
 ### Foreign Function `$gemini`

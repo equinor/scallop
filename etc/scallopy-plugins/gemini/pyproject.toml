@@ -2,7 +2,7 @@
 name = "scallop-gemini"
 version = "0.0.2"
 dependencies = [
-  "genai",
+  "google-genai",
   "torch",
 ]
 

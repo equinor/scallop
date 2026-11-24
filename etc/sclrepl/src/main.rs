@@ -1,27 +1,27 @@
-use linefeed::{Interface, ReadResult};
+use clap::Parser;
+use rustyline::{error::ReadlineError, DefaultEditor};
 use scallop_core::utils::RcFamily;
-use structopt::StructOpt;
 
 use scallop_core::common;
 use scallop_core::compiler;
 use scallop_core::runtime;
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "sclrepl", about = "Scallop Interactive REPL")]
+#[derive(Debug, Parser)]
+#[command(name = "sclrepl", about = "Scallop Interactive REPL", version)]
 struct Options {
-  #[structopt(short, long, default_value = "unit")]
+  #[arg(short, long, default_value = "unit")]
   provenance: String,
 
-  #[structopt(short, long)]
+  #[arg(short, long)]
   debug: bool,
 
-  #[structopt(long)]
+  #[arg(long)]
   debug_front: bool,
 
-  #[structopt(long)]
+  #[arg(long)]
   debug_back: bool,
 
-  #[structopt(long)]
+  #[arg(long)]
   debug_ram: bool,
 }
 
@@ -38,9 +38,9 @@ impl From<&Options> for compiler::CompileOptions {
   }
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> rustyline::Result<()> {
   // Command line arguments
-  let cmd_args = Options::from_args();
+  let cmd_args = Options::parse();
 
   // Initialize provenance context and run
   match cmd_args.provenance.as_str() {
@@ -75,13 +75,13 @@ fn main() -> std::io::Result<()> {
   }
 }
 
-fn run<C>(cmd_args: Options, ctx: C) -> std::io::Result<()>
+fn run<C>(cmd_args: Options, ctx: C) -> rustyline::Result<()>
 where
   C: runtime::provenance::Provenance,
 {
   // Interactive REPL
-  let reader = Interface::new("scl")?;
-  reader.set_prompt("scl> ")?;
+  let config = rustyline::Config::builder().history_ignore_dups(false)?.build();
+  let mut reader = DefaultEditor::with_config(config)?;
 
   // Compile context
   let options = compiler::CompileOptions::from(&cmd_args);
@@ -98,8 +98,13 @@ where
 
   // Main Loop
   let mut repl_id = 0;
-  while let ReadResult::Input(input) = reader.read_line()? {
-    reader.add_history(input.clone());
+  loop {
+    let input = match reader.readline("scl> ") {
+      Ok(input) => input,
+      Err(ReadlineError::Eof | ReadlineError::Interrupted) => break,
+      Err(err) => return Err(err),
+    };
+    reader.add_history_entry(input.as_str())?;
 
     // Construct a source
     let source = compiler::front::ReplSource::new(repl_id, input);

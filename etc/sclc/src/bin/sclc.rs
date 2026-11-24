@@ -1,11 +1,11 @@
-use structopt::StructOpt;
+use clap::Parser;
 
 use scallop_core::compiler;
 use sclc_core::*;
 
 fn main() {
   // Command line arguments
-  let opt = options::Options::from_args();
+  let opt = options::Options::parse();
 
   // Compile
   let compile_opt = compiler::CompileOptions::from(&opt);

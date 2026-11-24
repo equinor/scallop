@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 scallop-core = { path = "../../core" }
-structopt = "0.3"
+clap = { version = "4.6", features = ["derive"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.8"

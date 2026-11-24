@@ -1,18 +1,10 @@
-from typing import *
-
-import google.generativeai as genai
+from google.genai import types
 import torch
-import os
 
 import scallopy
 from scallop_gpu import get_device
 
 from . import ScallopGeminiPlugin
-
-# Configure the Gemini client
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-embedding_model = genai.get_model("models/embedding-001")  # Load once
-
 
 FA_NAME = "gemini_encoder"
 ERR_HEAD = f"[@{FA_NAME}]"
@@ -20,7 +12,7 @@ ERR_HEAD = f"[@{FA_NAME}]"
 def get_gemini_encoder(plugin: ScallopGeminiPlugin):
 
   @scallopy.foreign_attribute
-  def gemini_encoder(item, *, debug: bool = False, model: str = "models/embedding-001"):
+  def gemini_encoder(item, *, debug: bool = False, model: str = "gemini-embedding-001"):
     # Check if the annotation is on function type decl
     assert item.is_function_decl(), f"{ERR_HEAD} has to be an attribute of a function type declaration"
 
@@ -43,12 +35,15 @@ def get_gemini_encoder(plugin: ScallopGeminiPlugin):
           print(f"{ERR_HEAD} Querying `{model}` for text `{text}`")
 
         # Request the embedding
-        response = embedding_model.embed_content(
-          content=text,
-          task_type="retrieval_document",  # or "retrieval_query"
+        response = plugin.client().models.embed_content(
+          model=model,
+          contents=text,
+          config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT", output_dimensionality=768),
         )
 
-        embedding = response["embedding"]
+        if not response.embeddings or not response.embeddings[0].values:
+          raise RuntimeError(f"{ERR_HEAD} Gemini returned no embedding")
+        embedding = response.embeddings[0].values
 
         if debug:
           print(f"{ERR_HEAD} Obtaining embedding: {embedding}")

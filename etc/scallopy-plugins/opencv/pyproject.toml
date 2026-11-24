@@ -3,7 +3,6 @@ name = "scallop-opencv"
 version = "0.0.2"
 dependencies = [
   "opencv-python",
-  "imgurpython",
   "torch",
   "requests"
 ]

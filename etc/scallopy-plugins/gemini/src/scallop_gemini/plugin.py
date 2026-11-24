@@ -3,14 +3,14 @@ from typing import Dict, List
 import os
 import sys
 
+from google import genai
 import scallopy
 
 class ScallopGeminiPlugin(scallopy.Plugin):
   def __init__(self):
     super().__init__()
 
-    # Whether the gemini plugin has been configured
-    self._configured = False
+    self._client = None
 
     # Number of allowed requests
     self._num_allowed_requests = 100
@@ -22,7 +22,7 @@ class ScallopGeminiPlugin(scallopy.Plugin):
     self._temperature = 0.0
 
     # The Gemini model to use
-    self._default_model = "gemini-2.0.flash"
+    self._default_model = "gemini-3.6-flash"
     self._model = self._default_model
 
     # Whether the warning has already being printed
@@ -35,19 +35,13 @@ class ScallopGeminiPlugin(scallopy.Plugin):
     
 
   def configure(self, args: Dict = {}, unknown_args: List = []):
-    from google import genai
-
     # Gemini API
     api_key = os.getenv("GEMINI_API_KEY")
     if api_key is None:
       print("[scallop_gemini] `GEMINI_API_KEY` not found, consider setting it in the environment variable", file=sys.stderr)
       return
 
-    # Is configured
-    self._configured = True
-
-    # Set the API Key
-    genai.api_key = api_key
+    self._client = genai.Client(api_key=api_key)
 
     # Set request limit
     if "num_allowed_gemini_request" in args:
@@ -55,12 +49,17 @@ class ScallopGeminiPlugin(scallopy.Plugin):
     self._num_performed_requests = 0
 
     # Set model
-    if "genai_model" in args:
+    if "gemini_model" in args:
       self._model = args["gemini_model"]
 
     # Set temperature
-    if "genai_temperature" in args:
+    if "gemini_temperature" in args:
       self._temperature = args["gemini_temperature"]
+
+  def client(self) -> genai.Client:
+    if self._client is None:
+      self.raise_unconfigured()
+    return self._client
 
   def model(self) -> str:
     return self._model
@@ -76,7 +75,7 @@ class ScallopGeminiPlugin(scallopy.Plugin):
 
   def assert_can_request(self):
     # Check if Gemini API is configured
-    if not self._configured:
+    if self._client is None:
       self.raise_unconfigured()
 
     # Check openai request
@@ -90,7 +89,6 @@ class ScallopGeminiPlugin(scallopy.Plugin):
     self._num_performed_requests += 1
 
   def load_into_ctx(self, ctx: scallopy.ScallopContext):
-    from . import fa_encoder
     from . import fa_extract_info
     from . import ff_gemini
     from . import fp_gemini
@@ -100,4 +98,6 @@ class ScallopGeminiPlugin(scallopy.Plugin):
     ctx.register_foreign_predicate(fp_gemini.get_gemini(self))
 
     if scallopy.torch_tensor_enabled():
+      from . import fa_encoder
+
       ctx.register_foreign_attribute(fa_encoder.get_gemini_encoder(self))
