@@ -6,7 +6,7 @@ use scallop_core::testing::*;
 #[test]
 fn test_static_iter_edge_path() {
   let env = RuntimeEnvironment::default();
-  let mut prov = unit::UnitProvenance::default();
+  let mut prov = unit::UnitProvenance;
   let mut iter = StaticIteration::<unit::UnitProvenance>::new(&env, &mut prov);
 
   // Add relations
@@ -31,9 +31,33 @@ fn test_static_iter_edge_path() {
 }
 
 #[test]
+fn test_static_join_uses_collection_order_for_float_keys() {
+  let env = RuntimeEnvironment::default();
+  let mut prov = unit::UnitProvenance;
+  let mut iter = StaticIteration::new(&env, &mut prov);
+  let left = iter.create_relation::<((f64,), i32)>();
+  let right = iter.create_relation::<((f64,), i32)>();
+  let joined = iter.create_relation::<(i32, i32)>();
+  let found = iter.create_relation::<i32>();
+
+  left.insert_untagged(
+    iter.provenance_context,
+    vec![((f64::NAN,), 1), ((-0.0,), 2), ((1.0,), 5), ((-f64::NAN,), 6)],
+  );
+  right.insert_untagged(iter.provenance_context, vec![((0.0,), 3), ((-f64::NAN,), 4)]);
+  while iter.changed() || iter.is_first_iteration() {
+    iter.insert_dataflow(&joined, dataflow::project(iter.join(&left, &right), |t| (t.1, t.2)));
+    iter.insert_dataflow(&found, dataflow::project(dataflow::find(&left, (f64::NAN,)), |t| t.1));
+    iter.step();
+  }
+  expect_static_collection(&iter.complete(&joined), vec![(1, 4), (2, 3), (6, 4)]);
+  expect_static_collection(&iter.complete(&found), vec![1, 6]);
+}
+
+#[test]
 fn test_static_iter_odd_even_3() {
   let env = RuntimeEnvironment::default();
-  let mut prov = unit::UnitProvenance::default();
+  let mut prov = unit::UnitProvenance;
 
   struct Stratum0Result<C: Provenance> {
     numbers: StaticCollection<(i32,), C>,
@@ -226,7 +250,7 @@ fn test_static_out_degree_join() {
   }
 
   let env = RuntimeEnvironment::default();
-  let mut prov = unit::UnitProvenance::default();
+  let mut prov = unit::UnitProvenance;
 
   // Execute
   let stratum_0_result = stratum_0(&env, &mut prov);
@@ -294,7 +318,7 @@ fn test_static_out_degree_implicit_group() {
   }
 
   let env = RuntimeEnvironment::default();
-  let mut prov = unit::UnitProvenance::default();
+  let mut prov = unit::UnitProvenance;
 
   // Execute
   let stratum_0_result = stratum_0(&env, &mut prov);
@@ -362,7 +386,7 @@ fn test_static_num_edges() {
   }
 
   let env = RuntimeEnvironment::default();
-  let mut prov = unit::UnitProvenance::default();
+  let mut prov = unit::UnitProvenance;
 
   // Execute
   let stratum_0_result = stratum_0(&env, &mut prov);

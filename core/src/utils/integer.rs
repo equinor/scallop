@@ -13,8 +13,8 @@ pub trait Integer:
   + std::ops::Sub<Self, Output = Self>
   + std::ops::Mul<Self, Output = Self>
   + std::ops::Div<Self, Output = Self>
-  + std::convert::TryInto<usize>
-  + std::convert::TryInto<isize>
+  + TryInto<usize>
+  + TryInto<isize>
 {
   fn zero() -> Self;
 

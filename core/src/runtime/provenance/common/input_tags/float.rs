@@ -6,8 +6,8 @@ use super::*;
 impl StaticInputTag for f64 {
   fn from_dynamic_input_tag(t: &DynamicInputTag) -> Option<Self> {
     match t {
-      DynamicInputTag::Float(f) => Some(f.clone()),
-      DynamicInputTag::ExclusiveFloat(f, _) => Some(f.clone()),
+      DynamicInputTag::Float(f) => Some(*f),
+      DynamicInputTag::ExclusiveFloat(f, _) => Some(*f),
       _ => None,
     }
   }

@@ -2,7 +2,7 @@
 
 use super::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct NewTagVariable;
 
 impl NewTagVariable {

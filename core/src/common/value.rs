@@ -1,14 +1,14 @@
-use std::convert::*;
+use std::cmp::Ordering;
 
 pub use jiff::Timestamp as DateTime;
 
-use crate::utils::display_date_time;
+use crate::utils::{display_date_time, FloatKey};
 
 use super::duration::*;
 use super::foreign_tensor::*;
 use super::value_type::*;
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone)]
 pub enum Value {
   I8(i8),
   I16(i16),
@@ -92,7 +92,7 @@ impl Value {
   pub fn as_str(&self) -> &str {
     match self {
       Self::Str(s) => s,
-      Self::String(s) => &s,
+      Self::String(s) => s,
       v => panic!("Cannot get string from value {}", v),
     }
   }
@@ -102,13 +102,54 @@ impl Value {
   }
 }
 
+impl PartialEq for Value {
+  fn eq(&self, other: &Self) -> bool {
+    self.cmp(other).is_eq()
+  }
+}
+
 impl Eq for Value {}
 
+impl PartialOrd for Value {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
 impl Ord for Value {
-  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    match self.partial_cmp(other) {
-      Some(o) => o,
-      None => std::cmp::Ordering::Equal,
+  fn cmp(&self, other: &Self) -> Ordering {
+    use Value::*;
+    match (self, other) {
+      (I8(a), I8(b)) => a.cmp(b),
+      (I16(a), I16(b)) => a.cmp(b),
+      (I32(a), I32(b)) => a.cmp(b),
+      (I64(a), I64(b)) => a.cmp(b),
+      (I128(a), I128(b)) => a.cmp(b),
+      (ISize(a), ISize(b)) => a.cmp(b),
+      (U8(a), U8(b)) => a.cmp(b),
+      (U16(a), U16(b)) => a.cmp(b),
+      (U32(a), U32(b)) => a.cmp(b),
+      (U64(a), U64(b)) => a.cmp(b),
+      (U128(a), U128(b)) => a.cmp(b),
+      (USize(a), USize(b)) => a.cmp(b),
+      (F32(a), F32(b)) => FloatKey(*a).cmp(&FloatKey(*b)),
+      (F64(a), F64(b)) => FloatKey(*a).cmp(&FloatKey(*b)),
+      (Char(a), Char(b)) => a.cmp(b),
+      (Bool(a), Bool(b)) => a.cmp(b),
+      (Str(a), Str(b)) => a.cmp(b),
+      (String(a), String(b)) => a.cmp(b),
+      (Symbol(a), Symbol(b)) => a.cmp(b),
+      (SymbolString(a), SymbolString(b)) => a.cmp(b),
+      (DateTime(a), DateTime(b)) => a.cmp(b),
+      (Duration(a), Duration(b)) => a.cmp(b),
+      (Entity(a), Entity(b)) => a.cmp(b),
+      (EntityString(a), EntityString(b)) => a.cmp(b),
+      (Tensor(a), Tensor(b)) => a.cmp(b),
+      (TensorValue(a), TensorValue(b)) => a.cmp(b),
+      // These pairs share a ValueType but represent distinct variants.
+      (Symbol(_), SymbolString(_)) | (Entity(_), EntityString(_)) | (Tensor(_), TensorValue(_)) => Ordering::Less,
+      (SymbolString(_), Symbol(_)) | (EntityString(_), Entity(_)) | (TensorValue(_), Tensor(_)) => Ordering::Greater,
+      _ => self.value_type().cmp(&other.value_type()),
     }
   }
 }
@@ -128,8 +169,8 @@ impl std::hash::Hash for Value {
       Self::U64(u) => u.hash(state),
       Self::U128(u) => u.hash(state),
       Self::USize(u) => u.hash(state),
-      Self::F32(f) => i32::from_ne_bytes(f.to_ne_bytes()).hash(state),
-      Self::F64(f) => i64::from_ne_bytes(f.to_ne_bytes()).hash(state),
+      Self::F32(f) => FloatKey(*f).hash(state),
+      Self::F64(f) => FloatKey(*f).hash(state),
       Self::Char(c) => c.hash(state),
       Self::Bool(b) => b.hash(state),
       Self::Str(s) => s.hash(state),
@@ -302,14 +343,14 @@ impl From<Duration> for Value {
   }
 }
 
-macro_rules! impl_try_into {
-  ($into_ty:ty, $variant:ident) => {
-    impl TryInto<$into_ty> for Value {
+macro_rules! impl_try_from_value {
+  ($target:ty, $variant:ident) => {
+    impl TryFrom<Value> for $target {
       type Error = ValueConversionError;
 
-      fn try_into(self) -> Result<$into_ty, Self::Error> {
-        match self {
-          Self::$variant(i) => Ok(i),
+      fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+          Value::$variant(inner) => Ok(inner),
           _ => Err(ValueConversionError),
         }
       }
@@ -320,20 +361,20 @@ macro_rules! impl_try_into {
 #[derive(Clone, Debug, Default)]
 pub struct ValueConversionError;
 
-impl_try_into!(i8, I8);
-impl_try_into!(i16, I16);
-impl_try_into!(i32, I32);
-impl_try_into!(i64, I64);
-impl_try_into!(i128, I128);
-impl_try_into!(isize, ISize);
-impl_try_into!(u8, U8);
-impl_try_into!(u16, U16);
-impl_try_into!(u32, U32);
-impl_try_into!(u64, U64);
-impl_try_into!(u128, U128);
-impl_try_into!(usize, USize);
-impl_try_into!(f32, F32);
-impl_try_into!(f64, F64);
-impl_try_into!(bool, Bool);
-impl_try_into!(char, Char);
-impl_try_into!(String, String);
+impl_try_from_value!(i8, I8);
+impl_try_from_value!(i16, I16);
+impl_try_from_value!(i32, I32);
+impl_try_from_value!(i64, I64);
+impl_try_from_value!(i128, I128);
+impl_try_from_value!(isize, ISize);
+impl_try_from_value!(u8, U8);
+impl_try_from_value!(u16, U16);
+impl_try_from_value!(u32, U32);
+impl_try_from_value!(u64, U64);
+impl_try_from_value!(u128, U128);
+impl_try_from_value!(usize, USize);
+impl_try_from_value!(f32, F32);
+impl_try_from_value!(f64, F64);
+impl_try_from_value!(bool, Bool);
+impl_try_from_value!(char, Char);
+impl_try_from_value!(String, String);

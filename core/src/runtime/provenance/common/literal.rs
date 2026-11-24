@@ -23,8 +23,8 @@ impl Literal {
 
   pub fn negate(&self) -> Self {
     match self {
-      Self::Pos(v) => Self::Neg(v.clone()),
-      Self::Neg(v) => Self::Pos(v.clone()),
+      Self::Pos(v) => Self::Neg(*v),
+      Self::Neg(v) => Self::Pos(*v),
     }
   }
 }

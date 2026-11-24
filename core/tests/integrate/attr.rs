@@ -1,6 +1,8 @@
+use scallop_core::compiler::compile_string_to_ram;
 use scallop_core::compiler::front::ast;
 use scallop_core::compiler::front::attribute::*;
 use scallop_core::compiler::front::FrontContext;
+use scallop_core::runtime::database::StorageMetadata;
 use scallop_core::testing::*;
 
 mod attr_1 {
@@ -20,7 +22,7 @@ mod attr_1 {
           "foo attribute requires 3 arguments".to_string(),
         ))
       } else {
-        if attr.pos_arg(0).and_then(|arg| Some(arg.is_tuple())) == Some(true) {
+        if attr.pos_arg(0).map(|arg| arg.is_tuple()) == Some(true) {
           Ok(AttributeAction::Nothing)
         } else {
           Err(AttributeError::new_custom(
@@ -73,4 +75,27 @@ mod attr_1 {
       |s| s.contains("foo attribute requires a tuple as the first argument"),
     );
   }
+}
+
+#[test]
+fn storage_attribute_keeps_supported_modes() {
+  let source = r#"
+    @storage("indexed_vec")
+    type indexed(i: usize, n: i32)
+    rel indexed = {(0, 7), (2, 9)}
+    @storage("sorted")
+    rel result(n) = indexed(2, n)
+    query result
+  "#;
+  let program = compile_string_to_ram(source.to_owned()).unwrap();
+  assert_eq!(
+    program.relation("indexed").unwrap().storage,
+    StorageMetadata::IndexedVec
+  );
+  assert_eq!(program.relation("result").unwrap().storage, StorageMetadata::Sorted);
+  expect_interpret_result(source, ("result", vec![(9i32,)]));
+
+  expect_front_compile_failure(r#"@storage("dense_matrix") rel invalid = {(0, 1)}"#, |error| {
+    error.contains("Choose from \"sorted\", \"indexed_vec\"")
+  });
 }

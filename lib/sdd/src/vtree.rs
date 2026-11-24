@@ -14,17 +14,11 @@ pub enum VTreeNode {
 
 impl VTreeNode {
   pub fn is_branch(&self) -> bool {
-    match self {
-      Self::Branch { .. } => true,
-      _ => false,
-    }
+    matches!(self, Self::Branch { .. })
   }
 
   pub fn is_leaf(&self) -> bool {
-    match self {
-      Self::Leaf { .. } => true,
-      _ => false,
-    }
+    matches!(self, Self::Leaf { .. })
   }
 
   pub fn is_left(&self, node: VTreeNodeIndex) -> bool {
@@ -70,17 +64,12 @@ pub struct VTree {
   pub(crate) last_in_subtree_map: HashMap<VTreeNodeIndex, VTreeNodeIndex>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum VTreeType {
   Left,
   Right,
+  #[default]
   Balanced,
-}
-
-impl Default for VTreeType {
-  fn default() -> Self {
-    Self::Balanced
-  }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -110,10 +99,10 @@ impl VTree {
 
   pub fn create_left_linear_from_vars(vars: Vec<usize>) -> Self {
     let mut tree = Graph::new();
-    if vars.len() > 0 {
+    if !vars.is_empty() {
       let mut curr_left = tree.add_node(VTreeNode::Leaf { var_id: vars[0] });
-      for i in 1..vars.len() {
-        let curr_right_leaf = tree.add_node(VTreeNode::Leaf { var_id: vars[i] });
+      for &var_id in &vars[1..] {
+        let curr_right_leaf = tree.add_node(VTreeNode::Leaf { var_id });
         let parent_node = tree.add_node(VTreeNode::Branch {
           left: VTreeNodeIndex(curr_left),
           right: VTreeNodeIndex(curr_right_leaf),
@@ -134,7 +123,7 @@ impl VTree {
 
   pub fn create_right_linear_from_vars(vars: Vec<usize>) -> Self {
     let mut tree = Graph::new();
-    if vars.len() > 0 {
+    if !vars.is_empty() {
       let mut curr_right = tree.add_node(VTreeNode::Leaf {
         var_id: vars[vars.len() - 1],
       });
@@ -205,9 +194,9 @@ impl VTree {
           left: VTreeNodeIndex(left),
           right: VTreeNodeIndex(right),
         } => {
-          in_order_traversal(tree, left.clone(), f);
+          in_order_traversal(tree, *left, f);
           f(node_id, &tree[node_id]);
-          in_order_traversal(tree, right.clone(), f);
+          in_order_traversal(tree, *right, f);
         }
         VTreeNode::Leaf { .. } => {
           f(node_id, &tree[node_id]);
@@ -222,7 +211,7 @@ impl VTree {
       count += 1;
 
       if let VTreeNode::Leaf { var_id } = node {
-        var_to_node_id_map.insert(var_id.clone(), VTreeNodeIndex(node_index));
+        var_to_node_id_map.insert(*var_id, VTreeNodeIndex(node_index));
       }
     });
 
@@ -271,14 +260,14 @@ impl VTree {
   pub fn left(&self, node: VTreeNodeIndex) -> Option<VTreeNodeIndex> {
     match &self.tree[node.0] {
       VTreeNode::Leaf { .. } => None,
-      VTreeNode::Branch { left, .. } => Some(left.clone()),
+      VTreeNode::Branch { left, .. } => Some(*left),
     }
   }
 
   pub fn right(&self, node: VTreeNodeIndex) -> Option<VTreeNodeIndex> {
     match &self.tree[node.0] {
       VTreeNode::Leaf { .. } => None,
-      VTreeNode::Branch { right, .. } => Some(right.clone()),
+      VTreeNode::Branch { right, .. } => Some(*right),
     }
   }
 
@@ -288,10 +277,7 @@ impl VTree {
   pub fn is_decomposition(&self, node: VTreeNodeIndex) -> bool {
     match &self.tree[node.0] {
       VTreeNode::Leaf { .. } => false,
-      VTreeNode::Branch { left, .. } => match &self.tree[left.0] {
-        VTreeNode::Leaf { .. } => false,
-        _ => true,
-      },
+      VTreeNode::Branch { left, .. } => !matches!(&self.tree[left.0], VTreeNode::Leaf { .. }),
     }
   }
 
@@ -299,7 +285,7 @@ impl VTree {
     match &self.tree[node.0] {
       VTreeNode::Leaf { .. } => None,
       VTreeNode::Branch { left, .. } => match &self.tree[left.0] {
-        VTreeNode::Leaf { var_id } => Some(var_id.clone()),
+        VTreeNode::Leaf { var_id } => Some(*var_id),
         _ => None,
       },
     }
@@ -499,9 +485,7 @@ impl VTree {
   pub fn swap(&mut self, node_id: VTreeNodeIndex) -> Result<(), VTreeMutationError> {
     match &mut self.tree[node_id.0] {
       VTreeNode::Branch { left, right } => {
-        let tmp = *left;
-        *left = *right;
-        *right = tmp;
+        std::mem::swap(&mut *left, &mut *right);
         Ok(())
       }
       VTreeNode::Leaf { .. } => Err(VTreeMutationError::NodeIsNotBranch),
@@ -516,7 +500,7 @@ impl VTree {
       edge_strs: &mut Vec<String>,
     ) {
       let node_id = curr_node.index();
-      match &nodes[curr_node.clone()] {
+      match &nodes[curr_node] {
         VTreeNode::Leaf { var_id } => {
           let node_str = format!("{} [label=\"V{}\"]", node_id, var_id);
           node_strs.push(node_str);
@@ -537,7 +521,7 @@ impl VTree {
     let mut node_strs = vec![];
     let mut edge_strs = vec![];
 
-    traverse(&self.tree, self.root.clone(), &mut node_strs, &mut edge_strs);
+    traverse(&self.tree, self.root, &mut node_strs, &mut edge_strs);
 
     format!(
       "digraph vtree {{ node [shape=record margin=0.03 width=0 height=0]; {} {} }}",

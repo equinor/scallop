@@ -12,8 +12,8 @@ pub enum Exclusion {
 impl StaticInputTag for Exclusion {
   fn from_dynamic_input_tag(t: &DynamicInputTag) -> Option<Self> {
     match t {
-      DynamicInputTag::Exclusive(e) => Some(Self::Exclusive(e.clone())),
-      DynamicInputTag::ExclusiveFloat(_, e) => Some(Self::Exclusive(e.clone())),
+      DynamicInputTag::Exclusive(e) => Some(Self::Exclusive(*e)),
+      DynamicInputTag::ExclusiveFloat(_, e) => Some(Self::Exclusive(*e)),
       _ => Some(Self::Independent),
     }
   }
@@ -51,8 +51,8 @@ impl ConvertFromInputTag<Exclusion> for Exclusion {
 
 impl ConvertFromInputTag<InputExclusiveProb> for Exclusion {
   fn from_input_tag(t: InputExclusiveProb) -> Option<Self> {
-    match &t.exclusion {
-      Some(e) => Some(Self::Exclusive(e.clone())),
+    match t.exclusion {
+      Some(e) => Some(Self::Exclusive(e)),
       None => Some(Self::Independent),
     }
   }
@@ -66,8 +66,8 @@ impl<T: FromTensor> ConvertFromInputTag<InputDiffProb<T>> for Exclusion {
 
 impl<T: FromTensor> ConvertFromInputTag<InputExclusiveDiffProb<T>> for Exclusion {
   fn from_input_tag(t: InputExclusiveDiffProb<T>) -> Option<Self> {
-    match &t.exclusion {
-      Some(e) => Some(Self::Exclusive(e.clone())),
+    match t.exclusion {
+      Some(e) => Some(Self::Exclusive(e)),
       None => Some(Self::Independent),
     }
   }
@@ -75,8 +75,8 @@ impl<T: FromTensor> ConvertFromInputTag<InputExclusiveDiffProb<T>> for Exclusion
 
 impl<T: FromTensor> ConvertFromInputTag<InputExclusiveDiffProbWithID<T>> for Exclusion {
   fn from_input_tag(t: InputExclusiveDiffProbWithID<T>) -> Option<Self> {
-    match &t.exclusion {
-      Some(e) => Some(Self::Exclusive(e.clone())),
+    match t.exclusion {
+      Some(e) => Some(Self::Exclusive(e)),
       None => Some(Self::Independent),
     }
   }

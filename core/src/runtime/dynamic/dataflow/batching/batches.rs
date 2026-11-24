@@ -107,10 +107,13 @@ impl<'a, Prov: Provenance> DynamicBatchesChain<'a, Prov> {
 impl<'a, Prov: Provenance> Batches<'a, Prov> for DynamicBatchesChain<'a, Prov> {
   fn next_batch(&mut self) -> Option<DynamicBatch<'a, Prov>> {
     while self.id < self.bs.len() {
-      if let Some(batch) = self.bs[self.id].next_batch() {
-        return Some(batch);
-      } else {
-        self.id += 1;
+      match self.bs[self.id].next_batch() {
+        Some(batch) => {
+          return Some(batch);
+        }
+        None => {
+          self.id += 1;
+        }
       }
     }
     None
@@ -135,10 +138,10 @@ impl<'a, Prov: Provenance> DynamicBatchesBinary<'a, Prov> {
     let b1_curr = b1.next_batch();
     let b2_source = b2.clone();
     Self {
-      b1: b1,
+      b1,
       b1_curr,
-      b2: b2,
-      b2_source: b2_source,
+      b2,
+      b2_source,
       op: DynamicBatchBinaryOp::new(op),
     }
   }
@@ -147,19 +150,12 @@ impl<'a, Prov: Provenance> DynamicBatchesBinary<'a, Prov> {
 impl<'a, Prov: Provenance> Batches<'a, Prov> for DynamicBatchesBinary<'a, Prov> {
   fn next_batch(&mut self) -> Option<DynamicBatch<'a, Prov>> {
     loop {
-      match &self.b1_curr {
-        Some(b1_curr_batch) => match self.b2.next_batch() {
-          Some(b2_curr_batch) => {
-            let result = self.op.apply(b1_curr_batch.clone(), b2_curr_batch);
-            return Some(result);
-          }
-          None => {
-            self.b1_curr = self.b1.next_batch();
-            self.b2 = self.b2_source.clone();
-          }
-        },
-        None => return None,
+      let b1_curr = self.b1_curr.as_ref()?;
+      if let Some(b2_curr) = self.b2.next_batch() {
+        return Some(self.op.apply(b1_curr.clone(), b2_curr));
       }
+      self.b1_curr = self.b1.next_batch();
+      self.b2 = self.b2_source.clone();
     }
   }
 }

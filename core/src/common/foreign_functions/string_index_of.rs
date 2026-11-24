@@ -31,12 +31,7 @@ impl ForeignFunction for StringIndexOf {
   fn execute(&self, args: Vec<Value>) -> Option<Value> {
     assert_eq!(args.len(), 2);
     match (&args[0], &args[1]) {
-      (Value::String(s), Value::String(sub)) => {
-        match s.find(sub) {
-          Some(index) => Some(Value::USize(index)),
-          None => None, // return None if no match found
-        }
-      }
+      (Value::String(s), Value::String(sub)) => s.find(sub).map(Value::USize),
       _ => panic!("Invalid arguments, expected strings"),
     }
   }

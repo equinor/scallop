@@ -66,16 +66,16 @@ impl<T: FromTensor> StaticInputTag for InputExclusiveDiffProbWithID<T> {
       DynamicInputTag::Float(_) => None,
       DynamicInputTag::ExclusiveFloat(_, _) => None,
       DynamicInputTag::FloatWithID(id, prob) => Some(Self {
-        id: id.clone(),
-        prob: prob.clone(),
+        id: *id,
+        prob: *prob,
         external_tag: None,
         exclusion: None,
       }),
       DynamicInputTag::ExclusiveFloatWithID(id, prob, i) => Some(Self {
-        id: id.clone(),
-        prob: prob.clone(),
+        id: *id,
+        prob: *prob,
         external_tag: None,
-        exclusion: Some(i.clone()),
+        exclusion: Some(*i),
       }),
       DynamicInputTag::Tensor(_) => None,
     }

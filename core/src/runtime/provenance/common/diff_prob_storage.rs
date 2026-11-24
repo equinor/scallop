@@ -65,7 +65,7 @@ impl<T: Clone, P: PointerFamily> DiffProbStorage<T, P> {
         s.extend(std::iter::repeat_n((0.0, None), id - s.len() + 1));
       }
 
-      s[id] = (prob.clone(), external_tag.clone())
+      s[id] = (prob, external_tag.clone())
     });
 
     // Return the id
@@ -73,11 +73,11 @@ impl<T: Clone, P: PointerFamily> DiffProbStorage<T, P> {
   }
 
   pub fn get_diff_prob(&self, id: &usize) -> (f64, Option<T>) {
-    P::get_rc_cell(&self.storage, |d| d[id.clone()].clone())
+    P::get_rc_cell(&self.storage, |d| d[*id].clone())
   }
 
   pub fn get_prob(&self, id: &usize) -> f64 {
-    P::get_rc_cell(&self.storage, |d| d[id.clone()].0)
+    P::get_rc_cell(&self.storage, |d| d[*id].0)
   }
 
   pub fn input_tags(&self) -> Vec<T> {
@@ -90,6 +90,12 @@ impl<T: Clone, P: PointerFamily> DiffProbStorage<T, P> {
 
   pub fn fact_probability(&self, id: &usize) -> f64 {
     P::get_rc_cell(&self.storage, |d| d[*id].0)
+  }
+}
+
+impl<T: Clone, P: PointerFamily> Default for DiffProbStorage<T, P> {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

@@ -8,7 +8,7 @@ use scallop_core::testing::*;
 
 #[test]
 fn test_dynamic_aggregate_count_1() {
-  let ctx = unit::UnitProvenance::default();
+  let ctx = unit::UnitProvenance;
   let rt = RuntimeEnvironment::default();
 
   // Relations

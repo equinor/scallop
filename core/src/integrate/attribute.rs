@@ -17,9 +17,9 @@ impl AttributeValue {
 
   pub fn to_front(&self) -> ast::AttributeValue {
     match self {
-      Self::Float(f) => ast::AttributeValue::float(f.clone()),
-      Self::Integer(i) => ast::AttributeValue::integer(i.clone()),
-      Self::Boolean(b) => ast::AttributeValue::boolean(b.clone()),
+      Self::Float(f) => ast::AttributeValue::float(*f),
+      Self::Integer(i) => ast::AttributeValue::integer(*i),
+      Self::Boolean(b) => ast::AttributeValue::boolean(*b),
       Self::String(s) => ast::AttributeValue::string(s.clone()),
       Self::List(l) => {
         let l = l.iter().map(AttributeValue::to_front).collect();

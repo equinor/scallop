@@ -26,12 +26,9 @@ impl StoppingCriteria {
 
   pub fn set_iter_limit(&mut self, k: usize) {
     for criterion in &mut self.criteria {
-      match criterion {
-        StoppingCriterion::IterationLimit { limit } => {
-          *limit = k;
-          return;
-        }
-        _ => {}
+      if let StoppingCriterion::IterationLimit { limit } = criterion {
+        *limit = k;
+        return;
       }
     }
 
@@ -40,9 +37,8 @@ impl StoppingCriteria {
 
   pub fn get_iter_limit(&self) -> Option<usize> {
     for criterion in &self.criteria {
-      match criterion {
-        StoppingCriterion::IterationLimit { limit } => return Some(*limit),
-        _ => {}
+      if let StoppingCriterion::IterationLimit { limit } = criterion {
+        return Some(*limit);
       }
     }
     None
@@ -57,9 +53,8 @@ impl StoppingCriteria {
 
   pub fn stop_when_goal_relation_non_empty(&self) -> bool {
     for criterion in &self.criteria {
-      match criterion {
-        StoppingCriterion::NonEmptyGoalRelation => return true,
-        _ => {}
+      if let StoppingCriterion::NonEmptyGoalRelation = criterion {
+        return true;
       }
     }
     false
@@ -71,11 +66,12 @@ impl StoppingCriteria {
 }
 
 /// A pre-defined set of stopping criteria in Scallop
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum StoppingCriterion {
   /// The execution will stop when the newly derived
   /// delta is empty with all the facts having saturated
   /// tag
+  #[default]
   LeastFixPointSaturation,
 
   /// The execution will stop when the goal relation
@@ -89,28 +85,16 @@ pub enum StoppingCriterion {
   },
 }
 
-impl Default for StoppingCriterion {
-  fn default() -> Self {
-    Self::LeastFixPointSaturation
-  }
-}
-
 impl StoppingCriterion {
   pub fn iter_limit(k: usize) -> Self {
     Self::IterationLimit { limit: k }
   }
 
   pub fn is_iter_limit(&self) -> bool {
-    match self {
-      Self::IterationLimit { .. } => true,
-      _ => false,
-    }
+    matches!(self, Self::IterationLimit { .. })
   }
 
   pub fn is_non_empty_goal_relation(&self) -> bool {
-    match self {
-      Self::NonEmptyGoalRelation => true,
-      _ => false,
-    }
+    matches!(self, Self::NonEmptyGoalRelation)
   }
 }

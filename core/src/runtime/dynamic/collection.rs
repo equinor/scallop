@@ -6,7 +6,6 @@ use crate::runtime::provenance::*;
 pub enum DynamicCollection<Prov: Provenance> {
   Sorted(DynamicSortedCollection<Prov>),
   IndexedVec(DynamicIndexedVecCollection<Prov>),
-  DenseMatrix(DynamicDenseMatrixCollection<Prov>),
 }
 
 impl<Prov: Provenance> std::fmt::Display for DynamicCollection<Prov>
@@ -17,7 +16,6 @@ where
     match self {
       Self::Sorted(s) => s.fmt(f),
       Self::IndexedVec(s) => s.fmt(f),
-      Self::DenseMatrix(s) => s.fmt(f),
     }
   }
 }
@@ -30,7 +28,6 @@ where
     match self {
       Self::Sorted(s) => s.fmt(f),
       Self::IndexedVec(s) => s.fmt(f),
-      Self::DenseMatrix(s) => s.fmt(f),
     }
   }
 }
@@ -44,7 +41,6 @@ impl<Prov: Provenance> DynamicCollection<Prov> {
     match self {
       Self::Sorted(_) => DynamicCollection::Sorted(DynamicSortedCollection::empty()),
       Self::IndexedVec(_) => DynamicCollection::IndexedVec(DynamicIndexedVecCollection::empty()),
-      Self::DenseMatrix(_) => DynamicCollection::DenseMatrix(DynamicDenseMatrixCollection::empty()),
     }
   }
 
@@ -52,7 +48,6 @@ impl<Prov: Provenance> DynamicCollection<Prov> {
     match self {
       Self::Sorted(_) => StorageMetadata::Sorted,
       Self::IndexedVec(_) => StorageMetadata::IndexedVec,
-      Self::DenseMatrix(_) => StorageMetadata::DenseMatrix,
     }
   }
 
@@ -60,7 +55,6 @@ impl<Prov: Provenance> DynamicCollection<Prov> {
     match self {
       Self::Sorted(s) => s.len(),
       Self::IndexedVec(s) => s.len(),
-      Self::DenseMatrix(s) => s.len(),
     }
   }
 
@@ -68,15 +62,13 @@ impl<Prov: Provenance> DynamicCollection<Prov> {
     match self {
       Self::Sorted(s) => s.is_empty(),
       Self::IndexedVec(s) => s.is_empty(),
-      Self::DenseMatrix(s) => s.is_empty(),
     }
   }
 
   pub fn as_ref<'a>(&'a self) -> DynamicCollectionRef<'a, Prov> {
     match self {
-      Self::Sorted(s) => DynamicCollectionRef::Sorted(&s),
-      Self::IndexedVec(s) => DynamicCollectionRef::IndexedVec(&s),
-      Self::DenseMatrix(s) => DynamicCollectionRef::DenseMatrix(&s),
+      Self::Sorted(s) => DynamicCollectionRef::Sorted(s),
+      Self::IndexedVec(s) => DynamicCollectionRef::IndexedVec(s),
     }
   }
 
@@ -84,7 +76,6 @@ impl<Prov: Provenance> DynamicCollection<Prov> {
     match self {
       Self::Sorted(s) => DynamicCollectionIter::Sorted(s.iter()),
       Self::IndexedVec(s) => DynamicCollectionIter::IndexedVec(s.iter()),
-      Self::DenseMatrix(s) => DynamicCollectionIter::DenseMatrix(s.iter()),
     }
   }
 
@@ -92,7 +83,6 @@ impl<Prov: Provenance> DynamicCollection<Prov> {
     match self {
       Self::Sorted(s) => DynamicCollectionDrainer::Sorted(s.drain()),
       Self::IndexedVec(s) => DynamicCollectionDrainer::IndexedVec(s.drain()),
-      Self::DenseMatrix(s) => DynamicCollectionDrainer::DenseMatrix(s.drain()),
     }
   }
 }
@@ -101,7 +91,6 @@ impl<Prov: Provenance> DynamicCollection<Prov> {
 pub enum DynamicCollectionRef<'a, Prov: Provenance> {
   Sorted(&'a DynamicSortedCollection<Prov>),
   IndexedVec(&'a DynamicIndexedVecCollection<Prov>),
-  DenseMatrix(&'a DynamicDenseMatrixCollection<Prov>),
 }
 
 impl<'a, Prov: Provenance> DynamicCollectionRef<'a, Prov> {
@@ -109,7 +98,6 @@ impl<'a, Prov: Provenance> DynamicCollectionRef<'a, Prov> {
     match self {
       Self::Sorted(s) => DynamicCollection::Sorted((*s).clone()),
       Self::IndexedVec(s) => DynamicCollection::IndexedVec((*s).clone()),
-      Self::DenseMatrix(s) => DynamicCollection::DenseMatrix((*s).clone()),
     }
   }
 }
@@ -122,7 +110,6 @@ where
     match self {
       Self::Sorted(s) => s.fmt(f),
       Self::IndexedVec(s) => s.fmt(f),
-      Self::DenseMatrix(s) => s.fmt(f),
     }
   }
 }
@@ -132,7 +119,6 @@ impl<'a, Prov: Provenance> DynamicCollectionRef<'a, Prov> {
     match self {
       Self::Sorted(s) => s.len(),
       Self::IndexedVec(s) => s.len(),
-      Self::DenseMatrix(s) => s.len(),
     }
   }
 
@@ -140,7 +126,6 @@ impl<'a, Prov: Provenance> DynamicCollectionRef<'a, Prov> {
     match self {
       Self::Sorted(s) => s.is_empty(),
       Self::IndexedVec(s) => s.is_empty(),
-      Self::DenseMatrix(s) => s.is_empty(),
     }
   }
 
@@ -148,7 +133,6 @@ impl<'a, Prov: Provenance> DynamicCollectionRef<'a, Prov> {
     match self {
       Self::Sorted(s) => DynamicCollectionIter::Sorted(s.iter()),
       Self::IndexedVec(s) => DynamicCollectionIter::IndexedVec(s.iter()),
-      Self::DenseMatrix(s) => DynamicCollectionIter::DenseMatrix(s.iter()),
     }
   }
 }
@@ -157,7 +141,6 @@ impl<'a, Prov: Provenance> DynamicCollectionRef<'a, Prov> {
 pub enum DynamicCollectionIter<'a, Prov: Provenance> {
   Sorted(DynamicSortedCollectionIter<'a, Prov>),
   IndexedVec(DynamicIndexedVecCollectionIter<'a, Prov>),
-  DenseMatrix(DynamicDenseMatrixCollectionIter<'a, Prov>),
 }
 
 impl<'a, Prov: Provenance> Iterator for DynamicCollectionIter<'a, Prov> {
@@ -167,7 +150,6 @@ impl<'a, Prov: Provenance> Iterator for DynamicCollectionIter<'a, Prov> {
     match self {
       Self::Sorted(s) => s.next(),
       Self::IndexedVec(s) => s.next(),
-      Self::DenseMatrix(s) => s.next(),
     }
   }
 }
@@ -175,7 +157,6 @@ impl<'a, Prov: Provenance> Iterator for DynamicCollectionIter<'a, Prov> {
 pub enum DynamicCollectionDrainer<'a, Prov: Provenance> {
   Sorted(DynamicSortedCollectionDrainer<'a, Prov>),
   IndexedVec(DynamicIndexedVecCollectionDrainer<'a, Prov>),
-  DenseMatrix(DynamicDenseMatrixCollectionDrainer<'a, Prov>),
 }
 
 impl<'a, Prov: Provenance> Iterator for DynamicCollectionDrainer<'a, Prov> {
@@ -185,7 +166,6 @@ impl<'a, Prov: Provenance> Iterator for DynamicCollectionDrainer<'a, Prov> {
     match self {
       Self::Sorted(s) => s.next(),
       Self::IndexedVec(s) => s.next(),
-      Self::DenseMatrix(s) => s.next(),
     }
   }
 }

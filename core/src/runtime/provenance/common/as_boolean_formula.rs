@@ -32,9 +32,9 @@ pub trait AsBooleanFormula {
       sdd::bf_conjunction(disj.facts.iter().map(|to_be_neg_fact_id| {
         sdd::bf_disjunction(disj.facts.iter().map(|fact_id| {
           if fact_id == to_be_neg_fact_id {
-            sdd::bf_neg(fact_id.clone())
+            sdd::bf_neg(*fact_id)
           } else {
-            sdd::bf_pos(fact_id.clone())
+            sdd::bf_pos(*fact_id)
           }
         }))
       }))

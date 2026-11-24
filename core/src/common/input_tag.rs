@@ -1,9 +1,13 @@
 use serde::*;
+use std::cmp::Ordering;
+
+use crate::utils::FloatKey;
 
 use super::foreign_tensor::DynamicExternalTensor;
 
-#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Serialize, Default)]
 pub enum DynamicInputTag {
+  #[default]
   None,
   NewVariable,
   Exclusive(usize),
@@ -17,26 +21,66 @@ pub enum DynamicInputTag {
 }
 
 impl DynamicInputTag {
-  pub fn is_some(&self) -> bool {
+  fn variant_order(&self) -> u8 {
     match self {
-      Self::None => false,
-      _ => true,
+      Self::None => 0,
+      Self::NewVariable => 1,
+      Self::Exclusive(_) => 2,
+      Self::Bool(_) => 3,
+      Self::Natural(_) => 4,
+      Self::Float(_) => 5,
+      Self::ExclusiveFloat(..) => 6,
+      Self::FloatWithID(..) => 7,
+      Self::ExclusiveFloatWithID(..) => 8,
+      Self::Tensor(_) => 9,
     }
   }
 
+  pub fn is_some(&self) -> bool {
+    !matches!(self, Self::None)
+  }
+
   pub fn is_none(&self) -> bool {
-    match self {
-      Self::None => true,
-      _ => false,
-    }
+    matches!(self, Self::None)
   }
 
   pub fn with_exclusivity(&self, exclusion_id: usize) -> Self {
     match self {
       Self::None => Self::Exclusive(exclusion_id),
-      Self::Float(f) => Self::ExclusiveFloat(f.clone(), exclusion_id),
-      Self::ExclusiveFloat(f, _) => Self::ExclusiveFloat(f.clone(), exclusion_id),
+      Self::Float(f) => Self::ExclusiveFloat(*f, exclusion_id),
+      Self::ExclusiveFloat(f, _) => Self::ExclusiveFloat(*f, exclusion_id),
       _ => self.clone(),
+    }
+  }
+}
+
+impl PartialEq for DynamicInputTag {
+  fn eq(&self, other: &Self) -> bool {
+    self.cmp(other).is_eq()
+  }
+}
+
+impl Eq for DynamicInputTag {}
+
+impl PartialOrd for DynamicInputTag {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl Ord for DynamicInputTag {
+  fn cmp(&self, other: &Self) -> Ordering {
+    match (self, other) {
+      (Self::Exclusive(a), Self::Exclusive(b)) | (Self::Natural(a), Self::Natural(b)) => a.cmp(b),
+      (Self::Bool(a), Self::Bool(b)) => a.cmp(b),
+      (Self::Float(a), Self::Float(b)) => FloatKey(*a).cmp(&FloatKey(*b)),
+      (Self::ExclusiveFloat(a, id_a), Self::ExclusiveFloat(b, id_b)) => (FloatKey(*a), id_a).cmp(&(FloatKey(*b), id_b)),
+      (Self::FloatWithID(id_a, a), Self::FloatWithID(id_b, b)) => (id_a, FloatKey(*a)).cmp(&(id_b, FloatKey(*b))),
+      (Self::ExclusiveFloatWithID(id_a, a, ex_a), Self::ExclusiveFloatWithID(id_b, b, ex_b)) => {
+        (id_a, FloatKey(*a), ex_a).cmp(&(id_b, FloatKey(*b), ex_b))
+      }
+      (Self::Tensor(a), Self::Tensor(b)) => a.cmp(b),
+      _ => self.variant_order().cmp(&other.variant_order()),
     }
   }
 }
@@ -55,12 +99,6 @@ impl std::fmt::Display for DynamicInputTag {
       Self::ExclusiveFloatWithID(id, n, i) => f.write_str(&format!("{} [ID({}), ME({})]", n, id, i)),
       Self::Tensor(t) => t.fmt(f),
     }
-  }
-}
-
-impl Default for DynamicInputTag {
-  fn default() -> Self {
-    Self::None
   }
 }
 

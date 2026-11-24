@@ -6,7 +6,7 @@ use super::*;
 impl StaticInputTag for bool {
   fn from_dynamic_input_tag(t: &DynamicInputTag) -> Option<Self> {
     match t {
-      DynamicInputTag::Bool(b) => Some(b.clone()),
+      DynamicInputTag::Bool(b) => Some(*b),
       _ => None,
     }
   }

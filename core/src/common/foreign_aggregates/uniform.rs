@@ -5,7 +5,7 @@ use crate::runtime::env::*;
 
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct UniformAggregate;
 
 impl UniformAggregate {
@@ -14,9 +14,9 @@ impl UniformAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for UniformAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::Sampler(DynamicSampleAggregate::new(self))
+impl From<UniformAggregate> for DynamicAggregate {
+  fn from(val: UniformAggregate) -> Self {
+    DynamicAggregate::Sampler(DynamicSampleAggregate::new(val))
   }
 }
 
@@ -42,9 +42,9 @@ pub struct UniformSampler {
   k: usize,
 }
 
-impl Into<DynamicSampler> for UniformSampler {
-  fn into(self) -> DynamicSampler {
-    DynamicSampler::new(self)
+impl From<UniformSampler> for DynamicSampler {
+  fn from(val: UniformSampler) -> Self {
+    DynamicSampler::new(val)
   }
 }
 

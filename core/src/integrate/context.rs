@@ -145,14 +145,14 @@ impl<Prov: Provenance, P: PointerFamily> IntegrateContext<Prov, P> {
   /// Extending the existing monitors with new ones
   pub fn add_monitors(&mut self, monitors: &[&str]) {
     let reg = MonitorRegistry::<Prov>::std();
-    let monitors = reg.load_monitors(&monitors);
+    let monitors = reg.load_monitors(monitors);
     self.monitors.extend(monitors)
   }
 
   /// Set the monitors with new ones
   pub fn load_monitors(&mut self, monitors: &[&str]) {
     let reg = MonitorRegistry::<Prov>::std();
-    let monitors = reg.load_monitors(&monitors);
+    let monitors = reg.load_monitors(monitors);
     self.monitors = monitors;
   }
 
@@ -243,7 +243,7 @@ impl<Prov: Provenance, P: PointerFamily> IntegrateContext<Prov, P> {
     mut attrs: Vec<Attribute>,
   ) -> Result<compiler::front::SourceId, IntegrateError> {
     // First generate all attributes
-    if let Some(_) = tag {
+    if tag.is_some() {
       attrs.push(Attribute::named("tagged"));
     }
 
@@ -295,7 +295,7 @@ impl<Prov: Provenance, P: PointerFamily> IntegrateContext<Prov, P> {
       let pred_tuple_type = self.front_ctx.relation_tuple_type(predicate);
       if let Some(tuple_type) = pred_tuple_type {
         for (_, tuple) in &facts {
-          if !tuple_type.matches(&tuple) {
+          if !tuple_type.matches(tuple) {
             return Err(IntegrateError::Runtime(RuntimeError::Database(
               DatabaseError::TypeError {
                 relation: predicate.to_string(),
@@ -620,7 +620,7 @@ impl<Prov: Provenance, P: PointerFamily> InternalIntegrateContext<Prov, P> {
       let pred_tuple_type = self.ram_program.relation_tuple_type(predicate);
       if let Some(tuple_type) = pred_tuple_type {
         for (_, tuple) in &facts {
-          if !tuple_type.matches(&tuple) {
+          if !tuple_type.matches(tuple) {
             return Err(IntegrateError::Runtime(RuntimeError::Database(
               DatabaseError::TypeError {
                 relation: predicate.to_string(),
@@ -658,7 +658,7 @@ impl<Prov: Provenance, P: PointerFamily> InternalIntegrateContext<Prov, P> {
     // Finally execute the ram
     self
       .exec_ctx
-      .incremental_execute_with_monitor(self.ram_program.clone(), &mut self.runtime_env, &mut self.prov_ctx, m)
+      .incremental_execute_with_monitor(self.ram_program.clone(), &self.runtime_env, &self.prov_ctx, m)
       .map_err(IntegrateError::Runtime)?;
 
     // Success
@@ -673,7 +673,7 @@ impl<Prov: Provenance, P: PointerFamily> InternalIntegrateContext<Prov, P> {
     // Finally execute the ram
     self
       .exec_ctx
-      .incremental_execute(self.ram_program.clone(), &mut self.runtime_env, &mut self.prov_ctx)
+      .incremental_execute(self.ram_program.clone(), &self.runtime_env, &self.prov_ctx)
       .map_err(IntegrateError::Runtime)?;
 
     // Success

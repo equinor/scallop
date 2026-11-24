@@ -67,7 +67,7 @@ impl DualNumber2 {
   }
 }
 
-impl<'a> std::ops::Neg for &'a DualNumber2 {
+impl std::ops::Neg for &DualNumber2 {
   type Output = DualNumber2;
 
   fn neg(self) -> Self::Output {
@@ -199,7 +199,7 @@ impl<'a> std::ops::Add<&'a Gradient> for Gradient {
   }
 }
 
-impl<'a> std::ops::Neg for &'a Gradient {
+impl std::ops::Neg for &Gradient {
   type Output = Gradient;
 
   fn neg(self) -> Self::Output {

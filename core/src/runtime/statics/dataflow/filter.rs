@@ -137,13 +137,11 @@ where
 
   fn next(&mut self) -> Option<Self::Item> {
     loop {
-      match self.source_iter.next() {
-        Some(item) => {
-          if (self.filter_fn)(item.tuple.get()) {
-            return Some(item);
-          }
+      {
+        let item = self.source_iter.next()?;
+        if (self.filter_fn)(item.tuple.get()) {
+          return Some(item);
         }
-        None => return None,
       }
     }
   }

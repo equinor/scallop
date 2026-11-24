@@ -52,19 +52,17 @@ pub struct DynamicFindBatch<'a, Prov: Provenance> {
 impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicFindBatch<'a, Prov> {
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
     use std::cmp::Ordering;
-    let key = self.key.clone();
+    let key = &self.key;
     loop {
-      match &self.curr_elem {
-        Some(elem) => match elem.tuple[0].cmp(&key) {
-          Ordering::Less => self.curr_elem = self.source.search_elem_0_until(&key),
-          Ordering::Equal => {
-            let result = elem.clone();
-            self.curr_elem = self.source.next_elem();
-            return Some(result);
-          }
-          Ordering::Greater => return None,
-        },
-        None => return None,
+      let elem = self.curr_elem.as_ref()?;
+      match elem.tuple[0].cmp(key) {
+        Ordering::Less => self.curr_elem = self.source.search_elem_0_until(key),
+        Ordering::Equal => {
+          let result = elem.clone();
+          self.curr_elem = self.source.next_elem();
+          return Some(result);
+        }
+        Ordering::Greater => return None,
       }
     }
   }

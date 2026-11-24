@@ -98,7 +98,7 @@ impl Clause {
       .literals
       .iter()
       .filter_map(|l| match l {
-        Literal::Pos(v) => Some(v.clone()),
+        Literal::Pos(v) => Some(*v),
         Literal::Neg(_) => None,
       })
       .collect()

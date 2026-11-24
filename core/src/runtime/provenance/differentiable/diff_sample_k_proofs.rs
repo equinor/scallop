@@ -64,7 +64,7 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffSampleKProofsProvenance
   type OutputTag = OutputDiffProb;
 
   fn name(&self) -> String {
-    format!("diff-sample-k-proofs")
+    "diff-sample-k-proofs".to_string()
   }
 
   fn tagging_fn(&self, input_tag: Self::InputTag) -> Self::Tag {
@@ -95,9 +95,9 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffSampleKProofsProvenance
 
       // Check if this variable `i` requires grad or not
       if external_tag.is_some() {
-        s.singleton(real.clone(), i.clone())
+        s.singleton(real, *i)
       } else {
-        s.constant(real.clone())
+        s.constant(real)
       }
     };
     let wmc_result = t.wmc(&s, &v);
@@ -115,11 +115,11 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffSampleKProofsProvenance
   }
 
   fn zero(&self) -> Self::Tag {
-    self.base_zero().into()
+    self.base_zero()
   }
 
   fn one(&self) -> Self::Tag {
-    self.base_one().into()
+    self.base_one()
   }
 
   fn add(&self, t1: &Self::Tag, t2: &Self::Tag) -> Self::Tag {
@@ -129,7 +129,6 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffSampleKProofsProvenance
       DNFFormula {
         clauses: sampled_clauses,
       }
-      .into()
     })
   }
 
@@ -150,7 +149,6 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffSampleKProofsProvenance
       DNFFormula {
         clauses: sampled_clauses,
       }
-      .into()
     })
   }
 

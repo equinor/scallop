@@ -19,18 +19,7 @@ fn test_dyn_dataflow_free_range() {
   );
   let batch = df.iter_recent().next().unwrap().collect::<Vec<_>>();
   for i in 1..5 {
-    match &batch[i - 1].tuple {
-      Tuple::Tuple(vs) => {
-        assert_eq!(vs.len(), 1);
-        match vs[0] {
-          Tuple::Value(Value::USize(x)) if x == i => {
-            // Good
-          }
-          _ => assert!(false),
-        }
-      }
-      _ => assert!(false),
-    }
+    assert_eq!(batch[i - 1].tuple, Tuple::from(vec![Value::USize(i)]));
   }
 }
 

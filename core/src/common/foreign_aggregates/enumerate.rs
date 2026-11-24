@@ -6,7 +6,7 @@ use crate::runtime::provenance::*;
 
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct EnumerateAggregate;
 
 impl EnumerateAggregate {
@@ -15,9 +15,9 @@ impl EnumerateAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for EnumerateAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::Enumerate(self)
+impl From<EnumerateAggregate> for DynamicAggregate {
+  fn from(val: EnumerateAggregate) -> Self {
+    DynamicAggregate::Enumerate(val)
   }
 }
 
@@ -56,7 +56,7 @@ impl<Prov: Provenance> Aggregator<Prov> for EnumerateAggregator {
       .into_iter()
       .enumerate()
       .map(|(i, elem)| {
-        let tup = Tuple::from_values(std::iter::once(i.into()).chain(elem.tuple.to_values().into_iter()));
+        let tup = Tuple::from_values(std::iter::once(i.into()).chain(elem.tuple.to_values()));
         DynamicElement::new(tup, elem.tag)
       })
       .collect()

@@ -18,9 +18,9 @@ pub enum Derivative {
 impl Derivative {
   pub fn negate(&self) -> Self {
     match self {
-      Self::Pos(i) => Self::Neg(i.clone()),
+      Self::Pos(i) => Self::Neg(*i),
       Self::Zero => Self::Zero,
-      Self::Neg(i) => Self::Pos(i.clone()),
+      Self::Neg(i) => Self::Pos(*i),
     }
   }
 }
@@ -48,7 +48,7 @@ impl std::fmt::Debug for Prob {
 
 impl std::cmp::PartialEq for Prob {
   fn eq(&self, other: &Self) -> bool {
-    self.0 == other.0
+    self.cmp(other).is_eq()
   }
 }
 
@@ -56,13 +56,13 @@ impl std::cmp::Eq for Prob {}
 
 impl std::cmp::PartialOrd for Prob {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    self.0.partial_cmp(&other.0)
+    Some(self.cmp(other))
   }
 }
 
 impl std::cmp::Ord for Prob {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    self.0.total_cmp(&other.0)
+    FloatKey(self.0).cmp(&FloatKey(other.0))
   }
 }
 
@@ -114,7 +114,7 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffMinMaxProbProvenance<T,
   type OutputTag = OutputDiffProb<T>;
 
   fn name(&self) -> String {
-    format!("diffminmaxprob")
+    "diffminmaxprob".to_string()
   }
 
   fn tagging_fn(&self, input_tag: Self::InputTag) -> Self::Tag {
@@ -212,13 +212,13 @@ impl<T: FromTensor, P: PointerFamily> Aggregator<DiffMinMaxProbProvenance<T, P>>
   }
 }
 
-fn max_min_prob_of_k_count<T, P, E>(sorted_set: &Vec<E>, k: usize) -> Prob
+fn max_min_prob_of_k_count<T, P, E>(sorted_set: &[E], k: usize) -> Prob
 where
   T: FromTensor,
   P: PointerFamily,
   E: Element<DiffMinMaxProbProvenance<T, P>>,
 {
-  let prob = sorted_set
+  sorted_set
     .iter()
     .enumerate()
     .map(|(id, elem)| {
@@ -228,6 +228,5 @@ where
         Prob(1.0 - elem.tag().0, elem.tag().1.negate())
       }
     })
-    .fold(Prob(f64::INFINITY, Derivative::Zero), |a, b| a.min(b));
-  prob.into()
+    .fold(Prob(f64::INFINITY, Derivative::Zero), |a, b| a.min(b))
 }

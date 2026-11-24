@@ -15,10 +15,7 @@ impl NatWithInfty {
   }
 
   pub fn is_infty(&self) -> bool {
-    match self {
-      Self::Infty => true,
-      _ => false,
-    }
+    matches!(self, Self::Infty)
   }
 }
 
@@ -63,7 +60,7 @@ impl Provenance for TropicalProvenance {
   type OutputTag = usize;
 
   fn name(&self) -> String {
-    format!("tropical")
+    "tropical".to_string()
   }
 
   fn tagging_fn(&self, ext_tag: Self::InputTag) -> Self::Tag {

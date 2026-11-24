@@ -21,9 +21,9 @@ impl SortAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for SortAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::Sort(self)
+impl From<SortAggregate> for DynamicAggregate {
+  fn from(val: SortAggregate) -> Self {
+    DynamicAggregate::Sort(val)
   }
 }
 

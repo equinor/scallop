@@ -9,11 +9,11 @@ use super::utils::{compute_saturation_and_update_tag, compute_stable_retain};
 pub fn schedule_dfs<'a, Prov: Provenance>(
   to_add: &'a mut DynamicSortedCollection<Prov>,
   waitlist: &'a mut Vec<DynamicElement<Prov>>,
-  stable: &'a mut Vec<DynamicSortedCollection<Prov>>,
+  stable: &'a mut [DynamicSortedCollection<Prov>],
   ctx: &'a Prov,
 ) {
   // First go over the to_add set
-  if to_add.len() > 0 {
+  if !to_add.is_empty() {
     let mut to_remove_to_add_indices = HashSet::new();
     for stable_batch in stable.iter_mut() {
       let mut index = 0;
@@ -39,7 +39,7 @@ pub fn schedule_dfs<'a, Prov: Provenance>(
   }
 
   // If there exists at least one element left in the to_add set
-  if to_add.len() > 0 {
+  if !to_add.is_empty() {
     // Then we leave only one element in to_add and leave everything else to waitlist
     let num_elems = to_add.len();
     let mut drainer = to_add.drain();
@@ -51,7 +51,7 @@ pub fn schedule_dfs<'a, Prov: Provenance>(
 
     // For the first element, we add that back to delta
     to_add.insert_unchecked(first);
-  } else if waitlist.len() > 0 {
+  } else if !waitlist.is_empty() {
     // Otherwise, we will need to find at least one element in waitlist that is non-saturated
     // For any element in the waitlist that is saturated (that we compute along the way), we
     // update the stable batch with the new index already
@@ -60,7 +60,7 @@ pub fn schedule_dfs<'a, Prov: Provenance>(
       let mut not_found = true;
       for stable_batch in stable.iter_mut() {
         let stable_index = gallop_index(&stable_batch.elements, 0, |y| y < &waitlist_elem);
-        if stable_index >= stable_batch.len() || &stable_batch[stable_index].tuple != &waitlist_elem.tuple {
+        if stable_index >= stable_batch.len() || stable_batch[stable_index].tuple != waitlist_elem.tuple {
           // This element is not found in the current stable batch
         } else {
           let stable_elem = &mut stable_batch[stable_index];

@@ -5,7 +5,7 @@ use crate::runtime::provenance::*;
 
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ExistsAggregate;
 
 impl ExistsAggregate {
@@ -14,9 +14,9 @@ impl ExistsAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for ExistsAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::Exists(self)
+impl From<ExistsAggregate> for DynamicAggregate {
+  fn from(val: ExistsAggregate) -> Self {
+    DynamicAggregate::Exists(val)
   }
 }
 

@@ -86,9 +86,9 @@ impl SDDBuilder {
       .iter()
       .map(|var_id| {
         (
-          var_id.clone(),
+          *var_id,
           sdd_nodes.add_node(SDDNode::Literal {
-            literal: SDDLiteral::PosVar { var_id: var_id.clone() },
+            literal: SDDLiteral::PosVar { var_id: *var_id },
           }),
         )
       })
@@ -99,9 +99,9 @@ impl SDDBuilder {
       .iter()
       .map(|var_id| {
         (
-          var_id.clone(),
+          *var_id,
           sdd_nodes.add_node(SDDNode::Literal {
-            literal: SDDLiteral::NegVar { var_id: var_id.clone() },
+            literal: SDDLiteral::NegVar { var_id: *var_id },
           }),
         )
       })
@@ -114,11 +114,11 @@ impl SDDBuilder {
     // - false is negation of true
     let negation_map = pos_var_nodes
       .iter()
-      .map(|(var_id, pos_node_id)| (pos_node_id.clone(), neg_var_nodes[var_id]))
+      .map(|(var_id, pos_node_id)| (*pos_node_id, neg_var_nodes[var_id]))
       .chain(
         neg_var_nodes
           .iter()
-          .map(|(var_id, neg_node_id)| (neg_node_id.clone(), pos_var_nodes[var_id])),
+          .map(|(var_id, neg_node_id)| (*neg_node_id, pos_var_nodes[var_id])),
       )
       .chain(vec![(false_node, true_node), (true_node, false_node)])
       .collect::<HashMap<_, _>>();
@@ -127,11 +127,11 @@ impl SDDBuilder {
     // - All the Pos/Neg var nodes are ampped to their VTree leaf nodes
     let sdd_node_to_vtree_node_map = pos_var_nodes
       .iter()
-      .map(|(var_id, pos_node_id)| (pos_node_id.clone(), config.vtree.var_to_node_id_map[var_id]))
+      .map(|(var_id, pos_node_id)| (*pos_node_id, config.vtree.var_to_node_id_map[var_id]))
       .chain(
         neg_var_nodes
           .iter()
-          .map(|(var_id, neg_node_id)| (neg_node_id.clone(), config.vtree.var_to_node_id_map[var_id])),
+          .map(|(var_id, neg_node_id)| (*neg_node_id, config.vtree.var_to_node_id_map[var_id])),
       )
       .collect::<HashMap<_, _>>();
     let apply_cache = HashMap::new();
@@ -207,8 +207,8 @@ impl SDDBuilder {
       SDDNode::Literal { .. } => {}
       SDDNode::Or { children } => {
         for SDDElement { prime, sub } in children {
-          Self::mark_visited(sdd_nodes, prime.clone(), visited);
-          Self::mark_visited(sdd_nodes, sub.clone(), visited);
+          Self::mark_visited(sdd_nodes, *prime, visited);
+          Self::mark_visited(sdd_nodes, *sub, visited);
         }
       }
     }
@@ -220,9 +220,9 @@ impl SDDBuilder {
 
   pub fn garbage_collect(&mut self) {
     let mut visited = HashSet::new();
-    if self.roots.len() > 0 {
+    if !self.roots.is_empty() {
       for root in &self.roots {
-        Self::mark_visited(&self.sdd_nodes, root.clone(), &mut visited);
+        Self::mark_visited(&self.sdd_nodes, *root, &mut visited);
       }
       Self::remove_not_visited(&mut self.sdd_nodes, &visited);
     }
@@ -252,7 +252,7 @@ impl SDDBuilder {
   }
 
   fn negation_of(&mut self, node: SDDNodeIndex) -> Option<SDDNodeIndex> {
-    self.negation_map.get(&node).map(SDDNodeIndex::clone)
+    self.negation_map.get(&node).copied()
   }
 
   fn zero(&self, op: ApplyOp) -> SDDNodeIndex {
@@ -299,15 +299,13 @@ impl SDDBuilder {
 
   fn add_or_node(&mut self, children: Vec<SDDElement>, vtree_node: VTreeNodeIndex) -> SDDNodeIndex {
     // Apply shortcuts
-    if children.len() == 2 {
-      if Some(children[0].prime) == self.negation_of(children[1].prime) {
-        if children[0].sub == self.false_node && children[1].sub == self.true_node {
-          return children[1].prime;
-        } else if children[0].sub == self.true_node && children[1].sub == self.false_node {
-          return children[0].prime;
-        } else if children[0].sub == children[1].sub {
-          return children[0].sub;
-        }
+    if children.len() == 2 && Some(children[0].prime) == self.negation_of(children[1].prime) {
+      if children[0].sub == self.false_node && children[1].sub == self.true_node {
+        return children[1].prime;
+      } else if children[0].sub == self.true_node && children[1].sub == self.false_node {
+        return children[0].prime;
+      } else if children[0].sub == children[1].sub {
+        return children[0].sub;
       }
     }
 
@@ -319,7 +317,7 @@ impl SDDBuilder {
     self.sdd_node_to_vtree_node_map.insert(node_id, vtree_node);
 
     // Return node id
-    return node_id;
+    node_id
   }
 
   fn cache_apply_result(&mut self, lhs: SDDNodeIndex, rhs: SDDNodeIndex, op: ApplyOp, result_node: SDDNodeIndex) {
@@ -327,7 +325,7 @@ impl SDDBuilder {
   }
 
   fn lookup_apply_cache(&self, lhs: SDDNodeIndex, rhs: SDDNodeIndex, op: ApplyOp) -> Option<SDDNodeIndex> {
-    self.apply_cache.get(&(lhs, rhs, op)).map(SDDNodeIndex::clone)
+    self.apply_cache.get(&(lhs, rhs, op)).copied()
   }
 
   fn negate_node(&mut self, n: SDDNodeIndex) -> SDDNodeIndex {
@@ -340,7 +338,7 @@ impl SDDBuilder {
     let mut neg_children = Vec::new();
     if let SDDNode::Or { children } = self.sdd_nodes[n].clone() {
       for SDDElement { prime, sub } in children {
-        let sub_neg = self.negate_node(sub.clone());
+        let sub_neg = self.negate_node(sub);
         neg_children.push(SDDElement { prime, sub: sub_neg });
       }
     }
@@ -370,7 +368,7 @@ impl SDDBuilder {
     for SDDElement { prime: p1, sub: s1 } in &c1 {
       for SDDElement { prime: p2, sub: s2 } in &c2 {
         // Generate prime
-        let new_prime = self.apply(p1.clone(), p2.clone(), ApplyOp::Conjoin);
+        let new_prime = self.apply(*p1, *p2, ApplyOp::Conjoin);
 
         // Shortcut for prime
         if self.is_false(new_prime) {
@@ -378,7 +376,7 @@ impl SDDBuilder {
         }
 
         // Generate sub
-        let new_sub = self.apply(s1.clone(), s2.clone(), op);
+        let new_sub = self.apply(*s1, *s2, op);
         new_children.push(SDDElement {
           prime: new_prime,
           sub: new_sub,
@@ -410,10 +408,7 @@ impl SDDBuilder {
         for SDDElement { prime, sub } in children {
           let new_prime = self.apply(prime, n, ApplyOp::Conjoin);
           if !self.is_false(new_prime) {
-            new_children.push(SDDElement {
-              prime: new_prime,
-              sub: sub,
-            });
+            new_children.push(SDDElement { prime: new_prime, sub });
           }
         }
       }
@@ -430,11 +425,8 @@ impl SDDBuilder {
       SDDNode::Or { children } => {
         let mut new_children = Vec::new();
         for SDDElement { prime, sub } in children {
-          let new_sub = self.apply(sub.clone(), n2, op);
-          new_children.push(SDDElement {
-            prime: prime.clone(),
-            sub: new_sub,
-          });
+          let new_sub = self.apply(sub, n2, op);
+          new_children.push(SDDElement { prime, sub: new_sub });
         }
 
         // Construct new or node

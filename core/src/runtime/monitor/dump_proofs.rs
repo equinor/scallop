@@ -9,12 +9,14 @@ use crate::utils::*;
 
 use super::*;
 
+type RecoveredTuple = (String, f64, Vec<Vec<(bool, usize)>>);
+
 #[derive(Clone)]
 pub struct DumpProofsInternal {
   current_tagging_relation: Option<String>,
   tagged_tuples: HashMap<String, Vec<(usize, Option<f64>, String)>>,
   current_recovering_relation: Option<String>,
-  recovered_tuples: HashMap<String, Vec<(String, f64, Vec<Vec<(bool, usize)>>)>>,
+  recovered_tuples: HashMap<String, Vec<RecoveredTuple>>,
 }
 
 pub struct DumpProofsMonitor {
@@ -41,13 +43,13 @@ impl DumpProofsMonitor {
 
   pub fn record_tag(&self, tup: &Tuple, prob: Option<f64>, tag: &DNFFormula) {
     ArcFamily::get_rc_cell_mut(&self.internal, |c| {
-      if let Some(r) = &c.current_tagging_relation {
-        if let Some(id) = tag.get_singleton_id() {
-          c.tagged_tuples
-            .entry(r.to_string())
-            .or_default()
-            .push((id, prob, tup.to_string()));
-        }
+      if let Some(r) = &c.current_tagging_relation
+        && let Some(id) = tag.get_singleton_id()
+      {
+        c.tagged_tuples
+          .entry(r.to_string())
+          .or_default()
+          .push((id, prob, tup.to_string()));
       }
     })
   }
@@ -88,13 +90,19 @@ impl DumpProofsMonitor {
       let dir = env::var("SCALLOP_DUMP_PROOFS_DIR").unwrap_or(".tmp/dumped-tuples".to_string());
       for (relation, tuples) in &c.tagged_tuples {
         let js = serde_json::to_string(&tuples).expect("Cannot serialize tuples");
-        fs::write(&format!("{dir}/{relation}.json"), js).expect("Unable to write file");
+        fs::write(format!("{dir}/{relation}.json"), js).expect("Unable to write file");
       }
       if let Some(tuples) = c.recovered_tuples.get(relation) {
         let js = serde_json::to_string(&tuples).expect("Cannot serialize tuples");
-        fs::write(&format!("{dir}/{relation}.json"), js).expect("Unable to write file");
+        fs::write(format!("{dir}/{relation}.json"), js).expect("Unable to write file");
       }
     })
+  }
+}
+
+impl Default for DumpProofsMonitor {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
@@ -136,7 +144,7 @@ impl<P: PointerFamily> Monitor<top_k_proofs::TopKProofsProvenance<P>> for DumpPr
   }
 
   fn observe_recover(&self, tup: &Tuple, tag: &DNFFormula, output_tag: &f64) {
-    self.record_recover(tup, output_tag.clone(), tag)
+    self.record_recover(tup, *output_tag, tag)
   }
 
   fn observe_finish_recovering_relation(&self, relation: &str) {
@@ -162,7 +170,7 @@ impl<T: FromTensor, P: PointerFamily> Monitor<diff_top_k_proofs::DiffTopKProofsP
   }
 
   fn observe_recover(&self, tup: &Tuple, tag: &DNFFormula, output_tag: &OutputDiffProb) {
-    self.record_recover(tup, output_tag.0.clone(), tag)
+    self.record_recover(tup, output_tag.0, tag)
   }
 
   fn observe_finish_recovering_relation(&self, relation: &str) {

@@ -15,7 +15,7 @@ impl Min {
   {
     let mut iter = args.into_iter();
     let mut curr_min: T = iter.next()?.try_into().ok()?;
-    while let Some(next_elem) = iter.next() {
+    for next_elem in iter {
       let next_elem = next_elem.try_into().ok()?;
       if next_elem < curr_min {
         curr_min = next_elem;

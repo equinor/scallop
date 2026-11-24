@@ -28,16 +28,22 @@ impl<Prov: Provenance> MonitorRegistry<Prov> {
     self.monitors.entry(m.name().to_string()).or_insert(Box::new(m));
   }
 
-  pub fn get(&self, name: &str) -> Option<&Box<dyn Monitor<Prov>>> {
-    self.monitors.get(name)
+  pub fn get(&self, name: &str) -> Option<&dyn Monitor<Prov>> {
+    self.monitors.get(name).map(Box::as_ref)
   }
 
   pub fn load_monitors(&self, names: &[&str]) -> DynamicMonitors<Prov> {
     DynamicMonitors {
       monitors: names
         .iter()
-        .filter_map(|name| self.get(name).map(|m| dyn_clone::clone_box(&**m)))
+        .filter_map(|name| self.get(name).map(dyn_clone::clone_box))
         .collect(),
     }
+  }
+}
+
+impl<Prov: Provenance> Default for MonitorRegistry<Prov> {
+  fn default() -> Self {
+    Self::new()
   }
 }

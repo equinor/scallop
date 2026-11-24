@@ -7,7 +7,7 @@ use scallop_core::testing::*;
 
 #[test]
 fn test_dynamic_filter_1() {
-  let mut ctx = unit::UnitProvenance;
+  let ctx = unit::UnitProvenance;
   let rt = RuntimeEnvironment::default();
 
   // Relations
@@ -15,7 +15,7 @@ fn test_dynamic_filter_1() {
   let mut target = DynamicRelation::<unit::UnitProvenance>::new();
 
   // Initial
-  source.insert_untagged(&mut ctx, vec![(0i8, 1i8), (1i8, 2i8)]);
+  source.insert_untagged(&ctx, vec![(0i8, 1i8), (1i8, 2i8)]);
 
   // Iterate until fixpoint
   while source.changed(&ctx, rt.get_default_scheduler()) || target.changed(&ctx, rt.get_default_scheduler()) {

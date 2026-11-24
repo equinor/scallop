@@ -6,7 +6,7 @@ use crate::runtime::provenance::*;
 
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct RankAggregate;
 
 impl RankAggregate {
@@ -15,9 +15,9 @@ impl RankAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for RankAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::Rank(self)
+impl From<RankAggregate> for DynamicAggregate {
+  fn from(val: RankAggregate) -> Self {
+    DynamicAggregate::Rank(val)
   }
 }
 
@@ -69,21 +69,11 @@ impl<Prov: Provenance> Aggregator<Prov> for RankAggregator {
     _env: &RuntimeEnvironment,
     mut batch: DynamicElements<Prov>,
   ) -> DynamicElements<Prov> {
-    // Helper struct to sort f64
-    #[derive(PartialEq, PartialOrd)]
-    struct OrdF64(f64);
-    impl std::cmp::Eq for OrdF64 {}
-    impl std::cmp::Ord for OrdF64 {
-      fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.partial_cmp(&other.0).unwrap()
-      }
-    }
-
     // Sort the batch
     if self.ascending {
-      batch.sort_by_cached_key(|elem| OrdF64(prov.weight(&elem.tag)));
+      batch.sort_by_cached_key(|elem| crate::utils::FloatKey(prov.weight(&elem.tag)));
     } else {
-      batch.sort_by_cached_key(|elem| OrdF64(-prov.weight(&elem.tag)));
+      batch.sort_by_cached_key(|elem| crate::utils::FloatKey(-prov.weight(&elem.tag)));
     }
 
     // Return
@@ -91,7 +81,7 @@ impl<Prov: Provenance> Aggregator<Prov> for RankAggregator {
       .into_iter()
       .enumerate()
       .map(|(i, elem)| {
-        let tup = Tuple::from_values(std::iter::once(i.into()).chain(elem.tuple.to_values().into_iter()));
+        let tup = Tuple::from_values(std::iter::once(i.into()).chain(elem.tuple.to_values()));
         DynamicElement::new(tup, elem.tag)
       })
       .collect()

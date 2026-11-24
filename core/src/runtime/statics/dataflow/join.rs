@@ -237,6 +237,8 @@ where
   }
 }
 
+type KeyedJoinProduct<K, T1, T2, Prov> = JoinProductIterator<(K, T1), (K, T2), Prov>;
+
 pub struct JoinIterator<'b, I1, I2, K, T1, T2, Prov>
 where
   K: StaticTupleTrait,
@@ -250,7 +252,7 @@ where
   i2: I2,
   i1_curr: Option<StaticElement<(K, T1), Prov>>,
   i2_curr: Option<StaticElement<(K, T2), Prov>>,
-  curr_iter: Option<JoinProductIterator<(K, T1), (K, T2), Prov>>,
+  curr_iter: Option<KeyedJoinProduct<K, T1, T2, Prov>>,
   semiring_ctx: &'b Prov,
 }
 
@@ -290,41 +292,52 @@ where
     loop {
       // First go through curr joint product iterator
       if let Some(curr_iter) = &mut self.curr_iter {
-        if let Some((e1, e2)) = curr_iter.next() {
-          let (k, t1) = e1.tuple.get().clone();
-          let (_, t2) = e2.tuple.get().clone();
-          let tup = (k, t1, t2);
-          let tag = self.semiring_ctx.mult(&e1.tag, &e2.tag);
-          let result = StaticElement::new(tup, tag);
-          return Some(result);
-        } else {
-          // Skip ahead
-          self.i1.step(curr_iter.v1.len() - 1);
-          self.i1_curr = self.i1.next();
-          self.i2.step(curr_iter.v2.len() - 1);
-          self.i2_curr = self.i2.next();
+        match curr_iter.next() {
+          Some((e1, e2)) => {
+            let (k, t1) = e1.tuple.get().clone();
+            let (_, t2) = e2.tuple.get().clone();
+            let tup = (k, t1, t2);
+            let tag = self.semiring_ctx.mult(&e1.tag, &e2.tag);
+            let result = StaticElement::new(tup, tag);
+            return Some(result);
+          }
+          None => {
+            // Skip ahead
+            self.i1.step(curr_iter.v1.len() - 1);
+            self.i1_curr = self.i1.next();
+            self.i2.step(curr_iter.v2.len() - 1);
+            self.i2_curr = self.i2.next();
 
-          // Remove current iterator
-          self.curr_iter = None;
+            // Remove current iterator
+            self.curr_iter = None;
+          }
         }
       }
 
       // Then continue
       match (&self.i1_curr, &self.i2_curr) {
-        (Some(i1_curr), Some(i2_curr)) => match i1_curr.tuple.0.partial_cmp(&i2_curr.tuple.0).unwrap() {
-          Ordering::Less => self.i1_curr = self.i1.search_ahead(|i1_next| i1_next.0 < i2_curr.tuple.0),
+        (Some(i1_curr), Some(i2_curr)) => match i1_curr.tuple.0.cmp_tuple(&i2_curr.tuple.0) {
+          Ordering::Less => {
+            self.i1_curr = self
+              .i1
+              .search_ahead(|i1_next| i1_next.0.cmp_tuple(&i2_curr.tuple.0).is_lt())
+          }
           Ordering::Equal => {
             let key = &i1_curr.tuple.0;
             let v1 = std::iter::once(i1_curr.clone())
-              .chain(self.i1.clone().take_while(|x| &x.tuple.0 == key))
+              .chain(self.i1.clone().take_while(|x| x.tuple.0.cmp_tuple(key).is_eq()))
               .collect::<Vec<_>>();
             let v2 = std::iter::once(i2_curr.clone())
-              .chain(self.i2.clone().take_while(|x| &x.tuple.0 == key))
+              .chain(self.i2.clone().take_while(|x| x.tuple.0.cmp_tuple(key).is_eq()))
               .collect::<Vec<_>>();
             let iter = JoinProductIterator::new(v1, v2);
             self.curr_iter = Some(iter);
           }
-          Ordering::Greater => self.i2_curr = self.i2.search_ahead(|i2_next| i2_next.0 < i1_curr.tuple.0),
+          Ordering::Greater => {
+            self.i2_curr = self
+              .i2
+              .search_ahead(|i2_next| i2_next.0.cmp_tuple(&i1_curr.tuple.0).is_lt())
+          }
         },
         _ => break None,
       }

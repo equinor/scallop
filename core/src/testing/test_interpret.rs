@@ -20,7 +20,7 @@ pub fn expect_interpret_result_with_runtime_option<T>(s: &str, o: RuntimeEnviron
 where
   T: Into<Tuple> + Clone,
 {
-  let prov = unit::UnitProvenance::default();
+  let prov = unit::UnitProvenance;
   let opt = IntegrateOptions {
     compiler_options: CompileOptions::default(),
     execution_options: ExecutionOptions::default(),
@@ -40,7 +40,7 @@ pub fn expect_contains_interpret_result_with_runtime_option<T>(
 ) where
   T: Into<Tuple> + Clone,
 {
-  let prov = unit::UnitProvenance::default();
+  let prov = unit::UnitProvenance;
   let opt = IntegrateOptions {
     compiler_options: CompileOptions::default(),
     execution_options: ExecutionOptions::default(),
@@ -58,7 +58,7 @@ where
   T: Into<Tuple> + Clone,
   F: FnOnce(&mut extensional::ExtensionalDatabase<unit::UnitProvenance>),
 {
-  let prov = unit::UnitProvenance::default();
+  let prov = unit::UnitProvenance;
   let mut interpret_ctx = InterpretContext::<_, RcFamily>::new(s.to_string(), prov).expect("Compilation error");
   f(interpret_ctx.edb());
   interpret_ctx.run().expect("Runtime error");
@@ -103,7 +103,7 @@ pub fn expect_interpret_multi_result(s: &str, expected: Vec<(&str, TestCollectio
 /// Expect the given program to be executed within a given iteration limit.
 /// It panics if the program uses an iteration count more than the limit.
 pub fn expect_interpret_within_iter_limit(s: &str, iter_limit: usize) {
-  let prov = unit::UnitProvenance::default();
+  let prov = unit::UnitProvenance;
   let monitor = monitor::IterationCheckingMonitor::new(iter_limit);
   interpret_string_with_ctx_and_monitor(s.to_string(), prov, &monitor).expect("Interpret Error");
 }

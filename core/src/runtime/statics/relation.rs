@@ -114,7 +114,7 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticRelation<Tup, Prov> {
     self.insert_dataflow_recent(ctx, data, false)
   }
 
-  pub fn insert_dynamic_elements_ref(&self, ctx: &Prov, data: &Vec<crate::runtime::dynamic::DynamicElement<Prov>>)
+  pub fn insert_dynamic_elements_ref(&self, ctx: &Prov, data: &[crate::runtime::dynamic::DynamicElement<Prov>])
   where
     Tuple: AsTuple<Tup>,
   {
@@ -172,6 +172,12 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticRelation<Tup, Prov> {
   }
 }
 
+impl<Tup: StaticTupleTrait, Prov: Provenance> Default for StaticRelation<Tup, Prov> {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 pub trait StaticRelationTrait<Prov: Provenance> {
   fn changed(&mut self, semiring_ctx: &Prov) -> bool;
 }
@@ -217,7 +223,7 @@ where
 
             // Otherwise, we can safely access the index in to_add collection
             let to_add_elem = &mut to_add[index];
-            if &to_add_elem.tuple != &stable_elem.tuple {
+            if to_add_elem.tuple != stable_elem.tuple {
               // If the two elements are not equal, we retain the element in stable batch
               true
             } else {
@@ -230,7 +236,7 @@ where
                 // the tag of that element. Additionally, we will remove the element in the `to_add`
                 // collection.
                 stable_elem.tag = new_tag;
-                to_remove_to_add_indices.insert(index.clone());
+                to_remove_to_add_indices.insert(index);
                 true
               } else {
                 // If we put the new element in recent, then we will not retain the stable element,

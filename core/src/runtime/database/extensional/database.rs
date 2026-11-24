@@ -155,7 +155,7 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
     relation: &str,
     facts: Vec<(Option<Prov::InputTag>, Tuple)>,
   ) -> Result<(), DatabaseError> {
-    let facts: Vec<(_, Tuple)> = facts.into_iter().map(|(tag, tup)| (tag, tup.into())).collect();
+    let facts: Vec<(_, Tuple)> = facts.into_iter().collect();
     self.check_tuples_type(relation, facts.iter().map(|(_, tup)| tup))?;
     self
       .extensional_relations
@@ -170,7 +170,7 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
     relation: &str,
     facts: Vec<(Option<Prov::InputTag>, Tuple)>,
   ) -> Result<(), DatabaseError> {
-    let facts: Vec<(_, Tuple)> = facts.into_iter().map(|(tag, tup)| (tag, tup.into())).collect();
+    let facts: Vec<(_, Tuple)> = facts.into_iter().collect();
     self
       .extensional_relations
       .entry(relation.to_string())
@@ -192,11 +192,11 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
     Tup: StaticTupleTrait,
     Tuple: AsTuple<Tup>,
   {
-    if let Some(extensional_relation) = self.extensional_relations.get(relation) {
-      if !extensional_relation.internal.is_empty() {
-        let data = extensional_relation.internal.iter().collect();
-        rela.insert_dynamic_elements_ref(ctx, &data);
-      }
+    if let Some(extensional_relation) = self.extensional_relations.get(relation)
+      && !extensional_relation.internal.is_empty()
+    {
+      let data = extensional_relation.internal.iter().collect::<Vec<_>>();
+      rela.insert_dynamic_elements_ref(ctx, &data);
     }
   }
 
@@ -260,7 +260,7 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
   }
 
   pub fn internalize(&mut self, env: &RuntimeEnvironment, ctx: &Prov) {
-    for (_, relation) in &mut self.extensional_relations {
+    for relation in self.extensional_relations.values_mut() {
       relation.internalize(env, ctx);
     }
     self.internalized = true
@@ -309,6 +309,12 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
       .extensional_relations
       .entry(relation.predicate.clone())
       .or_insert_with(|| ExtensionalRelation::new_with_metadata(relation.storage.clone()));
+  }
+}
+
+impl<Prov: Provenance> Default for ExtensionalDatabase<Prov> {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

@@ -99,7 +99,7 @@ impl Expr {
       (Self::Constant(c), _) => Self::Constant(c.clone()),
       (Self::Access(a1), Self::Access(a2)) => Self::Access(a2.join(a1)),
       (Self::Access(a), Self::Tuple(t)) => {
-        if a.len() == 0 {
+        if a.is_empty() {
           Self::Tuple(t.clone())
         } else {
           let sub_expr = &t[a.indices[0] as usize];
@@ -108,7 +108,7 @@ impl Expr {
         }
       }
       (Self::Access(a), e) => {
-        if a.len() == 0 {
+        if a.is_empty() {
           e.clone()
         } else {
           panic!("Type mismatch")

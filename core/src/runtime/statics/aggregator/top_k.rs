@@ -36,8 +36,8 @@ where
     let agg = TopKSampler::new(self.k);
     let weights = tuples.iter().map(|e| ctx.weight(&e.tag)).collect();
     let indices = agg.sample_weight_only(rt, weights);
-    let stat_elems = indices.into_iter().map(|i| tuples[i].clone()).collect();
-    stat_elems
+
+    indices.into_iter().map(|i| tuples[i].clone()).collect()
   }
 }
 
