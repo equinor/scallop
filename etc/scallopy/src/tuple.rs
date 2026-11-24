@@ -46,7 +46,7 @@ pub fn to_python_value(val: &Value, env: &PythonRuntimeEnvironment) -> Option<Py
     String(s) => s.into_py_any(py).ok(),
     Symbol(s) => env.symbol_registry.get_symbol(*s).into_py_any(py).ok(),
     SymbolString(s) => s.into_py_any(py).ok(),
-    DateTime(d) => d.to_string().into_py_any(py).ok(),
+    DateTime(d) => utils::display_date_time(*d).to_string().into_py_any(py).ok(),
     Duration(d) => d.to_string().into_py_any(py).ok(),
     Entity(e) => e.into_py_any(py).ok(),
     EntityString(_) => panic!("[Internal Error] Entity string could not be turned to python value"),

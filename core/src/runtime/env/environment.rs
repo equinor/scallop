@@ -344,7 +344,9 @@ impl RuntimeEnvironment {
       (Sub, Tuple::Value(F32(i1)), Tuple::Value(F32(i2))) => Tuple::Value(F32(i1 - i2)),
       (Sub, Tuple::Value(F64(i1)), Tuple::Value(F64(i2))) => Tuple::Value(F64(i1 - i2)),
       (Sub, Tuple::Value(DateTime(i1)), Tuple::Value(Duration(i2))) => Tuple::Value(DateTime(i1 - i2)),
-      (Sub, Tuple::Value(DateTime(i1)), Tuple::Value(DateTime(i2))) => Tuple::Value(Duration((i1 - i2).into())),
+      (Sub, Tuple::Value(DateTime(i1)), Tuple::Value(DateTime(i2))) => {
+        Tuple::Value(Duration(i1.duration_since(i2).into()))
+      }
       (Sub, Tuple::Value(Duration(i1)), Tuple::Value(Duration(i2))) => Tuple::Value(Duration(i1 - i2)),
       (Sub, Tuple::Value(TensorValue(v1)), Tuple::Value(TensorValue(v2))) => {
         v1.sub(v2).map(TensorValue).map(Tuple::Value)?

@@ -1,7 +1,8 @@
 use std::convert::*;
 
-use chrono::{DateTime, Utc};
-use chronoutil::RelativeDuration;
+pub use jiff::Timestamp as DateTime;
+
+use crate::utils::display_date_time;
 
 use super::duration::*;
 use super::foreign_tensor::*;
@@ -29,7 +30,7 @@ pub enum Value {
   String(String),
   Symbol(usize),
   SymbolString(String),
-  DateTime(DateTime<Utc>),
+  DateTime(DateTime),
   Duration(Duration),
   Entity(u64),
   EntityString(String),
@@ -42,16 +43,16 @@ impl Value {
     ValueType::type_of(self)
   }
 
-  pub fn as_date_time(&self) -> DateTime<Utc> {
+  pub fn as_date_time(&self) -> DateTime {
     match self {
-      Self::DateTime(d) => d.clone(),
+      Self::DateTime(d) => *d,
       _ => panic!("Not a DateTime"),
     }
   }
 
   pub fn as_duration(&self) -> Duration {
     match self {
-      Self::Duration(d) => d.clone(),
+      Self::Duration(d) => *d,
       _ => panic!("Not a Duration"),
     }
   }
@@ -171,7 +172,7 @@ impl std::fmt::Display for Value {
       Self::String(i) => f.write_fmt(format_args!("{:?}", i)),
       Self::Symbol(_) => panic!("[Internal Error] Cannot display symbol"),
       Self::SymbolString(s) => f.write_fmt(format_args!("s\"{}\"", s)),
-      Self::DateTime(i) => f.write_fmt(format_args!("t\"{}\"", i)),
+      Self::DateTime(i) => f.write_fmt(format_args!("t\"{}\"", display_date_time(*i))),
       Self::Duration(i) => f.write_fmt(format_args!("d\"{}\"", i)),
       Self::Entity(e) => f.write_fmt(format_args!("entity({e:#x})")),
       Self::EntityString(s) => f.write_fmt(format_args!("entity_string({s})")),
@@ -289,15 +290,15 @@ impl From<String> for Value {
   }
 }
 
-impl From<DateTime<Utc>> for Value {
-  fn from(dt: DateTime<Utc>) -> Self {
+impl From<DateTime> for Value {
+  fn from(dt: DateTime) -> Self {
     Self::DateTime(dt)
   }
 }
 
-impl From<RelativeDuration> for Value {
-  fn from(d: RelativeDuration) -> Self {
-    Self::Duration(d.into())
+impl From<Duration> for Value {
+  fn from(d: Duration) -> Self {
+    Self::Duration(d)
   }
 }
 
