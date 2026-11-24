@@ -1,3 +1,8 @@
+use scallop_core::common::foreign_aggregate::Aggregator;
+use scallop_core::common::foreign_aggregates::RankAggregator;
+use scallop_core::common::tuple::Tuple;
+use scallop_core::runtime::dynamic::DynamicElement;
+use scallop_core::runtime::env::RuntimeEnvironment;
 use scallop_core::runtime::provenance::*;
 use scallop_core::testing::*;
 use scallop_core::utils::*;
@@ -246,6 +251,27 @@ fn test_rank_ascending_2() {
     ),
     min_max_prob::MinMaxProbProvenance::cmp,
   );
+}
+
+#[test]
+fn test_rank_puts_nan_weights_last_in_both_directions() {
+  let prov = min_max_prob::MinMaxProbProvenance::new();
+  let env = RuntimeEnvironment::default();
+  let batch = vec![
+    DynamicElement::new(0i32, 0.1),
+    DynamicElement::new(1i32, f64::NAN),
+    DynamicElement::new(2i32, 0.9),
+  ];
+
+  for (ascending, expected) in [(true, [0i32, 2, 1]), (false, [2, 0, 1])] {
+    let ranked = RankAggregator { ascending }.aggregate(&prov, &env, batch.clone());
+    let expected = expected
+      .into_iter()
+      .enumerate()
+      .map(|(rank, digit)| Tuple::from_values([rank.into(), digit.into()].into_iter()))
+      .collect::<Vec<_>>();
+    assert_eq!(ranked.into_iter().map(|elem| elem.tuple).collect::<Vec<_>>(), expected);
+  }
 }
 
 #[test]

@@ -238,21 +238,14 @@ where
 
   fn next(&mut self) -> Option<Self::Item> {
     loop {
-      match &self.i1_curr {
-        Some(i1_curr) => match self.i2_clone.next() {
-          Some(i2_curr) => {
-            let tup = (i1_curr.tuple.get().clone(), i2_curr.tuple.get().clone());
-            let tag = self.semiring_ctx.mult(&i1_curr.tag, &i2_curr.tag);
-            let elem = StaticElement::new(tup, tag);
-            return Some(elem);
-          }
-          None => {
-            self.i1_curr = self.i1.next();
-            self.i2_clone = self.i2_source.clone();
-          }
-        },
-        None => return None,
+      let i1_curr = self.i1_curr.as_ref()?;
+      if let Some(i2_curr) = self.i2_clone.next() {
+        let tup = (i1_curr.tuple.get().clone(), i2_curr.tuple.get().clone());
+        let tag = self.semiring_ctx.mult(&i1_curr.tag, &i2_curr.tag);
+        return Some(StaticElement::new(tup, tag));
       }
+      self.i1_curr = self.i1.next();
+      self.i2_clone = self.i2_source.clone();
     }
   }
 }

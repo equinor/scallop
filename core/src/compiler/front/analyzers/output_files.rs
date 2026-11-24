@@ -95,6 +95,12 @@ impl OutputFilesAnalysis {
   }
 }
 
+impl Default for OutputFilesAnalysis {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<QueryDecl> for OutputFilesAnalysis {
   fn visit(&mut self, qd: &QueryDecl) {
     self.process_attributes(qd.query().create_relation_name(), qd.attrs());

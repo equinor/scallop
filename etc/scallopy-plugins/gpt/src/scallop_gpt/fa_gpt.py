@@ -1,11 +1,13 @@
-from typing import *
+from collections.abc import Sequence
+from typing import List, Optional
 import re
 import json
 
-import openai
+from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 import scallopy
 
-from . import ScallopGPTPlugin
+from .plugin import ScallopGPTPlugin, message_text
 
 FA_NAME = "gpt"
 ERR_HEAD = f"[@{FA_NAME}]"
@@ -35,7 +37,7 @@ def get_gpt(plugin: ScallopGPTPlugin):
     # Compute the number of `b`ounds and the number of `f`rees.
     regex_match = re.match("^(b*)(f+)$", pattern)
     assert regex_match is not None, f"{ERR_HEAD} pattern must start with b (optional) and ending with f (required)"
-    num_bounded, num_free = len(regex_match[1]), len(regex_match[2])
+    num_bounded = len(regex_match[1])
 
     # Make sure that the types are good
     assert all([at.is_string() for at in arg_types[:num_bounded]]), f"{ERR_HEAD} annotation requires all input arguments to have `String` type"
@@ -50,7 +52,7 @@ def get_gpt(plugin: ScallopGPTPlugin):
       output_arg_types=arg_types[num_bounded:],
       tag_type=None,
     )
-    def invoke_gpt(*args):
+    def invoke_gpt(*args: str):
       assert len(args) == num_bounded
 
       if model is None:
@@ -74,8 +76,7 @@ def get_gpt(plugin: ScallopGPTPlugin):
         # Create a request to openai gpt
         plugin.increment_num_performed_request()
         system_ctx, messages = fill_template([filled_prompt])
-        _, current_conversation = query_gpt_completion(system_ctx, messages, local_model)
-        responses = extract_responses(current_conversation)
+        responses = query_gpt_completion(plugin.client(), system_ctx, messages, local_model)
 
         # Debug print
         if debug:
@@ -103,8 +104,8 @@ def get_boundness(adornment) -> str:
 def fill_prompt(
   header: str,
   prompt: str,
-  examples: Optional[List[Tuple[str]]],
-  args: List[str],
+  examples: Sequence[Sequence[str]],
+  args: Sequence[str],
   arg_names: List[str],
   num_bounded: int
 ):
@@ -141,7 +142,7 @@ def fill_prompt(
 def parse_choice_text(text: str, arg_names: List[str], arg_types: List, num_bounded: int):
   try:
     answers_json = json.loads(text)
-  except:
+  except json.JSONDecodeError:
     raise Exception(f"{ERR_HEAD} error when parsing JSON from GPT outputs. GPT output:\n{text}") from None
   answer = []
   for (arg_name, arg_type) in zip(arg_names[num_bounded:], arg_types[num_bounded:]):
@@ -152,30 +153,28 @@ def parse_choice_text(text: str, arg_names: List[str], arg_types: List, num_boun
   return tuple(answer)
 
 
-def query_gpt_completion(system_ctx, messages, model):
-  current_conversation = [system_ctx]
+def query_gpt_completion(
+  client: OpenAI,
+  system_ctx: ChatCompletionSystemMessageParam,
+  messages: Sequence[ChatCompletionUserMessageParam],
+  model: str,
+) -> list[str]:
+  current_conversation: list[ChatCompletionMessageParam] = [system_ctx]
   responses = []
   for message in messages:
     current_conversation.append(message)
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
       model=model,
       messages=current_conversation,
       temperature=0)
-    responses.append(response)
-    current_conversation.append(response['choices'][0]['message'])
-  response_pairs = (responses, current_conversation)
-  return response_pairs
+    reply = response.choices[0].message
+    text = message_text(reply)
+    responses.append(text)
+    current_conversation.append({"role": reply.role, "content": text})
+  return responses
 
 
-def fill_template(texts):
-  system_ctx = {"role": "system", "content": f"You are a knowledgable assistant. "}
-  messages = [{"role": "user", "content": text} for text in texts]
+def fill_template(texts: Sequence[str]) -> tuple[ChatCompletionSystemMessageParam, list[ChatCompletionUserMessageParam]]:
+  system_ctx: ChatCompletionSystemMessageParam = {"role": "system", "content": "You are a knowledgable assistant. "}
+  messages: list[ChatCompletionUserMessageParam] = [{"role": "user", "content": text} for text in texts]
   return system_ctx, messages
-
-
-def extract_responses(conversation):
-  gpt_responses = []
-  for dialogue in conversation:
-    if dialogue['role'] == 'assistant':
-      gpt_responses.append(dialogue['content'])
-  return gpt_responses

@@ -1,4 +1,4 @@
-///! A-Star Search Scheduling
+//! Beam Search Scheduling
 use std::collections::*;
 
 use crate::runtime::dynamic::*;
@@ -11,12 +11,12 @@ use super::utils::compute_stable_retain;
 pub fn schedule_beam<'a, Prov: Provenance>(
   to_add: &'a mut DynamicSortedCollection<Prov>,
   waitlist: &'a mut Vec<DynamicElement<Prov>>,
-  stable: &'a mut Vec<DynamicSortedCollection<Prov>>,
+  stable: &'a mut [DynamicSortedCollection<Prov>],
   ctx: &'a Prov,
   beam_size: usize,
 ) {
   // First go over the to_add set
-  if to_add.len() > 0 {
+  if !to_add.is_empty() {
     let mut to_remove_to_add_indices = HashSet::new();
     for stable_batch in stable.iter_mut() {
       let mut index = 0;
@@ -61,7 +61,7 @@ pub fn schedule_beam<'a, Prov: Provenance>(
 
     // The rest goes into waitlist; notice that this is in chronological + weight-increasing
     // manner
-    waitlist.extend(sorted_delta.into_iter());
+    waitlist.extend(sorted_delta);
   } else {
     // We first insert everything from the delta to the to_add
     for elem in sorted_delta {
@@ -70,7 +70,7 @@ pub fn schedule_beam<'a, Prov: Provenance>(
 
     // If there is not enough elements in delta, we will need to pull from
     // the waitlist. We need to pop somethings from the waitlist. We can just pop the last ones
-    while to_add.len() < beam_size && waitlist.len() > 0 {
+    while to_add.len() < beam_size && !waitlist.is_empty() {
       to_add.insert(waitlist.pop().unwrap(), ctx);
     }
   }

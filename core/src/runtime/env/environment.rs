@@ -215,7 +215,7 @@ impl RuntimeEnvironment {
 
   pub fn internalize_expr(&self, expr: &Expr) -> Option<Expr> {
     match expr {
-      Expr::Access(a) => Some(Expr::Access(a.clone())),
+      Expr::Access(a) => Some(Expr::Access(*a)),
       Expr::Tuple(t) => t
         .iter()
         .map(|e| self.internalize_expr(e))
@@ -318,13 +318,13 @@ impl RuntimeEnvironment {
       (Add, Tuple::Value(Duration(d1)), Tuple::Value(DateTime(t2))) => Tuple::Value(DateTime(t2 + d1)),
       (Add, Tuple::Value(Duration(d1)), Tuple::Value(Duration(d2))) => Tuple::Value(Duration(d1 + d2)),
       (Add, Tuple::Value(TensorValue(v1)), Tuple::Value(TensorValue(v2))) => {
-        v1.add(v2).map(TensorValue).map(Tuple::Value)?
+        v1.checked_add(v2).map(TensorValue).map(Tuple::Value)?
       }
       (Add, Tuple::Value(TensorValue(v1)), Tuple::Value(F64(f2))) => {
-        v1.add(f2.into()).map(TensorValue).map(Tuple::Value)?
+        v1.checked_add(f2.into()).map(TensorValue).map(Tuple::Value)?
       }
       (Add, Tuple::Value(F64(f1)), Tuple::Value(TensorValue(v2))) => {
-        v2.add(f1.into()).map(TensorValue).map(Tuple::Value)?
+        v2.checked_add(f1.into()).map(TensorValue).map(Tuple::Value)?
       }
       (Add, b1, b2) => panic!("Cannot perform ADD on {:?} and {:?}", b1, b2),
 
@@ -349,13 +349,13 @@ impl RuntimeEnvironment {
       }
       (Sub, Tuple::Value(Duration(i1)), Tuple::Value(Duration(i2))) => Tuple::Value(Duration(i1 - i2)),
       (Sub, Tuple::Value(TensorValue(v1)), Tuple::Value(TensorValue(v2))) => {
-        v1.sub(v2).map(TensorValue).map(Tuple::Value)?
+        v1.checked_sub(v2).map(TensorValue).map(Tuple::Value)?
       }
       (Sub, Tuple::Value(TensorValue(v1)), Tuple::Value(F64(f2))) => {
-        v1.sub(f2.into()).map(TensorValue).map(Tuple::Value)?
+        v1.checked_sub(f2.into()).map(TensorValue).map(Tuple::Value)?
       }
       (Sub, Tuple::Value(F64(f1)), Tuple::Value(TensorValue(v2))) => foreign_tensor::TensorValue::from(f1)
-        .sub(v2)
+        .checked_sub(v2)
         .map(TensorValue)
         .map(Tuple::Value)?,
       (Sub, b1, b2) => panic!("Cannot perform SUB on {:?} and {:?}", b1, b2),
@@ -378,13 +378,13 @@ impl RuntimeEnvironment {
       (Mul, Tuple::Value(Duration(i1)), Tuple::Value(I32(i2))) => Tuple::Value(Duration(i1 * i2)),
       (Mul, Tuple::Value(I32(i1)), Tuple::Value(Duration(i2))) => Tuple::Value(Duration(i2 * i1)),
       (Mul, Tuple::Value(TensorValue(v1)), Tuple::Value(TensorValue(v2))) => {
-        v1.mul(v2).map(TensorValue).map(Tuple::Value)?
+        v1.checked_mul(v2).map(TensorValue).map(Tuple::Value)?
       }
       (Mul, Tuple::Value(TensorValue(v1)), Tuple::Value(F64(f2))) => {
-        v1.mul(f2.into()).map(TensorValue).map(Tuple::Value)?
+        v1.checked_mul(f2.into()).map(TensorValue).map(Tuple::Value)?
       }
       (Mul, Tuple::Value(F64(f1)), Tuple::Value(TensorValue(v2))) => foreign_tensor::TensorValue::from(f1)
-        .mul(v2)
+        .checked_mul(v2)
         .map(TensorValue)
         .map(Tuple::Value)?,
       (Mul, b1, b2) => panic!("Cannot perform MUL on {:?} and {:?}", b1, b2),
@@ -654,7 +654,7 @@ impl RuntimeEnvironment {
           (Tuple::Value(Char(s)), T::ISize) => s.to_digit(10).map(|i| Tuple::Value(ISize(i as isize))),
           (Tuple::Value(Char(s)), T::U8) => s.to_digit(10).map(|i| Tuple::Value(U8(i as u8))),
           (Tuple::Value(Char(s)), T::U16) => s.to_digit(10).map(|i| Tuple::Value(U16(i as u16))),
-          (Tuple::Value(Char(s)), T::U32) => s.to_digit(10).map(|i| Tuple::Value(U32(i as u32))),
+          (Tuple::Value(Char(s)), T::U32) => s.to_digit(10).map(|i| Tuple::Value(U32(i))),
           (Tuple::Value(Char(s)), T::U64) => s.to_digit(10).map(|i| Tuple::Value(U64(i as u64))),
           (Tuple::Value(Char(s)), T::U128) => s.to_digit(10).map(|i| Tuple::Value(U128(i as u128))),
           (Tuple::Value(Char(s)), T::USize) => s.to_digit(10).map(|i| Tuple::Value(USize(i as usize))),

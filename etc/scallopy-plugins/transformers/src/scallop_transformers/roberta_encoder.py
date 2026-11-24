@@ -1,7 +1,6 @@
-from typing import *
-
 import scallopy
 from scallop_gpu import get_device
+from torch import Tensor
 
 
 FA_NAME = "roberta_encoder"
@@ -39,7 +38,7 @@ def roberta_encoder(
 
   # Generate foreign function
   @scallopy.foreign_function(name=item.function_decl_name())
-  def encode_text(text: str) -> scallopy.Tensor:
+  def encode_text(text: str) -> Tensor:
     (tokenizer, model) = get_roberta_model(checkpoint)
     device = get_device()
 

@@ -2,7 +2,7 @@
 name = "scli"
 version = "0.2.5"
 authors = ["Ziyang Li <liby99@icloud.com>"]
-edition = "2018"
+edition.workspace = true
 
 [dependencies]
 scallop-core = { path = "../../core" }

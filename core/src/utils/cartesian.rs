@@ -7,7 +7,7 @@ pub fn cartesian(sizes: Vec<usize>) -> Vec<Vec<usize>> {
 
   impl CartesianIterator {
     pub fn new(total: Vec<usize>) -> Self {
-      let indices = std::iter::repeat(0).take(total.len()).collect();
+      let indices = std::iter::repeat_n(0, total.len()).collect();
       let has_curr = total.iter().all(|s| *s > 0);
       Self {
         total,

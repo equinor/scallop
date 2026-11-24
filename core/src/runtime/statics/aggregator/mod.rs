@@ -1,4 +1,4 @@
-mod aggregator;
+mod aggregator_trait;
 mod argmax;
 mod argmin;
 mod argprod;
@@ -11,7 +11,7 @@ mod prod;
 mod sum;
 mod top_k;
 
-pub use aggregator::*;
+pub use aggregator_trait::*;
 pub use argmax::*;
 pub use argmin::*;
 pub use count::*;

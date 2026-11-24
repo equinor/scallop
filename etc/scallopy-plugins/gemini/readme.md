@@ -32,6 +32,10 @@ The Scallop Gemini plugin provides the following constructs:
 
 ### Foreign Attribute `@gemini_encoder`
 
+Text-only features do not require PyTorch. For embeddings, use a Scallopy
+build with tensor support and install `uv pip install './etc/scallopy-plugins/gemini[embeddings]'`.
+The encoder uses the CPU unless the optional `scallop-gpu` plugin selects a GPU.
+
 The encoder uses `gemini-embedding-001` by default and returns a 768-element
 embedding tensor. Embeddings from different models are not interchangeable.
 

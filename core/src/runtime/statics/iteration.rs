@@ -34,7 +34,7 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
   pub fn changed(&mut self) -> bool {
     let mut result = false;
     for relation in self.relations.iter_mut() {
-      if relation.changed(&self.provenance_context) {
+      if relation.changed(self.provenance_context) {
         result = true;
       }
     }
@@ -55,11 +55,11 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     D: dataflow::Dataflow<Tup, Prov>,
     Tup: StaticTupleTrait,
   {
-    r.insert_dataflow_recent(&self.provenance_context, data, self.early_discard)
+    r.insert_dataflow_recent(self.provenance_context, data, self.early_discard)
   }
 
   pub fn unit<U: dataflow::UnitTuple>(&self, first_iteration: bool) -> dataflow::Unit<'_, U, Prov> {
-    dataflow::unit::<U, Prov>(&self.provenance_context, first_iteration)
+    dataflow::unit::<U, Prov>(self.provenance_context, first_iteration)
   }
 
   pub fn product<D1, D2, T1, T2>(&self, v1: D1, v2: D2) -> dataflow::Product<'_, D1, D2, T1, T2, Prov>
@@ -69,7 +69,7 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     D1: dataflow::Dataflow<T1, Prov>,
     D2: dataflow::Dataflow<T2, Prov>,
   {
-    dataflow::product(v1, v2, &self.provenance_context)
+    dataflow::product(v1, v2, self.provenance_context)
   }
 
   pub fn intersect<D1, D2, Tup>(&self, v1: D1, v2: D2) -> dataflow::Intersection<'_, D1, D2, Tup, Prov>
@@ -78,7 +78,7 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     D1: dataflow::Dataflow<Tup, Prov>,
     D2: dataflow::Dataflow<Tup, Prov>,
   {
-    dataflow::intersect(v1, v2, &self.provenance_context)
+    dataflow::intersect(v1, v2, self.provenance_context)
   }
 
   pub fn union<D1, D2, Tup>(&self, v1: D1, v2: D2) -> dataflow::Union<'_, D1, D2, Tup, Prov>
@@ -87,7 +87,7 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     D1: dataflow::Dataflow<Tup, Prov>,
     D2: dataflow::Dataflow<Tup, Prov>,
   {
-    dataflow::union(v1, v2, &self.provenance_context)
+    dataflow::union(v1, v2, self.provenance_context)
   }
 
   pub fn join<D1, D2, K, T1, T2>(&self, v1: D1, v2: D2) -> dataflow::Join<'_, D1, D2, K, T1, T2, Prov>
@@ -98,7 +98,7 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     D1: dataflow::Dataflow<(K, T1), Prov>,
     D2: dataflow::Dataflow<(K, T2), Prov>,
   {
-    dataflow::join(v1, v2, &self.provenance_context)
+    dataflow::join(v1, v2, self.provenance_context)
   }
 
   pub fn difference<D1, D2, Tup>(&self, v1: D1, v2: D2) -> dataflow::Difference<'_, D1, D2, Tup, Prov>
@@ -107,7 +107,7 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     D1: dataflow::Dataflow<Tup, Prov>,
     D2: dataflow::Dataflow<Tup, Prov>,
   {
-    dataflow::difference(v1, v2, &self.provenance_context)
+    dataflow::difference(v1, v2, self.provenance_context)
   }
 
   pub fn antijoin<D1, D2, K, T1>(&self, v1: D1, v2: D2) -> dataflow::Antijoin<'_, D1, D2, K, T1, Prov>
@@ -117,7 +117,7 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     D1: dataflow::Dataflow<(K, T1), Prov>,
     D2: dataflow::Dataflow<K, Prov>,
   {
-    dataflow::antijoin(v1, v2, &self.provenance_context)
+    dataflow::antijoin(v1, v2, self.provenance_context)
   }
 
   pub fn aggregate<A, D, T1>(&self, agg: A, d: D) -> dataflow::AggregationSingleGroup<'_, A, D, T1, Prov>
@@ -126,7 +126,7 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     T1: StaticTupleTrait,
     D: dataflow::Dataflow<T1, Prov>,
   {
-    dataflow::AggregationSingleGroup::new(agg, d, self.runtime_environment, &self.provenance_context)
+    dataflow::AggregationSingleGroup::new(agg, d, self.runtime_environment, self.provenance_context)
   }
 
   pub fn aggregate_implicit_group<A, D, K, T1>(
@@ -140,7 +140,7 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     T1: StaticTupleTrait,
     D: dataflow::Dataflow<(K, T1), Prov>,
   {
-    dataflow::AggregationImplicitGroup::new(agg, d, self.runtime_environment, &self.provenance_context)
+    dataflow::AggregationImplicitGroup::new(agg, d, self.runtime_environment, self.provenance_context)
   }
 
   pub fn aggregate_join_group<A, D1, D2, K, T1, T2>(
@@ -157,13 +157,13 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     D1: dataflow::Dataflow<(K, T1), Prov>,
     D2: dataflow::Dataflow<(K, T2), Prov>,
   {
-    dataflow::AggregationJoinGroup::new(agg, v1, v2, self.runtime_environment, &self.provenance_context)
+    dataflow::AggregationJoinGroup::new(agg, v1, v2, self.runtime_environment, self.provenance_context)
   }
 
   pub fn complete<Tup>(&self, r: &StaticRelation<Tup, Prov>) -> StaticCollection<Tup, Prov>
   where
     Tup: StaticTupleTrait,
   {
-    r.complete(&self.provenance_context)
+    r.complete(self.provenance_context)
   }
 }

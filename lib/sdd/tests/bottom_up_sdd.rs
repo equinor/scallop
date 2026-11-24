@@ -5,8 +5,8 @@ fn test_bu_sdd_false() {
   let form = bf(0) & !bf(0);
   let config = bottom_up::SDDBuilderConfig::with_formula(&form);
   let sdd = bottom_up::SDDBuilder::with_config(config).build(&form);
-  assert_eq!(sdd.eval_i(vec![(0, false)]), false);
-  assert_eq!(sdd.eval_i(vec![(0, true)]), false);
+  assert!(!sdd.eval_i(vec![(0, false)]));
+  assert!(!sdd.eval_i(vec![(0, true)]));
 }
 
 #[test]
@@ -14,8 +14,8 @@ fn test_bu_sdd_true() {
   let form = bf(0) | !bf(0);
   let config = bottom_up::SDDBuilderConfig::with_formula(&form);
   let sdd = bottom_up::SDDBuilder::with_config(config).build(&form);
-  assert_eq!(sdd.eval_i(vec![(0, false)]), true);
-  assert_eq!(sdd.eval_i(vec![(0, true)]), true);
+  assert!(sdd.eval_i(vec![(0, false)]));
+  assert!(sdd.eval_i(vec![(0, true)]));
 }
 
 #[test]

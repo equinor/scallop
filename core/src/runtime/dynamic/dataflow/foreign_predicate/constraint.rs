@@ -67,7 +67,7 @@ impl<'a, Prov: Provenance> Batches<'a, Prov> for ForeignPredicateConstraintBatch
   fn next_batch(&mut self) -> Option<DynamicBatch<'a, Prov>> {
     self.batches.next_batch().map(|batch| {
       DynamicBatch::new(ForeignPredicateConstraintBatch {
-        batch: batch,
+        batch,
         foreign_predicate: self.foreign_predicate.clone(),
         args: self.args.clone(),
         env: self.env,

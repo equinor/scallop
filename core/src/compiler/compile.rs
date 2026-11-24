@@ -26,12 +26,12 @@ pub fn compile_source_to_ram_with_options<S: front::Source>(
   if options.debug || options.debug_front {
     println!("======== Front Program ========");
     front_context.dump_ir();
-    println!("");
+    println!();
   }
 
   // Construct back ir
   let mut back_ir = front_context.to_back_program();
-  if let Err(e) = back_ir.apply_optimizations(&options) {
+  if let Err(e) = back_ir.apply_optimizations(options) {
     return Err(vec![CompileError::Back(e)]);
   }
 
@@ -39,11 +39,11 @@ pub fn compile_source_to_ram_with_options<S: front::Source>(
   if options.debug || options.debug_back {
     println!("======== Back Program ========");
     println!("{}", back_ir);
-    println!("");
+    println!();
   }
 
   // Construct ram ir
-  let mut ram = match back_ir.to_ram_program(&options) {
+  let mut ram = match back_ir.to_ram_program(options) {
     Ok(ram) => ram,
     Err(e) => {
       return Err(vec![CompileError::Back(e)]);

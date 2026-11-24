@@ -27,6 +27,12 @@ impl AlgebraicDataTypeAnalysis {
   }
 }
 
+impl Default for AlgebraicDataTypeAnalysis {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<AlgebraicDataTypeDecl> for AlgebraicDataTypeAnalysis {
   fn visit(&mut self, decl: &AlgebraicDataTypeDecl) {
     // Add the type to the set of adt types

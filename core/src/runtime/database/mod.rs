@@ -1,8 +1,8 @@
 mod error;
-mod metadata;
 pub mod extensional;
 pub mod intentional;
 pub mod io;
+mod metadata;
 
-pub use metadata::*;
 pub use error::*;
+pub use metadata::*;

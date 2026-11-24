@@ -1,9 +1,5 @@
 use scallop_core::{
-  runtime::{
-    env::RuntimeEnvironmentOptions,
-    env::Scheduler,
-    provenance,
-  },
+  runtime::{env::RuntimeEnvironmentOptions, env::Scheduler, provenance},
   testing::*,
   utils::RcFamily,
 };

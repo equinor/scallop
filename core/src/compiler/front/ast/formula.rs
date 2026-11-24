@@ -92,7 +92,7 @@ impl NegAtom {
 #[doc(hidden)]
 pub struct _Case {
   pub variable: Variable,
-  pub entity: Entity,
+  pub entity: Box<Entity>,
 }
 
 impl Case {
@@ -159,7 +159,7 @@ impl VariableOrWildcard {
 #[derive(Clone, Debug, PartialEq, Serialize, AstNode)]
 pub struct _Range {
   pub left: Variable,
-  pub lower: Expr,
-  pub upper: Expr,
+  pub lower: Box<Expr>,
+  pub upper: Box<Expr>,
   pub inclusive: bool,
 }

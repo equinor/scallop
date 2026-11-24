@@ -784,7 +784,7 @@ fn test_not_exists_1() {
       rel color = {(0, "red"), (1, "green")}
       rel result() :- not exists(o: color(o, "blue"))
     "#,
-    ("result", vec![()].into()),
+    ("result", vec![()]),
   )
 }
 
@@ -1196,7 +1196,7 @@ fn no_nan_1() {
     rel P = {0.0, 1.0}
     rel Q(a / b) = R(a) and P(b)
     "#,
-    ("Q", vec![(0.0f32,), (3.0f32,), (5.0f32,), (std::f32::INFINITY,)]),
+    ("Q", vec![(0.0f32,), (3.0f32,), (5.0f32,), (f32::INFINITY,)]),
   )
 }
 

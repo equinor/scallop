@@ -23,7 +23,7 @@ impl SymbolRegistry {
   /// Register a symbol into the registry and return an ID to represent the symbol
   pub fn register(&mut self, symbol: String) -> usize {
     if let Some(id) = self.symbol_to_id_map.get(&symbol) {
-      id.clone()
+      *id
     } else {
       let id = self.id_to_symbol_map.len();
       self.symbol_to_id_map.insert(symbol.clone(), id);
@@ -40,5 +40,11 @@ impl SymbolRegistry {
   /// Getting a symbol using its ID
   pub fn get_symbol(&self, id: usize) -> Option<&String> {
     self.id_to_symbol_map.get(id)
+  }
+}
+
+impl Default for SymbolRegistry {
+  fn default() -> Self {
+    Self::new()
   }
 }

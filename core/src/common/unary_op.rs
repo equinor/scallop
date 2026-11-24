@@ -12,17 +12,11 @@ pub enum UnaryOp {
 
 impl UnaryOp {
   pub fn is_pos_neg(&self) -> bool {
-    match self {
-      Self::Pos | Self::Neg => true,
-      _ => false,
-    }
+    matches!(self, Self::Pos | Self::Neg)
   }
 
   pub fn is_not(&self) -> bool {
-    match self {
-      Self::Not => true,
-      _ => false,
-    }
+    matches!(self, Self::Not)
   }
 
   pub fn cast_to_type(&self) -> Option<&ValueType> {

@@ -62,23 +62,23 @@ impl ADTVariantRegistry {
     match &entity {
       ast::Entity::Expr(e) => match e {
         ast::Expr::Constant(c) => match (&c, ty) {
-          (ast::Constant::Integer(i), ValueType::I8) => Ok(Value::I8(i.int().clone() as i8)),
-          (ast::Constant::Integer(i), ValueType::I16) => Ok(Value::I16(i.int().clone() as i16)),
-          (ast::Constant::Integer(i), ValueType::I32) => Ok(Value::I32(i.int().clone() as i32)),
-          (ast::Constant::Integer(i), ValueType::I64) => Ok(Value::I64(i.int().clone() as i64)),
-          (ast::Constant::Integer(i), ValueType::I128) => Ok(Value::I128(i.int().clone() as i128)),
-          (ast::Constant::Integer(i), ValueType::ISize) => Ok(Value::ISize(i.int().clone() as isize)),
-          (ast::Constant::Integer(i), ValueType::U8) => Ok(Value::U8(i.int().clone() as u8)),
-          (ast::Constant::Integer(i), ValueType::U16) => Ok(Value::U16(i.int().clone() as u16)),
-          (ast::Constant::Integer(i), ValueType::U32) => Ok(Value::U32(i.int().clone() as u32)),
-          (ast::Constant::Integer(i), ValueType::U64) => Ok(Value::U64(i.int().clone() as u64)),
-          (ast::Constant::Integer(i), ValueType::U128) => Ok(Value::U128(i.int().clone() as u128)),
-          (ast::Constant::Integer(i), ValueType::USize) => Ok(Value::USize(i.int().clone() as usize)),
-          (ast::Constant::Integer(i), ValueType::F32) => Ok(Value::F32(i.int().clone() as f32)),
-          (ast::Constant::Integer(i), ValueType::F64) => Ok(Value::F64(i.int().clone() as f64)),
-          (ast::Constant::Float(f), ValueType::F32) => Ok(Value::F32(f.float().clone() as f32)),
-          (ast::Constant::Float(f), ValueType::F64) => Ok(Value::F64(f.float().clone() as f64)),
-          (ast::Constant::Boolean(b), ValueType::Bool) => Ok(Value::Bool(b.value().clone())),
+          (ast::Constant::Integer(i), ValueType::I8) => Ok(Value::I8(*i.int() as i8)),
+          (ast::Constant::Integer(i), ValueType::I16) => Ok(Value::I16(*i.int() as i16)),
+          (ast::Constant::Integer(i), ValueType::I32) => Ok(Value::I32(*i.int() as i32)),
+          (ast::Constant::Integer(i), ValueType::I64) => Ok(Value::I64(*i.int())),
+          (ast::Constant::Integer(i), ValueType::I128) => Ok(Value::I128(*i.int() as i128)),
+          (ast::Constant::Integer(i), ValueType::ISize) => Ok(Value::ISize(*i.int() as isize)),
+          (ast::Constant::Integer(i), ValueType::U8) => Ok(Value::U8(*i.int() as u8)),
+          (ast::Constant::Integer(i), ValueType::U16) => Ok(Value::U16(*i.int() as u16)),
+          (ast::Constant::Integer(i), ValueType::U32) => Ok(Value::U32(*i.int() as u32)),
+          (ast::Constant::Integer(i), ValueType::U64) => Ok(Value::U64(*i.int() as u64)),
+          (ast::Constant::Integer(i), ValueType::U128) => Ok(Value::U128(*i.int() as u128)),
+          (ast::Constant::Integer(i), ValueType::USize) => Ok(Value::USize(*i.int() as usize)),
+          (ast::Constant::Integer(i), ValueType::F32) => Ok(Value::F32(*i.int() as f32)),
+          (ast::Constant::Integer(i), ValueType::F64) => Ok(Value::F64(*i.int() as f64)),
+          (ast::Constant::Float(f), ValueType::F32) => Ok(Value::F32(*f.float() as f32)),
+          (ast::Constant::Float(f), ValueType::F64) => Ok(Value::F64(*f.float())),
+          (ast::Constant::Boolean(b), ValueType::Bool) => Ok(Value::Bool(*b.value())),
           (ast::Constant::Char(c), ValueType::Char) => Ok(Value::Char(c.parse_char())),
           (ast::Constant::String(s), ValueType::String) => Ok(Value::String(s.string().clone())),
           _ => Err(ADTEntityError::CannotUnifyType),
@@ -120,6 +120,12 @@ impl ADTVariantRegistry {
         }
       }
     }
+  }
+}
+
+impl Default for ADTVariantRegistry {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

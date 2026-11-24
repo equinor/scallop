@@ -60,7 +60,7 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffTopBottomKClausesProven
   type OutputTag = OutputDiffProb;
 
   fn name(&self) -> String {
-    format!("diff-top-bottom-k-clauses")
+    "diff-top-bottom-k-clauses".to_string()
   }
 
   fn tagging_fn(&self, input_tag: Self::InputTag) -> Self::Tag {
@@ -91,9 +91,9 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffTopBottomKClausesProven
 
       // Check if this variable `i` requires grad or not
       if external_tag.is_some() {
-        s.singleton(real.clone(), i.clone())
+        s.singleton(real, *i)
       } else {
-        s.constant(real.clone())
+        s.constant(real)
       }
     };
     let wmc_result = if self.wmc_with_disjunctions {

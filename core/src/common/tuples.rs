@@ -39,7 +39,7 @@ where
         result.push(v);
       }
     }
-    return result;
+    result
   }
 
   fn arg_minimum(self, num_args: usize) -> Vec<&'a Tuple> {
@@ -47,7 +47,7 @@ where
     let mut min_value: Option<&[Tuple]> = None;
     for v in self {
       if let Some(m) = &min_value {
-        if &v[num_args..] == &m[..] {
+        if v[num_args..] == m[..] {
           result.push(v);
         } else if &v[num_args..] < m {
           min_value = Some(&v[num_args..]);
@@ -59,7 +59,7 @@ where
         result.push(v);
       }
     }
-    return result;
+    result
   }
 
   fn maximum(self) -> Vec<&'a Tuple> {
@@ -79,7 +79,7 @@ where
         result.push(v);
       }
     }
-    return result;
+    result
   }
 
   fn arg_maximum(self, num_args: usize) -> Vec<&'a Tuple> {
@@ -87,9 +87,9 @@ where
     let mut max_value: Option<&[Tuple]> = None;
     for v in self {
       if let Some(m) = &max_value {
-        if &v[num_args..] == &m[..] {
+        if v[num_args..] == m[..] {
           result.push(v);
-        } else if &v[num_args..] > &m[..] {
+        } else if v[num_args..] > m[..] {
           max_value = Some(&v[num_args..]);
           result.clear();
           result.push(v);
@@ -99,6 +99,6 @@ where
         result.push(v);
       }
     }
-    return result;
+    result
   }
 }

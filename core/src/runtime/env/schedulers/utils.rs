@@ -17,13 +17,13 @@ pub fn compute_stable_retain<Prov: Provenance>(
 
   // Otherwise, we can safely access the index in to_add collection
   let to_add_elem = &mut to_add[index];
-  if &to_add_elem.tuple != &stable_elem.tuple {
+  if to_add_elem.tuple != stable_elem.tuple {
     // If the two elements are not equal, we retain the element in stable batch
     true
   } else {
     // If the two elements are equal, we will keep the element in stable if it is saturated
     if compute_saturation_and_update_tag(to_add_elem, stable_elem, ctx) {
-      to_remove_to_add_indices.insert(index.clone());
+      to_remove_to_add_indices.insert(index);
       true
     } else {
       false

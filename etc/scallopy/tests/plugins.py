@@ -1,8 +1,20 @@
 import unittest
+from importlib.metadata import EntryPoint
+from unittest.mock import patch
 
 import scallopy
+from scallopy.utils.image import box_slices
+
+
+class ExamplePlugin(scallopy.Plugin):
+  pass
+
 
 class TestConfigure(unittest.TestCase):
+  def test_padded_crop_clips_at_edges_of_rectangular_image(self):
+    rows, columns = box_slices(5, 10, x=8, y=0, box_width=2, box_height=2, padding=1)
+    self.assertEqual((rows, columns), (slice(0, 3), slice(7, 10)))
+
   def test_loading_no_plugin(self):
     # Create a plugin registry
     plugin_registry = scallopy.PluginRegistry()
@@ -20,6 +32,16 @@ class TestConfigure(unittest.TestCase):
     plugin_registry.load_plugin(Temp())
     plugins = plugin_registry.loaded_plugins()
     assert plugins == ["Temp"], "there should one configure plugin"
+
+  def test_load_plugins_from_entry_points_with_filter(self):
+    entry_points = [
+      EntryPoint("enabled", f"{__name__}:ExamplePlugin", "scallop.plugin"),
+      EntryPoint("excluded", f"{__name__}:ExamplePlugin", "scallop.plugin"),
+    ]
+    with patch("scallopy.plugin.registry.metadata.entry_points", return_value=entry_points):
+      registry = scallopy.PluginRegistry(load_from_entry_points=True, filter=lambda name: name == "enabled")
+
+    self.assertEqual(registry.loaded_plugins(), ["ExamplePlugin"])
 
   def test_py_eval(self):
     # When initializing a plugin registry, there is no plugin

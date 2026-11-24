@@ -146,8 +146,8 @@ impl Dataflow {
       Self::Reduce(r) => {
         let group_by_predicate = match &r.group_by {
           ReduceGroupByType::Join(group_by_predicate) => format!(" where {}", group_by_predicate),
-          ReduceGroupByType::Implicit => format!(" implicit group"),
-          _ => format!(""),
+          ReduceGroupByType::Implicit => " implicit group".to_string(),
+          _ => String::new(),
         };
         let info = &r.aggregate_info;
         let pos_params = if !info.pos_params.is_empty() {
@@ -158,7 +158,7 @@ impl Dataflow {
             .collect::<Vec<_>>()
             .join(", ")
         } else {
-          format!("")
+          String::new()
         };
         let named_params = if !info.named_params.is_empty() {
           let comma = if info.pos_params.is_empty() { "" } else { ", " };
@@ -170,17 +170,17 @@ impl Dataflow {
             .join(", ");
           format!("{comma}{s}")
         } else {
-          format!("")
+          String::new()
         };
         let params = if info.pos_params.is_empty() && info.named_params.is_empty() {
-          format!("")
+          String::new()
         } else {
           format!("<{}{}>", pos_params, named_params)
         };
         let exclamation_mark = if info.has_exclamation_mark {
-          format!("!")
+          "!".to_string()
         } else {
-          format!("")
+          String::new()
         };
         f.write_fmt(format_args!(
           "Aggregation {}{}{}({}{})",

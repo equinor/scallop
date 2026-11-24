@@ -35,15 +35,12 @@ where
     Ok(_) => panic!("Compilation passed; expected failure"),
     Err(es) => {
       for e in es {
-        match e {
-          compiler::CompileError::Front(e) => {
-            let e = format!("{}", e);
-            println!("{e}");
-            if f(e) {
-              return;
-            }
+        if let compiler::CompileError::Front(e) = e {
+          let e = format!("{}", e);
+          println!("{e}");
+          if f(e) {
+            return;
           }
-          _ => {}
         }
       }
       panic!("Expected failure not found")

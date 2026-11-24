@@ -1,6 +1,9 @@
 use itertools::Itertools;
 use std::collections::*;
 
+use crate::utils::FloatKey;
+
+use super::top_k_aggregation::ByPriority;
 use super::{CNFDNFFormula, Clause, FormulaKind, Literal};
 
 pub trait CNFDNFContextTrait {
@@ -56,7 +59,7 @@ pub trait CNFDNFContextTrait {
           result_clauses.push(clause_i.clone());
           incr_and_update(&mut i, &mut prob_i, f1);
           incr_and_update(&mut j, &mut prob_j, f2);
-        } else if prob_i > prob_j {
+        } else if FloatKey(-prob_i) < FloatKey(-prob_j) {
           result_clauses.push(clause_i.clone());
           incr_and_update(&mut i, &mut prob_i, f1);
         } else {
@@ -108,7 +111,7 @@ pub trait CNFDNFContextTrait {
           result_clauses.push(clause_i.clone());
           incr_and_update(&mut i, &mut prob_i, f1);
           incr_and_update(&mut j, &mut prob_j, f2);
-        } else if prob_i < prob_j {
+        } else if FloatKey(prob_i) < FloatKey(prob_j) {
           result_clauses.push(clause_i.clone());
           incr_and_update(&mut i, &mut prob_i, f1);
         } else {
@@ -132,39 +135,17 @@ pub trait CNFDNFContextTrait {
   }
 
   fn mult_formula_top_k(&self, f1: &Vec<Clause>, f2: &Vec<Clause>, k: usize) -> CNFDNFFormula {
-    #[derive(PartialEq)]
-    struct Element {
-      prob: f64,
-      i: usize,
-      j: usize,
-      clause: Clause,
-    }
-
-    impl std::cmp::Eq for Element {}
-
-    impl std::cmp::PartialOrd for Element {
-      fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.prob.partial_cmp(&other.prob)
-      }
-    }
-
-    impl std::cmp::Ord for Element {
-      fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
-      }
-    }
-
     // If any one of f1 and f2 is empty, then cartesian product is empty
-    if f1.len() == 0 || f2.len() == 0 {
-      return CNFDNFFormula::dnf_zero().into();
+    if f1.is_empty() || f2.is_empty() {
+      CNFDNFFormula::dnf_zero()
     } else {
       // Shortcut for the two formula are exactly the same
       if f1 == f2 {
-        return CNFDNFFormula::dnf(f1.clone()).into();
+        return CNFDNFFormula::dnf(f1.clone());
       }
 
       // Setup variables
-      let mut heap = BinaryHeap::<Element>::new();
+      let mut heap = BinaryHeap::new();
       let mut visited = HashSet::<(usize, usize)>::new();
       let mut result_clauses = Vec::new();
 
@@ -173,7 +154,7 @@ pub trait CNFDNFContextTrait {
         if i < f1.len() && j < f2.len() {
           let clause = f1[i].merge_unchecked(&f2[j]);
           let prob = self.conjunction_probability(&clause);
-          Some(Element { prob, i, j, clause })
+          Some(ByPriority::max(prob, (i, j, clause)))
         } else {
           None
         }
@@ -187,23 +168,24 @@ pub trait CNFDNFContextTrait {
       while result_clauses.len() < k {
         // Pop one from the heap
         if let Some(elem) = heap.pop() {
-          if !visited.contains(&(elem.i, elem.j)) {
-            visited.insert((elem.i, elem.j));
+          let (i, j, clause) = elem.value;
+          if !visited.contains(&(i, j)) {
+            visited.insert((i, j));
 
             // Check validity of this clause
-            if elem.clause.is_valid() {
+            if clause.is_valid() {
               // Check if there is disjunctive conflict
-              if !self.has_disjunction_conflict(&elem.clause.pos_fact_ids()) {
+              if !self.has_disjunction_conflict(&clause.pos_fact_ids()) {
                 // if valid, put it in the result
-                result_clauses.push(elem.clause);
+                result_clauses.push(clause);
               }
             }
 
             // Then push the two successors into the heap
-            if let Some(s1) = create_element(elem.i + 1, elem.j) {
+            if let Some(s1) = create_element(i + 1, j) {
               heap.push(s1);
             }
-            if let Some(s2) = create_element(elem.i, elem.j + 1) {
+            if let Some(s2) = create_element(i, j + 1) {
               heap.push(s2);
             }
           } else {
@@ -215,44 +197,22 @@ pub trait CNFDNFContextTrait {
       }
 
       // Return the result
-      CNFDNFFormula::dnf(result_clauses).into()
+      CNFDNFFormula::dnf(result_clauses)
     }
   }
 
   fn mult_formula_bottom_k(&self, f1: &Vec<Clause>, f2: &Vec<Clause>, k: usize) -> CNFDNFFormula {
-    #[derive(PartialEq)]
-    struct Element {
-      prob: f64,
-      i: usize,
-      j: usize,
-      clause: Clause,
-    }
-
-    impl std::cmp::Eq for Element {}
-
-    impl std::cmp::PartialOrd for Element {
-      fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.prob.partial_cmp(&other.prob).map(std::cmp::Ordering::reverse)
-      }
-    }
-
-    impl std::cmp::Ord for Element {
-      fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
-      }
-    }
-
     // If any one of f1 and f2 is empty, then cartesian product is empty
-    if f1.len() == 0 || f2.len() == 0 {
-      return CNFDNFFormula::cnf_zero().into();
+    if f1.is_empty() || f2.is_empty() {
+      CNFDNFFormula::cnf_zero()
     } else {
       // Shortcut for the two formula are exactly the same
       if f1 == f2 {
-        return CNFDNFFormula::cnf(f1.clone()).into();
+        return CNFDNFFormula::cnf(f1.clone());
       }
 
       // Setup variables
-      let mut heap = BinaryHeap::<Element>::new();
+      let mut heap = BinaryHeap::new();
       let mut visited = HashSet::<(usize, usize)>::new();
       let mut result_clauses = Vec::new();
 
@@ -261,7 +221,7 @@ pub trait CNFDNFContextTrait {
         if i < f1.len() && j < f2.len() {
           let clause = f1[i].merge_unchecked(&f2[j]);
           let prob = self.disjunction_probability(&clause);
-          Some(Element { prob, i, j, clause })
+          Some(ByPriority::max(-prob, (i, j, clause)))
         } else {
           None
         }
@@ -275,19 +235,20 @@ pub trait CNFDNFContextTrait {
       while result_clauses.len() < k {
         // Pop one from the heap
         if let Some(elem) = heap.pop() {
-          if !visited.contains(&(elem.i, elem.j)) {
-            visited.insert((elem.i, elem.j));
+          let (i, j, clause) = elem.value;
+          if !visited.contains(&(i, j)) {
+            visited.insert((i, j));
 
             // Check validity of this clause; if valid, put it in the result
-            if elem.clause.is_valid() {
-              result_clauses.push(elem.clause);
+            if clause.is_valid() {
+              result_clauses.push(clause);
             }
 
             // Then push the two successors into the heap
-            if let Some(s1) = create_element(elem.i + 1, elem.j) {
+            if let Some(s1) = create_element(i + 1, j) {
               heap.push(s1);
             }
-            if let Some(s2) = create_element(elem.i, elem.j + 1) {
+            if let Some(s2) = create_element(i, j + 1) {
               heap.push(s2);
             }
           } else {
@@ -303,28 +264,7 @@ pub trait CNFDNFContextTrait {
     }
   }
 
-  fn cnf2dnf_k(&self, f: &Vec<Clause>, k: usize) -> CNFDNFFormula {
-    #[derive(PartialEq)]
-    struct Element {
-      prob: f64,
-      indices: Vec<usize>,
-      clause: Clause,
-    }
-
-    impl std::cmp::Eq for Element {}
-
-    impl std::cmp::PartialOrd for Element {
-      fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.prob.partial_cmp(&other.prob)
-      }
-    }
-
-    impl std::cmp::Ord for Element {
-      fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
-      }
-    }
-
+  fn cnf2dnf_k(&self, f: &[Clause], k: usize) -> CNFDNFFormula {
     // Create a list of cnf clauses
     let cnf_clauses = f
       .iter()
@@ -332,11 +272,7 @@ pub trait CNFDNFContextTrait {
         clause
           .literals
           .iter()
-          .sorted_by(|x, y| {
-            let prob_x = self.literal_probability(*x);
-            let prob_y = self.literal_probability(*y);
-            prob_x.partial_cmp(&prob_y).unwrap().reverse()
-          })
+          .sorted_by_cached_key(|x| FloatKey(-self.literal_probability(x)))
           .collect::<Vec<_>>()
       })
       .collect::<Vec<_>>();
@@ -361,7 +297,7 @@ pub trait CNFDNFContextTrait {
       // Get the result
       let clause = Clause::new(literals);
       let prob = self.conjunction_probability(&clause);
-      Some(Element { prob, indices, clause })
+      Some(ByPriority::max(prob, (indices, clause)))
     };
 
     // A closure for getting the next elements of an element
@@ -383,13 +319,13 @@ pub trait CNFDNFContextTrait {
     // Check corner cases
     if cnf_clauses.is_empty() {
       // If there is no clause, this is a "true"
-      CNFDNFFormula::dnf_one().into()
+      CNFDNFFormula::dnf_one()
     } else if cnf_clauses.iter().any(|c| c.is_empty()) {
       // If there is a clause with no literal, this is a "false"
-      CNFDNFFormula::dnf_zero().into()
+      CNFDNFFormula::dnf_zero()
     } else {
       // Otherwise, perform full cartesian product
-      let mut heap = BinaryHeap::<Element>::new();
+      let mut heap = BinaryHeap::new();
       let mut visited = HashSet::<Vec<usize>>::new();
       let mut result_clauses = Vec::new();
 
@@ -403,16 +339,17 @@ pub trait CNFDNFContextTrait {
       // Enter the main loop
       while result_clauses.len() < k {
         if let Some(elem) = heap.pop() {
-          if !visited.contains(&elem.indices) {
-            visited.insert(elem.indices.clone());
+          let (indices, clause) = elem.value;
+          if !visited.contains(&indices) {
+            visited.insert(indices.clone());
 
             // Check validity of the clause; if valid, put it in the result
-            if elem.clause.is_valid() && !self.has_disjunction_conflict(&elem.clause.pos_fact_ids()) {
-              result_clauses.push(elem.clause);
+            if clause.is_valid() && !self.has_disjunction_conflict(&clause.pos_fact_ids()) {
+              result_clauses.push(clause);
             }
 
             // Insert the successors into the heap
-            for elem in next_elements(elem.indices) {
+            for elem in next_elements(indices) {
               heap.push(elem);
             }
           } else {
@@ -424,32 +361,11 @@ pub trait CNFDNFContextTrait {
       }
 
       // Return the result
-      CNFDNFFormula::dnf(result_clauses).into()
+      CNFDNFFormula::dnf(result_clauses)
     }
   }
 
-  fn dnf2cnf_k(&self, f: &Vec<Clause>, k: usize) -> CNFDNFFormula {
-    #[derive(PartialEq)]
-    struct Element {
-      prob: f64,
-      indices: Vec<usize>,
-      clause: Clause,
-    }
-
-    impl std::cmp::Eq for Element {}
-
-    impl std::cmp::PartialOrd for Element {
-      fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.prob.partial_cmp(&other.prob).map(std::cmp::Ordering::reverse)
-      }
-    }
-
-    impl std::cmp::Ord for Element {
-      fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
-      }
-    }
-
+  fn dnf2cnf_k(&self, f: &[Clause], k: usize) -> CNFDNFFormula {
     // Create a list of dnf clauses
     let dnf_clauses = f
       .iter()
@@ -457,11 +373,7 @@ pub trait CNFDNFContextTrait {
         clause
           .literals
           .iter()
-          .sorted_by(|x, y| {
-            let prob_x = self.literal_probability(*x);
-            let prob_y = self.literal_probability(*y);
-            prob_x.partial_cmp(&prob_y).unwrap()
-          })
+          .sorted_by_cached_key(|x| FloatKey(self.literal_probability(x)))
           .collect::<Vec<_>>()
       })
       .collect::<Vec<_>>();
@@ -486,7 +398,7 @@ pub trait CNFDNFContextTrait {
       // Get the result
       let clause = Clause::new(literals);
       let prob = self.disjunction_probability(&clause);
-      Some(Element { prob, indices, clause })
+      Some(ByPriority::max(-prob, (indices, clause)))
     };
 
     // A closure for getting the next elements of an element
@@ -508,13 +420,13 @@ pub trait CNFDNFContextTrait {
     // Check corner cases
     if dnf_clauses.is_empty() {
       // If there is no clause, this is a "false"
-      CNFDNFFormula::cnf_zero().into()
+      CNFDNFFormula::cnf_zero()
     } else if dnf_clauses.iter().any(|c| c.is_empty()) {
       // If there is a clause with no literal, this is a "true"
-      CNFDNFFormula::cnf_one().into()
+      CNFDNFFormula::cnf_one()
     } else {
       // Otherwise, perform full cartesian product
-      let mut heap = BinaryHeap::<Element>::new();
+      let mut heap = BinaryHeap::new();
       let mut visited = HashSet::<Vec<usize>>::new();
       let mut result_clauses = Vec::new();
 
@@ -528,16 +440,17 @@ pub trait CNFDNFContextTrait {
       // Enter the main loop
       while result_clauses.len() < k {
         if let Some(elem) = heap.pop() {
-          if !visited.contains(&elem.indices) {
-            visited.insert(elem.indices.clone());
+          let (indices, clause) = elem.value;
+          if !visited.contains(&indices) {
+            visited.insert(indices.clone());
 
             // Check validity of the clause; if valid, put it in the result
-            if elem.clause.is_valid() {
-              result_clauses.push(elem.clause);
+            if clause.is_valid() {
+              result_clauses.push(clause);
             }
 
             // Insert the successors into the heap
-            for elem in next_elements(elem.indices) {
+            for elem in next_elements(indices) {
               heap.push(elem);
             }
           } else {
@@ -549,7 +462,7 @@ pub trait CNFDNFContextTrait {
       }
 
       // Return the result
-      CNFDNFFormula::cnf(result_clauses).into()
+      CNFDNFFormula::cnf(result_clauses)
     }
   }
 
@@ -577,7 +490,7 @@ pub trait CNFDNFContextTrait {
     t.negate()
   }
 
-  fn top_bottom_k_tag_of_chosen_set<'a, I>(&self, all: I, chosen_ids: &Vec<usize>, k: usize) -> CNFDNFFormula
+  fn top_bottom_k_tag_of_chosen_set<'a, I>(&self, all: I, chosen_ids: &[usize], k: usize) -> CNFDNFFormula
   where
     I: Iterator<Item = &'a CNFDNFFormula>,
   {
@@ -601,6 +514,12 @@ pub struct BasicCNFDNFClausesContext {
 impl BasicCNFDNFClausesContext {
   pub fn new() -> Self {
     Self { probabilities: vec![] }
+  }
+}
+
+impl Default for BasicCNFDNFClausesContext {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

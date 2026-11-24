@@ -115,21 +115,21 @@ impl ValueType {
   }
 
   pub fn is_integer(&self) -> bool {
-    match self {
+    matches!(
+      self,
       Self::I8
-      | Self::I16
-      | Self::I32
-      | Self::I64
-      | Self::I128
-      | Self::ISize
-      | Self::U8
-      | Self::U16
-      | Self::U32
-      | Self::U64
-      | Self::U128
-      | Self::USize => true,
-      _ => false,
-    }
+        | Self::I16
+        | Self::I32
+        | Self::I64
+        | Self::I128
+        | Self::ISize
+        | Self::U8
+        | Self::U16
+        | Self::U32
+        | Self::U64
+        | Self::U128
+        | Self::USize
+    )
   }
 
   pub fn value_from_usize(&self, i: usize) -> Option<Value> {
@@ -145,86 +145,58 @@ impl ValueType {
       Self::U32 => Some(Value::U32(i as u32)),
       Self::U64 => Some(Value::U64(i as u64)),
       Self::U128 => Some(Value::U128(i as u128)),
-      Self::USize => Some(Value::USize(i as usize)),
+      Self::USize => Some(Value::USize(i)),
       _ => None,
     }
   }
 
   pub fn is_signed_integer(&self) -> bool {
-    match self {
-      Self::I8 | Self::I16 | Self::I32 | Self::I64 | Self::I128 | Self::ISize => true,
-      _ => false,
-    }
+    matches!(
+      self,
+      Self::I8 | Self::I16 | Self::I32 | Self::I64 | Self::I128 | Self::ISize
+    )
   }
 
   pub fn is_unsigned_integer(&self) -> bool {
-    match self {
-      Self::U8 | Self::U16 | Self::U32 | Self::U64 | Self::U128 | Self::USize => true,
-      _ => false,
-    }
+    matches!(
+      self,
+      Self::U8 | Self::U16 | Self::U32 | Self::U64 | Self::U128 | Self::USize
+    )
   }
 
   pub fn is_float(&self) -> bool {
-    match self {
-      Self::F32 | Self::F64 => true,
-      _ => false,
-    }
+    matches!(self, Self::F32 | Self::F64)
   }
 
   pub fn is_boolean(&self) -> bool {
-    match self {
-      Self::Bool => true,
-      _ => false,
-    }
+    matches!(self, Self::Bool)
   }
 
   pub fn is_char(&self) -> bool {
-    match self {
-      Self::Char => true,
-      _ => false,
-    }
+    matches!(self, Self::Char)
   }
 
   pub fn is_string(&self) -> bool {
-    match self {
-      Self::Str | Self::String /* | Self::RcString */ => true,
-      _ => false,
-    }
+    matches!(self, Self::Str | Self::String)
   }
 
   pub fn is_datetime(&self) -> bool {
-    match self {
-      Self::DateTime => true,
-      _ => false,
-    }
+    matches!(self, Self::DateTime)
   }
 
   pub fn is_duration(&self) -> bool {
-    match self {
-      Self::Duration => true,
-      _ => false,
-    }
+    matches!(self, Self::Duration)
   }
 
   pub fn is_entity(&self) -> bool {
-    match self {
-      Self::Entity => true,
-      _ => false,
-    }
+    matches!(self, Self::Entity)
   }
 
   pub fn can_type_cast(&self, target: &Self) -> bool {
-    if self.is_numeric() && target.is_numeric() {
-      true
-    } else if self.is_boolean() && target.is_boolean() {
-      true
-    } else if self.is_char() && (target.is_char() || target.is_string() || target.is_integer() || target.is_float()) {
-      true
-    } else if self.is_string() && target.is_numeric() {
-      true
-    } else {
-      self.is_string() && target.is_string()
-    }
+    (self.is_numeric() && target.is_numeric())
+      || (self.is_boolean() && target.is_boolean())
+      || (self.is_char() && (target.is_char() || target.is_string() || target.is_numeric()))
+      || (self.is_string() && (target.is_numeric() || target.is_string()))
   }
 
   pub fn parse(&self, s: &str) -> Result<Value, ValueParseError> {

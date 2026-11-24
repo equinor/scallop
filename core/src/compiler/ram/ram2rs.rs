@@ -1,4 +1,4 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Literal, TokenStream};
 use quote::{format_ident, quote};
 use std::collections::*;
 
@@ -133,11 +133,11 @@ impl ast::Program {
     let outputs = self
       .strata
       .iter()
-      .map(|stratum| {
+      .flat_map(|stratum| {
         stratum
           .relations
-          .iter()
-          .filter_map(|(_, relation)| match &relation.output {
+          .values()
+          .filter_map(|relation| match &relation.output {
             OutputOption::Default => {
               let field_name = relation_name_to_rs_field_name(&relation.predicate);
               let relation_name = relation.predicate.clone();
@@ -148,7 +148,6 @@ impl ast::Program {
             _ => None,
           })
       })
-      .flatten()
       .collect::<Vec<_>>();
     quote! { #(#outputs)* }
   }
@@ -164,8 +163,8 @@ impl ast::Stratum {
     let struct_name = format_ident!("Stratum{}Result", id);
     let fields = self
       .relations
-      .iter()
-      .filter_map(|(_, r)| {
+      .values()
+      .filter_map(|r| {
         if r.output.is_not_hidden() || inters_dep.contains(&r.predicate) {
           Some(r.to_rs_result_struct_field(opt))
         } else {
@@ -198,7 +197,7 @@ impl ast::Stratum {
       .iter()
       .map(|(predicate, relation)| {
         // 1.1. Create relation
-        let rs_rel_name = relation_name_to_rs_field_name(&predicate);
+        let rs_rel_name = relation_name_to_rs_field_name(predicate);
         let rs_ty = tuple_type_to_rs_type(&relation.tuple_type);
         let create_stmt = quote! { let #rs_rel_name = iter.create_relation::<#rs_ty>(); };
 
@@ -237,8 +236,8 @@ impl ast::Stratum {
     // 2.5. complete statements
     let complete_stmts = self
       .relations
-      .iter()
-      .map(|(_, r)| {
+      .values()
+      .map(|r| {
         let field_name = relation_name_to_rs_field_name(&r.predicate);
         quote! {
           let #field_name = iter.complete(&#field_name);
@@ -252,8 +251,8 @@ impl ast::Stratum {
     // 3. Ensemble final result
     let ensemble_result_fields = self
       .relations
-      .iter()
-      .filter_map(|(_, r)| {
+      .values()
+      .filter_map(|r| {
         if r.output.is_not_hidden() || inters_dep.contains(&r.predicate) {
           let rs_name = relation_name_to_rs_field_name(&r.predicate);
           Some(quote! { #rs_name, })
@@ -428,7 +427,7 @@ impl ast::Dataflow {
           }
           "exists" => quote! { ExistsAggregator::new(#non_multi_world) },
           "top" => {
-            let k = r.aggregate_info.pos_params.get(0).map(|v| v.as_usize()).unwrap_or(1);
+            let k = r.aggregate_info.pos_params.first().map(|v| v.as_usize()).unwrap_or(1);
             quote! { TopKAggregator::new(#k) }
           }
           _ => unimplemented!(),
@@ -443,7 +442,7 @@ impl ast::Dataflow {
             quote! { iter.aggregate_implicit_group(#agg, #to_agg_col) }
           }
           ReduceGroupByType::Join(group_by_rel) => {
-            let group_by_col = get_col(&group_by_rel);
+            let group_by_col = get_col(group_by_rel);
             quote! { iter.aggregate_join_group(#agg, #group_by_col, #to_agg_col) }
           }
         }
@@ -478,9 +477,9 @@ fn relation_name_to_rs_field_name(n: &str) -> TokenStream {
 
 fn tuple_type_to_rs_type(ty: &TupleType) -> TokenStream {
   match ty {
-    TupleType::Tuple(t) if t.len() == 0 => quote! { () },
+    TupleType::Tuple(t) if t.is_empty() => quote! { () },
     TupleType::Tuple(t) => {
-      let elems = t.iter().map(|vt| tuple_type_to_rs_type(vt)).collect::<Vec<_>>();
+      let elems = t.iter().map(tuple_type_to_rs_type).collect::<Vec<_>>();
       quote! { (#(#elems),*,) }
     }
     TupleType::Value(v) => value_type_to_rs_type(v),
@@ -521,15 +520,15 @@ fn expr_to_rs_expr(expr: &Expr) -> TokenStream {
       if t.is_empty() {
         quote! { () }
       } else {
-        let elems = t.iter().map(|a| expr_to_rs_expr(a)).collect::<Vec<_>>();
+        let elems = t.iter().map(expr_to_rs_expr).collect::<Vec<_>>();
         quote! { (#(#elems),*,) }
       }
     }
     Expr::Access(a) => {
-      if a.len() == 0 {
+      if a.is_empty() {
         quote! { t }
       } else {
-        let indices = a.iter().map(|id| syn::Index::from(id));
+        let indices = a.iter().map(Literal::usize_unsuffixed);
         quote! { t.#(#indices).* }
       }
     }
@@ -587,7 +586,7 @@ fn tuple_to_rs_tuple(tuple: &Tuple) -> TokenStream {
     Tuple::Value(v) => value_to_rs_value(v),
     Tuple::Tuple(t) if t.is_empty() => quote! { () },
     Tuple::Tuple(t) => {
-      let elems = t.iter().map(|a| tuple_to_rs_tuple(a)).collect::<Vec<_>>();
+      let elems = t.iter().map(tuple_to_rs_tuple).collect::<Vec<_>>();
       quote! { (#(#elems),*,) }
     }
   }
@@ -650,7 +649,7 @@ type RelationToStratumMap = HashMap<String, usize>;
 fn compute_relation_to_stratum_map(ast: &ast::Program) -> RelationToStratumMap {
   let mut map = RelationToStratumMap::new();
   for (i, stratum) in ast.strata.iter().enumerate() {
-    for (predicate, _) in &stratum.relations {
+    for predicate in stratum.relations.keys() {
       map.insert(predicate.clone(), i);
     }
   }
@@ -663,7 +662,7 @@ fn compute_stratum_dependency(ast: &ast::Program, rel_to_strat_map: &RelationToS
   let mut dep = StratumDependency::new();
   for (i, stratum) in ast.strata.iter().enumerate() {
     let dep_rels = stratum.dependency();
-    let dep_strats = dep_rels.into_iter().map(|r| rel_to_strat_map[&r].clone()).collect();
+    let dep_strats = dep_rels.into_iter().map(|r| rel_to_strat_map[&r]).collect();
     dep.insert(i, dep_strats);
   }
   dep

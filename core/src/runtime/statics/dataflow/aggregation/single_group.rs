@@ -54,15 +54,12 @@ where
   }
 
   fn iter_recent(self) -> Self::Recent {
-    // Sanitize input relation
-    let batch = if let Some(b) = self.d.iter_recent().next() {
-      b.collect::<Vec<_>>()
-    } else {
+    let Some(batch) = self.d.iter_recent().next() else {
       return Self::Recent::empty();
     };
 
     // Aggregate the result using aggregator
-    let result = self.agg.aggregate(batch, self.rt, self.ctx);
+    let result = self.agg.aggregate(batch.collect(), self.rt, self.ctx);
     Self::Recent::singleton(result.into_iter())
   }
 }

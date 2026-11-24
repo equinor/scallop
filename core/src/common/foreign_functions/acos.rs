@@ -14,7 +14,7 @@ impl UnaryFloatFunction for Acos {
   }
 
   fn execute_f32_partial(&self, arg: f32) -> Option<f32> {
-    if arg >= -1.0 && arg <= 1.0 {
+    if (-1.0..=1.0).contains(&arg) {
       Some(arg.acos())
     } else {
       None
@@ -22,7 +22,7 @@ impl UnaryFloatFunction for Acos {
   }
 
   fn execute_f64_partial(&self, arg: f64) -> Option<f64> {
-    if arg >= -1.0 && arg <= 1.0 {
+    if (-1.0..=1.0).contains(&arg) {
       Some(arg.acos())
     } else {
       None

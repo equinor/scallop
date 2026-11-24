@@ -1,13 +1,13 @@
-.PHONY: build install develop
+.PHONY: build install develop clean
 
 build:
-	python -m build
+	uv build --clear
 
 install: build
-	find dist -name "*.whl" -print | xargs pip install --force-reinstall
+	uv pip install --reinstall-package scallop dist/*.whl
 
 develop:
-	pip install --editable .
+	uv pip install --editable .
 
 clean:
 	rm -rf dist

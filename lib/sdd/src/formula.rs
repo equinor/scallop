@@ -54,7 +54,7 @@ where
   I: Iterator<Item = BooleanFormula>,
 {
   if let Some(mut agg) = bs.next() {
-    while let Some(next_fact) = bs.next() {
+    for next_fact in bs {
       agg = agg & next_fact;
     }
     agg
@@ -69,7 +69,7 @@ where
   I: Iterator<Item = BooleanFormula>,
 {
   if let Some(mut agg) = bs.next() {
-    while let Some(next_fact) = bs.next() {
+    for next_fact in bs {
       agg = agg | next_fact;
     }
     agg
@@ -111,19 +111,21 @@ impl std::ops::Not for BooleanFormula {
   }
 }
 
-impl BooleanFormula {
-  pub fn to_string(&self) -> String {
+impl std::fmt::Display for BooleanFormula {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::And { left, right } => format!("a{}{}", left.to_string(), right.to_string()),
-      Self::Or { left, right } => format!("o{}{}", left.to_string(), right.to_string()),
-      Self::Not { form } => format!("n{}", form.to_string()),
-      Self::Neg { var_id } => format!("n{}", var_id),
-      Self::Pos { var_id } => format!("p{}", var_id),
-      Self::False => format!("f"),
-      Self::True => format!("t"),
+      Self::And { left, right } => write!(f, "a{left}{right}"),
+      Self::Or { left, right } => write!(f, "o{left}{right}"),
+      Self::Not { form } => write!(f, "n{form}"),
+      Self::Neg { var_id } => write!(f, "n{var_id}"),
+      Self::Pos { var_id } => write!(f, "p{var_id}"),
+      Self::False => f.write_str("f"),
+      Self::True => f.write_str("t"),
     }
   }
+}
 
+impl BooleanFormula {
   pub fn collect_vars(&self) -> Vec<usize> {
     let mut set = BTreeSet::new();
     self.collect_vars_helper(&mut set);
@@ -142,10 +144,10 @@ impl BooleanFormula {
     match self {
       Self::True | Self::False => {}
       Self::Pos { var_id } => {
-        *occurrence.entry(var_id.clone()).or_default() += 1;
+        *occurrence.entry(*var_id).or_default() += 1;
       }
       Self::Neg { var_id } => {
-        *occurrence.entry(var_id.clone()).or_default() += 1;
+        *occurrence.entry(*var_id).or_default() += 1;
       }
       Self::Not { form } => {
         form.count_var_occurrence_helper(occurrence);

@@ -21,7 +21,7 @@ impl SchedulerAttributeAnalysis {
     self.scheduler_attrs.get(rel)
   }
 
-  pub fn find_scheduler_attr<'a>(&mut self, attrs: &'a Vec<Attribute>) -> Option<Scheduler> {
+  pub fn find_scheduler_attr(&mut self, attrs: &[Attribute]) -> Option<Scheduler> {
     if let Some(attr) = attrs.iter().find(|attr| attr.attr_name() == "scheduler") {
       if let Some(scheduler_arg) = attr.pos_arg(0) {
         match scheduler_arg.as_string() {
@@ -31,36 +31,51 @@ impl SchedulerAttributeAnalysis {
               "dfs" => Scheduler::DFS,
               "astar" => Scheduler::AStar,
               "beam" => {
-                let maybe_beam_size = attr.kw_arg("beam_size").and_then(|av| av.as_integer()).map(|i| i as usize);
+                let maybe_beam_size = attr
+                  .kw_arg("beam_size")
+                  .and_then(|av| av.as_integer())
+                  .map(|i| i as usize);
                 let beam_size = maybe_beam_size.unwrap_or(3);
                 Scheduler::Beam { beam_size }
               }
               n => {
-                self.errors.push(FrontCompileErrorMessage::error()
-                  .msg(&format!("Unknown scheduler `{}` for @scheduler attribute", n))
-                  .src(scheduler_arg.location().clone()));
+                self.errors.push(
+                  FrontCompileErrorMessage::error()
+                    .msg(format!("Unknown scheduler `{}` for @scheduler attribute", n))
+                    .src(scheduler_arg.location().clone()),
+                );
                 return None;
               }
             };
 
-            return Some(scheduler);
+            Some(scheduler)
           }
           None => {
-            self.errors.push(FrontCompileErrorMessage::error()
-              .msg(&format!("Expected a string for the first positional argument for @scheduler"))
-              .src(attr.location().clone()));
-            return None;
+            self.errors.push(
+              FrontCompileErrorMessage::error()
+                .msg("Expected a string for the first positional argument for @scheduler".to_string())
+                .src(attr.location().clone()),
+            );
+            None
           }
         }
       } else {
-        self.errors.push(FrontCompileErrorMessage::error()
-          .msg(&format!("Needs at least one positional argument for @scheduler"))
-          .src(attr.location().clone()));
-        return None;
+        self.errors.push(
+          FrontCompileErrorMessage::error()
+            .msg("Needs at least one positional argument for @scheduler".to_string())
+            .src(attr.location().clone()),
+        );
+        None
       }
     } else {
-      return None;
+      None
     }
+  }
+}
+
+impl Default for SchedulerAttributeAnalysis {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
@@ -71,9 +86,11 @@ impl NodeVisitor<RuleDecl> for SchedulerAttributeAnalysis {
         if !self.scheduler_attrs.contains_key(&pred) {
           self.scheduler_attrs.insert(pred.clone(), scheduler.clone());
         } else {
-          self.errors.push(FrontCompileErrorMessage::error()
-            .msg(&format!("@scheduler double specified on relation `{}`", pred))
-            .src(node.location().clone()));
+          self.errors.push(
+            FrontCompileErrorMessage::error()
+              .msg(format!("@scheduler double specified on relation `{}`", pred))
+              .src(node.location().clone()),
+          );
           return;
         }
       }
@@ -89,9 +106,11 @@ impl NodeVisitor<RelationTypeDecl> for SchedulerAttributeAnalysis {
         if !self.scheduler_attrs.contains_key(pred) {
           self.scheduler_attrs.insert(pred.clone(), scheduler.clone());
         } else {
-          self.errors.push(FrontCompileErrorMessage::error()
-            .msg(&format!("@scheduler double specified on relation `{}`", pred))
-            .src(node.location().clone()));
+          self.errors.push(
+            FrontCompileErrorMessage::error()
+              .msg(format!("@scheduler double specified on relation `{}`", pred))
+              .src(node.location().clone()),
+          );
           return;
         }
       }

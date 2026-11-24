@@ -21,9 +21,9 @@ impl NormalizeAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for NormalizeAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::Normalize(self)
+impl From<NormalizeAggregate> for DynamicAggregate {
+  fn from(val: NormalizeAggregate) -> Self {
+    DynamicAggregate::Normalize(val)
   }
 }
 

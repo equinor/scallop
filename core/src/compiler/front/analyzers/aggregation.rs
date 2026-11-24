@@ -14,20 +14,23 @@ impl AggregationAnalysis {
   }
 }
 
+impl Default for AggregationAnalysis {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<Reduce> for AggregationAnalysis {
   fn visit(&mut self, reduce: &Reduce) {
     // Check max/min arg
-    match reduce.operator().name().name().as_str() {
-      "forall" => {
-        // Check the body of forall expression
-        match reduce.body() {
-          Formula::Implies(_) => {}
-          _ => self.errors.push(AggregationAnalysisError::ForallBodyNotImplies {
-            loc: reduce.location().clone(),
-          }),
-        }
+    if reduce.operator().name().name().as_str() == "forall" {
+      // Check the body of forall expression
+      match reduce.body() {
+        Formula::Implies(_) => {}
+        _ => self.errors.push(AggregationAnalysisError::ForallBodyNotImplies {
+          loc: reduce.location().clone(),
+        }),
       }
-      _ => {}
     }
   }
 }

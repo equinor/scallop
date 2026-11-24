@@ -55,10 +55,10 @@ pub struct DynamicFilterBatch<'a, Prov: Provenance> {
 impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicFilterBatch<'a, Prov> {
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
     while let Some(elem) = self.source.next_elem() {
-      if let Some(tup) = self.runtime.eval(&self.filter, &elem.tuple) {
-        if tup.as_bool() {
-          return Some(elem);
-        }
+      if let Some(tup) = self.runtime.eval(&self.filter, &elem.tuple)
+        && tup.as_bool()
+      {
+        return Some(elem);
       }
     }
     None

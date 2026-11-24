@@ -29,6 +29,13 @@ impl Default for ExecutionOptions {
   }
 }
 
+struct StratumExecution<'a, Prov> {
+  ram_program: &'a ram::Program,
+  strata_info: &'a StrataInformation,
+  runtime: &'a RuntimeEnvironment,
+  ctx: &'a Prov,
+}
+
 pub struct DynamicExecutionContext<Prov: Provenance, Ptr: PointerFamily = RcFamily> {
   pub options: ExecutionOptions,
   pub program: ram::Program,
@@ -54,7 +61,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
   }
 
   pub fn new_with_options(options: ExecutionOptions) -> Self {
-    let edb = ExtensionalDatabase::new_with_options(options.type_check.clone());
+    let edb = ExtensionalDatabase::new_with_options(options.type_check);
     let idb = IntentionalDatabase::default();
     let program = ram::Program::new();
     Self {
@@ -66,8 +73,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
   }
 
   pub fn new_with_program_and_options(program: ram::Program, options: ExecutionOptions) -> Self {
-    let edb =
-      ExtensionalDatabase::with_relation_types_and_options(program.relation_types(), options.type_check.clone());
+    let edb = ExtensionalDatabase::with_relation_types_and_options(program.relation_types(), options.type_check);
     let idb = IntentionalDatabase::default();
     Self {
       options,
@@ -140,7 +146,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       incremental_result.retain_relations(&pers);
 
       // Return this new program
-      &new_program
+      new_program
     } else {
       self.edb.populate_program_facts(runtime, &temp_program)?;
 
@@ -161,15 +167,21 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       }
     }
 
+    let execution = StratumExecution {
+      ram_program: program_ref,
+      strata_info: &strata_info,
+      runtime,
+      ctx,
+    };
     // Go through each stratum
-    for (i, stratum) in program_ref.strata.iter().enumerate() {
+    for i in 0..program_ref.strata.len() {
       // Run the stratum to get the result
-      let result = self.execute_stratum(i, stratum, &incremental_result, program_ref, &strata_info, runtime, ctx)?;
+      let result = self.execute_stratum(i, &incremental_result, &execution)?;
 
       // Extend the incremental result with the relations within their lifespan
       incremental_result.extend(result.into_iter().filter(|(name, _)| {
         // Check if the relation is a hidden one
-        if program_ref.relation_unchecked(&name).output.is_hidden() {
+        if program_ref.relation_unchecked(name).output.is_hidden() {
           // If it is hidden, additionally check if it is going to be used later
           if let Some(last_stratum) = strata_info.relation_lifespan.get(name) {
             // If the last stratum that this relation is used is later than current, then keep; otherwise drop
@@ -216,17 +228,20 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
   fn execute_stratum(
     &mut self,
     stratum_id: usize,
-    stratum: &ram::Stratum,
     current_idb: &IntentionalDatabase<Prov, Ptr>,
-    ram_program: &ram::Program,
-    strata_info: &StrataInformation,
-    runtime: &RuntimeEnvironment,
-    ctx: &Prov,
+    execution: &StratumExecution<'_, Prov>,
   ) -> Result<IntentionalDatabase<Prov, Ptr>, RuntimeError> {
+    let StratumExecution {
+      ram_program,
+      strata_info,
+      runtime,
+      ctx,
+    } = *execution;
+    let stratum = &ram_program.strata[stratum_id];
     let dyn_relas = stratum
       .relations
       .iter()
-      .filter(|(r, _)| !current_idb.has_relation(*r))
+      .filter(|(r, _)| !current_idb.has_relation(r))
       .map(|(r, _)| r.clone())
       .collect::<HashSet<_>>();
 
@@ -242,11 +257,11 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     if self.options.incremental_maintain {
       for (rel, col) in &self.edb.extensional_relations {
         if ram_program.relation(rel).map(|r| r.immutable).unwrap_or(false) {
-          iter.add_input_dynamic_collection(&rel, col.internal.as_ref());
+          iter.add_input_dynamic_collection(rel, col.internal.as_ref());
         }
       }
       for (rel, col) in current_idb {
-        iter.add_input_dynamic_collection(&rel, col.internal_facts.as_ref());
+        iter.add_input_dynamic_collection(rel, col.internal_facts.as_ref());
       }
     } else {
       // Non-incremental version:
@@ -254,7 +269,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       // First add dynamic collection for every immutable relations in the stratum
       for (predicate, relation) in &stratum.relations {
         if relation.immutable {
-          iter.add_input_dynamic_collection(&predicate, self.edb.get_dynamic_collection(predicate).unwrap());
+          iter.add_input_dynamic_collection(predicate, self.edb.get_dynamic_collection(predicate).unwrap());
         }
       }
 
@@ -263,10 +278,10 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
         for (rel, _) in stratum_inputs {
           if ram_program.relation_unchecked(rel).immutable {
             // The collection could be immutable and thus will be from EDB
-            iter.add_input_dynamic_collection(&rel, self.edb.get_dynamic_collection(rel).unwrap());
+            iter.add_input_dynamic_collection(rel, self.edb.get_dynamic_collection(rel).unwrap());
           } else {
             // Otherwise it will be computed by previous stratum and thus from IDB
-            iter.add_input_dynamic_collection(&rel, current_idb.get_internal_collection(rel).unwrap());
+            iter.add_input_dynamic_collection(rel, current_idb.get_internal_collection(rel).unwrap());
           }
         }
       }
@@ -285,7 +300,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
         || strata_info
           .stratum_outputs
           .get(&stratum_id)
-          .map_or(false, |o| o.contains(rela))
+          .is_some_and(|o| o.contains(rela))
         || ram_program.relation_unchecked(rela).output.is_not_hidden()
       {
         let storage = &ram_program.relation_unchecked(rela).storage;
@@ -386,7 +401,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       incremental_result.retain_relations(&pers);
 
       // Return this new program
-      &new_program
+      new_program
     } else {
       self
         .edb
@@ -411,24 +426,21 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       }
     }
 
+    let execution = StratumExecution {
+      ram_program: program_ref,
+      strata_info: &strata_info,
+      runtime,
+      ctx,
+    };
     // Go through each stratum
-    for (i, stratum) in program_ref.strata.iter().enumerate() {
+    for i in 0..program_ref.strata.len() {
       // Run the stratum to get the result
-      let result = self.execute_stratum_with_monitor(
-        i,
-        stratum,
-        &incremental_result,
-        program_ref,
-        &strata_info,
-        runtime,
-        ctx,
-        m,
-      )?;
+      let result = self.execute_stratum_with_monitor(i, &incremental_result, &execution, m)?;
 
       // Extend the incremental result with the relations within their lifespan
       incremental_result.extend(result.into_iter().filter(|(name, _)| {
         // Check if the relation is a hidden one
-        if program_ref.relation_unchecked(&name).output.is_hidden() {
+        if program_ref.relation_unchecked(name).output.is_hidden() {
           // If it is hidden, additionally check if it is going to be used later
           if let Some(last_stratum) = strata_info.relation_lifespan.get(name) {
             // If the last stratum that this relation is used is later than current, then keep; otherwise drop
@@ -475,24 +487,27 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
   fn execute_stratum_with_monitor<M>(
     &mut self,
     stratum_id: usize,
-    stratum: &ram::Stratum,
     current_idb: &IntentionalDatabase<Prov, Ptr>,
-    ram_program: &ram::Program,
-    strata_info: &StrataInformation,
-    runtime: &RuntimeEnvironment,
-    ctx: &Prov,
+    execution: &StratumExecution<'_, Prov>,
     m: &M,
   ) -> Result<IntentionalDatabase<Prov, Ptr>, RuntimeError>
   where
     M: Monitor<Prov>,
   {
+    let StratumExecution {
+      ram_program,
+      strata_info,
+      runtime,
+      ctx,
+    } = *execution;
+    let stratum = &ram_program.strata[stratum_id];
     // !SPECIAL MONITORING!
     m.observe_executing_stratum(stratum_id);
 
     let dyn_relas = stratum
       .relations
       .iter()
-      .filter(|(r, _)| !current_idb.has_relation(*r))
+      .filter(|(r, _)| !current_idb.has_relation(r))
       .map(|(r, _)| r.clone())
       .collect::<HashSet<_>>();
 
@@ -512,7 +527,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
           m.observe_loading_relation(rel);
           m.observe_loading_relation_from_edb(rel);
 
-          iter.add_input_dynamic_collection(&rel, col.internal.as_ref());
+          iter.add_input_dynamic_collection(rel, col.internal.as_ref());
         }
       }
       for (rel, col) in current_idb {
@@ -520,7 +535,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
         m.observe_loading_relation(rel);
         m.observe_loading_relation_from_idb(rel);
 
-        iter.add_input_dynamic_collection(&rel, col.internal_facts.as_ref());
+        iter.add_input_dynamic_collection(rel, col.internal_facts.as_ref());
       }
     } else {
       // Non-incremental version:
@@ -532,7 +547,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
           m.observe_loading_relation(predicate);
           m.observe_loading_relation_from_edb(predicate);
 
-          iter.add_input_dynamic_collection(&predicate, self.edb.get_dynamic_collection(predicate).unwrap());
+          iter.add_input_dynamic_collection(predicate, self.edb.get_dynamic_collection(predicate).unwrap());
         }
       }
 
@@ -545,14 +560,14 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
             m.observe_loading_relation_from_edb(rel);
 
             // The collection could be immutable and thus will be from EDB
-            iter.add_input_dynamic_collection(&rel, self.edb.get_dynamic_collection(rel).unwrap());
+            iter.add_input_dynamic_collection(rel, self.edb.get_dynamic_collection(rel).unwrap());
           } else {
             // !SPECIAL MONITOR!
             m.observe_loading_relation(rel);
             m.observe_loading_relation_from_idb(rel);
 
             // Otherwise it will be computed by previous stratum and thus from IDB
-            iter.add_input_dynamic_collection(&rel, current_idb.get_internal_collection(rel).unwrap());
+            iter.add_input_dynamic_collection(rel, current_idb.get_internal_collection(rel).unwrap());
           }
         }
       }
@@ -662,12 +677,13 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
   }
 
   pub fn relations(&self) -> Vec<String> {
-    self
-      .program
-      .relation_to_stratum
-      .iter()
-      .map(|(n, _)| n.clone())
-      .collect()
+    self.program.relation_to_stratum.keys().cloned().collect()
+  }
+}
+
+impl<Prov: Provenance, Ptr: PointerFamily> Default for DynamicExecutionContext<Prov, Ptr> {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

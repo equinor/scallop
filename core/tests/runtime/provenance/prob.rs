@@ -7,6 +7,17 @@ use scallop_core::runtime::env::*;
 use scallop_core::runtime::provenance::*;
 
 #[test]
+fn test_diff_min_max_prob_order_handles_nan_and_signed_zero() {
+  use diff_min_max_prob::{Derivative, Prob};
+
+  let tag = |p| Prob::new(p, Derivative::Zero);
+  let mut tags = std::collections::BTreeSet::from([tag(f64::NAN), tag(-f64::NAN), tag(0.0), tag(-0.0)]);
+  assert_eq!(tags.len(), 2);
+  assert_eq!(tags.pop_first(), Some(tag(-0.0)));
+  assert_eq!(tags.pop_first(), Some(tag(f64::NAN)));
+}
+
+#[test]
 fn test_simple_probability_count() {
   let ctx = min_max_prob::MinMaxProbProvenance::default();
   let rt = RuntimeEnvironment::default();

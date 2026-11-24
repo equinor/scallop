@@ -1,3 +1,12 @@
+# Unreleased
+
+Rust API migration:
+- `ForeignFunction::infer_return_type` overrides now take `&[Value]` instead of `&Vec<Value>`.
+- Use `TensorValue::checked_add`, `checked_sub`, and `checked_mul` for shape-checked arithmetic. Incompatible shapes still return `None`.
+- Use a struct literal in place of `compiler::back::Reduce::new`. For a front-end `Reduce` with a source span, use `_Reduce::new(...).with_span(start, end)` instead of `Reduce::new_with_span`.
+- Construct reduce query-plan nodes with `HighRamNode::reduce`. The `HighRamNode::Reduce` variant now contains a `Box<Reduce>`; front-end AST constructors and accessors are unchanged except for the `Reduce` constructor noted above.
+- The unimplemented dense-matrix Rust storage variant has been removed. Scallop still supports `sorted` and `indexed_vec`.
+
 # v0.2.5, Sep 14, 2024
 
 - Adding `@goal` and `@scheduler` to Scallop: now we have multiple semantics driven by scheduling strategies (BFS, DFS, A-Star, Beam, etc.) and stopping criteria.

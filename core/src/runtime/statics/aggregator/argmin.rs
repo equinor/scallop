@@ -18,6 +18,12 @@ impl<T1: StaticTupleTrait, T2: StaticTupleTrait, Prov: Provenance> ArgminAggrega
   }
 }
 
+impl<T1: StaticTupleTrait, T2: StaticTupleTrait, Prov: Provenance> Default for ArgminAggregator<T1, T2, Prov> {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl<T1, T2, T, Prov> Aggregator<T, Prov> for ArgminAggregator<T1, T2, Prov>
 where
   T1: StaticTupleTrait + TupleLength,
@@ -43,11 +49,11 @@ where
       })
       .collect();
     let results = agg.aggregate(ctx, rt, dyn_elems);
-    let stat_elems = results
+
+    results
       .into_iter()
       .map(|e| StaticElement::new(T1::from_dyn_tuple(e.tuple), e.tag))
-      .collect();
-    stat_elems
+      .collect()
   }
 }
 

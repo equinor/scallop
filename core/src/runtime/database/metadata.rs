@@ -4,47 +4,36 @@ use crate::runtime::dynamic::*;
 use crate::runtime::provenance::*;
 
 /// The metadata for the storage of a relation
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum StorageMetadata {
   /// Sorted Tuple Storage
   ///
   /// The default in-memory storage
+  #[default]
   Sorted,
 
   /// Indexed Vector Storage:
   ///
   /// The first element of the tuple is the index in a dense vector
   IndexedVec,
-
-  /// Dense Matrix Storage:
-  ///
-  /// The tuple is all `usize` type representing indices inside of
-  /// a multi-dimensional matrix (tensor)
-  DenseMatrix,
 }
 
 impl StorageMetadata {
   pub fn choices_string() -> String {
-    vec![
-      Self::Sorted,
-      Self::IndexedVec,
-    ].into_iter().map(|m| format!("{:?}", m.to_string())).collect::<Vec<_>>().join(", ")
+    vec![Self::Sorted, Self::IndexedVec]
+      .into_iter()
+      .map(|m| format!("{:?}", m.to_string()))
+      .collect::<Vec<_>>()
+      .join(", ")
   }
 }
 
-impl Default for StorageMetadata {
-  fn default() -> Self {
-    Self::Sorted
-  }
-}
-
-impl ToString for StorageMetadata {
-  fn to_string(&self) -> String {
-    match self {
-      Self::Sorted => "sorted".to_string(),
-      Self::IndexedVec => "indexed_vec".to_string(),
-      Self::DenseMatrix => "dense_matrix".to_string(),
-    }
+impl std::fmt::Display for StorageMetadata {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str(match self {
+      Self::Sorted => "sorted",
+      Self::IndexedVec => "indexed_vec",
+    })
   }
 }
 
@@ -55,7 +44,7 @@ impl FromStr for StorageMetadata {
     match s {
       "sorted" => Ok(Self::Sorted),
       "indexed_vec" => Ok(Self::IndexedVec),
-      _ => Err(format!("Unknown storage type `{}`", s))
+      _ => Err(format!("Unknown storage type `{}`", s)),
     }
   }
 }
@@ -66,7 +55,6 @@ impl StorageMetadata {
     match self {
       Self::Sorted => DynamicCollection::Sorted(DynamicSortedCollection::empty()),
       Self::IndexedVec => DynamicCollection::IndexedVec(DynamicIndexedVecCollection::empty()),
-      Self::DenseMatrix => DynamicCollection::DenseMatrix(DynamicDenseMatrixCollection::empty()),
     }
   }
 
@@ -75,7 +63,6 @@ impl StorageMetadata {
     match self {
       Self::Sorted => DynamicCollection::Sorted(DynamicSortedCollection::from_vec(vec, ctx)),
       Self::IndexedVec => DynamicCollection::IndexedVec(DynamicIndexedVecCollection::from_vec(vec, ctx)),
-      Self::DenseMatrix => DynamicCollection::DenseMatrix(DynamicDenseMatrixCollection::from_vec(vec, ctx)),
     }
   }
 }

@@ -1,7 +1,7 @@
 [package]
 name = "scallopy"
 version = "0.2.5"
-edition = "2018"
+edition.workspace = true
 
 [lib]
 name = "scallopy"

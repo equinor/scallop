@@ -13,6 +13,12 @@ use super::FlattenExprContext;
 
 use front::{AstNode, AstWalker, NodeLocation};
 
+struct RuleLowering<'a, 'inference> {
+  flatten_expr: &'a mut FlattenExprContext<'inference>,
+  src_rule_loc: &'a NodeLocation,
+  temp_relations: &'a mut Vec<back::Relation>,
+}
+
 impl FrontContext {
   pub fn to_back_program(&self) -> back::Program {
     // Generate relations and facts
@@ -41,7 +47,7 @@ impl FrontContext {
 
     // Generate the program
     back::Program {
-      relations: vec![base_relations, temp_relations].concat(),
+      relations: [base_relations, temp_relations].concat(),
       outputs: output_relations,
       facts,
       disjunctive_facts,
@@ -133,11 +139,11 @@ impl FrontContext {
         }
         front::RelationDecl::Fact(f) => {
           let pred = f.predicate_name();
-          let tys = self.relation_arg_types(&pred).unwrap();
+          let tys = self.relation_arg_types(pred).unwrap();
           let args = f.iter_constants().zip(tys.iter()).map(|(c, t)| c.to_value(t)).collect();
           let tag = to_constant_dyn_input_tag(&f.tag().clone().and_then(|e| e.as_constant().cloned()));
           let back_fact = back::Fact {
-            tag: tag,
+            tag,
             predicate: pred.clone(),
             args,
           };
@@ -196,11 +202,13 @@ impl FrontContext {
 
   fn rule_decl_to_back_rules(&self, rd: &front::RuleDecl, temp_relations: &mut Vec<back::Relation>) -> Vec<back::Rule> {
     let rule_loc = rd.rule().location();
-    let rule_attrs = rd.attrs().iter().filter_map(|attr| self.attr_to_back_attr(attr)).collect();
+    let rule_attrs = rd
+      .attrs()
+      .iter()
+      .filter_map(|attr| self.attr_to_back_attr(attr))
+      .collect();
     match rd.rule().head() {
-      front::RuleHead::Atom(head) => {
-        self.atomic_rule_decl_to_back_rules(rule_loc, head, rule_attrs, temp_relations)
-      },
+      front::RuleHead::Atom(head) => self.atomic_rule_decl_to_back_rules(rule_loc, head, rule_attrs, temp_relations),
       front::RuleHead::Conjunction(_) => {
         panic!("[Internal Error] Conjunction should be flattened and de-sugared. This is probably a bug.")
       }
@@ -238,8 +246,7 @@ impl FrontContext {
     // Create the flattened expression that the head needs
     let head_exprs = head
       .iter_args()
-      .map(|a| flatten_expr.collect_flattened_literals(a.location()))
-      .flatten()
+      .flat_map(|a| flatten_expr.collect_flattened_literals(a.location()))
       .collect::<Vec<_>>();
 
     // Create the head that will be shared across all back rules
@@ -250,14 +257,16 @@ impl FrontContext {
     let boundness_analysis = &self.analysis.borrow().boundness_analysis;
     let rule_ctx = boundness_analysis.get_rule_context(rule_loc).unwrap();
     self.formula_to_back_rules(
-      &mut flatten_expr,
-      rule_loc,
+      &mut RuleLowering {
+        flatten_expr: &mut flatten_expr,
+        src_rule_loc: rule_loc,
+        temp_relations,
+      },
       attributes,
-      pred.name().clone(),
+      pred.name(),
       rule_ctx,
       head,
       head_exprs,
-      temp_relations,
     )
   }
 
@@ -301,27 +310,27 @@ impl FrontContext {
     let boundness_analysis = &self.analysis.borrow().boundness_analysis;
     let rule_ctx = boundness_analysis.get_rule_context(rule_loc).unwrap();
     self.formula_to_back_rules(
-      &mut flatten_expr,
-      rule_loc,
+      &mut RuleLowering {
+        flatten_expr: &mut flatten_expr,
+        src_rule_loc: rule_loc,
+        temp_relations,
+      },
       attributes,
-      pred.name().clone(),
+      pred.name(),
       rule_ctx,
       head,
       head_exprs,
-      temp_relations,
     )
   }
 
   fn formula_to_back_rules(
     &self,
-    flatten_expr: &mut FlattenExprContext,
-    src_rule_loc: &NodeLocation,
+    lowering: &mut RuleLowering<'_, '_>,
     attributes: back::Attributes,
-    parent_predicate: String,
+    parent_predicate: &str,
     rule_ctx: &RuleContext,
     head: back::Head,
     additional: Vec<back::Literal>,
-    temp_relations: &mut Vec<back::Relation>,
   ) -> Vec<back::Rule> {
     let mut rules = vec![];
     let mut temp_rules = vec![];
@@ -337,32 +346,24 @@ impl FrontContext {
           let predicate = format!(
             "{}#{}#agg#{}#{}",
             parent_predicate,
-            src_rule_loc.id.unwrap(),
+            lowering.src_rule_loc.id.unwrap(),
             conj_idx,
             agg_idx
           );
-          self.reduce_to_back_literal(
-            flatten_expr,
-            src_rule_loc,
-            rule_ctx,
-            agg_ctx,
-            predicate,
-            temp_relations,
-            &mut temp_rules,
-          )
+          self.reduce_to_back_literal(lowering, rule_ctx, agg_ctx, predicate, &mut temp_rules)
         })
         .collect::<Vec<_>>();
 
       // Create a context and visit all atoms
-      conj_ctx.pos_atoms.walk(flatten_expr);
-      conj_ctx.neg_atoms.walk(flatten_expr);
+      conj_ctx.pos_atoms.walk(lowering.flatten_expr);
+      conj_ctx.neg_atoms.walk(lowering.flatten_expr);
 
       // Add positive/negative atoms
-      let pos_formulas = flatten_expr.to_back_literals(&conj_ctx.pos_atoms);
-      let neg_formulas = flatten_expr.to_back_literals(&conj_ctx.neg_atoms);
+      let pos_formulas = lowering.flatten_expr.to_back_literals(&conj_ctx.pos_atoms);
+      let neg_formulas = lowering.flatten_expr.to_back_literals(&conj_ctx.neg_atoms);
 
       // Merge all formulas
-      let all_body_formulas = vec![pos_formulas, neg_formulas, reduce_formulas, additional.clone()].concat();
+      let all_body_formulas = [pos_formulas, neg_formulas, reduce_formulas, additional.clone()].concat();
       let body_conj = back::Conjunction {
         args: all_body_formulas,
       };
@@ -374,19 +375,18 @@ impl FrontContext {
       rules.push(rule);
     }
 
-    vec![rules, temp_rules].concat()
+    [rules, temp_rules].concat()
   }
 
   fn reduce_to_back_literal(
     &self,
-    flatten_expr: &mut FlattenExprContext,
-    src_rule_loc: &NodeLocation,
+    lowering: &mut RuleLowering<'_, '_>,
     rule_ctx: &RuleContext,
     agg_ctx: &AggregationContext,
     predicate: String,
-    temp_relations: &mut Vec<back::Relation>,
     temp_rules: &mut Vec<back::Rule>,
   ) -> back::Literal {
+    let src_rule_loc = lowering.src_rule_loc;
     // unwrap is ok because the success of compute boundness is checked already
     let pred_bindings = ForeignPredicateBindings::from(&self.foreign_predicate_registry);
     let body_bounded_vars = agg_ctx.body.compute_boundness(&pred_bindings, &vec![]).unwrap();
@@ -429,25 +429,24 @@ impl FrontContext {
       let group_by_terms = self.back_terms_with_types(group_by_vars, group_by_types.clone());
 
       // Create a temporary relation for group_by
-      let group_by_relation_attr = back::attributes::AggregateGroupByAttribute::new(joined_vars.len(), other_group_by_vars.len());
+      let group_by_relation_attr =
+        back::attributes::AggregateGroupByAttribute::new(joined_vars.len(), other_group_by_vars.len());
       let group_by_relation = back::Relation::new_with_attrs(
         group_by_relation_attr.into(),
         group_by_predicate.clone(),
         group_by_types.clone(),
       );
-      temp_relations.push(group_by_relation);
+      lowering.temp_relations.push(group_by_relation);
 
       // Create temporary rule(s) for group_by
       let group_by_rule_head = back::Head::atom(group_by_predicate.clone(), group_by_terms.clone());
       let group_by_rules = self.formula_to_back_rules(
-        flatten_expr,
-        src_rule_loc,
+        lowering,
         back::Attributes::new(),
-        group_by_predicate.clone(),
+        &group_by_predicate,
         group_by_ctx,
         group_by_rule_head.clone(),
         vec![],
-        temp_relations,
       );
       temp_rules.extend(group_by_rules);
 
@@ -509,7 +508,7 @@ impl FrontContext {
         }
       })
       .collect();
-    let arg_vars = self.back_vars(src_rule_loc, arg_var_names.iter().cloned().collect());
+    let arg_vars = self.back_vars(src_rule_loc, arg_var_names.to_vec());
 
     // Get the types of the variables for reduce literal
     let left_var_types = self
@@ -562,44 +561,38 @@ impl FrontContext {
     let body_attr =
       back::attributes::AggregateBodyAttribute::new(op.clone(), group_by_vars.len(), arg_vars.len(), to_agg_vars.len());
     let body_relation = back::Relation::new_with_attrs(body_attr.into(), body_predicate.clone(), body_arg_tys.clone());
-    temp_relations.push(body_relation);
+    lowering.temp_relations.push(body_relation);
 
     // Get the rules for body
     let body_head = back::Head::atom(body_predicate.clone(), body_terms.clone());
     let body_rules = self.formula_to_back_rules(
-      flatten_expr,
-      src_rule_loc,
+      lowering,
       back::Attributes::new(),
-      body_predicate.clone(),
+      &body_predicate,
       &agg_ctx.body,
       body_head,
       vec![],
-      temp_relations,
     );
     temp_rules.extend(body_rules);
 
     // Get the literal
     let body_atom = back::Atom::new(body_predicate.clone(), body_terms);
-    let reduce_literal = back::Reduce::new(
-      // Aggregator
-      op,
+    let reduce_literal = back::Reduce {
+      aggregator: op,
       params,
       named_params,
       has_exclamation_mark,
-      // types
       left_var_types,
       arg_var_types,
-      to_agg_var_types,
-      // Variables
+      input_var_types: to_agg_var_types,
       left_vars,
       group_by_vars,
       other_group_by_vars,
       arg_vars,
-      to_agg_vars,
-      // Bodies
-      body_atom,
-      group_by_atom,
-    );
+      to_aggregate_vars: to_agg_vars,
+      body_formula: body_atom,
+      group_by_formula: group_by_atom,
+    };
 
     // Return
     back::Literal::Reduce(reduce_literal)
@@ -608,7 +601,7 @@ impl FrontContext {
   fn back_terms_with_types(&self, var_names: Vec<String>, var_tys: Vec<ValueType>) -> Vec<back::Term> {
     var_names
       .into_iter()
-      .zip(var_tys.into_iter())
+      .zip(var_tys)
       .map(|(v, t)| back::Term::variable(v, t))
       .collect()
   }
@@ -616,7 +609,7 @@ impl FrontContext {
   fn back_vars_with_types(&self, var_names: Vec<String>, var_tys: Vec<ValueType>) -> Vec<back::Variable> {
     var_names
       .into_iter()
-      .zip(var_tys.into_iter())
+      .zip(var_tys)
       .map(|(v, t)| back::Variable::new(v, t))
       .collect()
   }

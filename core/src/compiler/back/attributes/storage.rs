@@ -9,9 +9,7 @@ pub struct StorageAttribute {
 
 impl StorageAttribute {
   pub fn new(metadata: StorageMetadata) -> Self {
-    Self {
-      metadata,
-    }
+    Self { metadata }
   }
 }
 

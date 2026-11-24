@@ -163,7 +163,7 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
       // Iterate (not drain) the program facts
       elems.extend(self.program_facts.iter().filter_map(|(tag, tup)| {
         let int_tup = env.internalize_tuple(tup)?;
-        let maybe_input_tag = StaticInputTag::from_dynamic_input_tag(&tag);
+        let maybe_input_tag = StaticInputTag::from_dynamic_input_tag(tag);
         let tag = ctx.tagging_optional_fn(maybe_input_tag);
         Some(DynamicElement::new(int_tup, tag))
       }));
@@ -203,7 +203,7 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
       // Iterate (not drain) the program facts
       elems.extend(self.program_facts.iter().filter_map(|(tag, tup)| {
         let int_tup = env.internalize_tuple(tup)?;
-        let maybe_input_tag = StaticInputTag::from_dynamic_input_tag(&tag);
+        let maybe_input_tag = StaticInputTag::from_dynamic_input_tag(tag);
         let tag = ctx.tagging_optional_fn(maybe_input_tag.clone());
 
         // !SPECIAL MONITORING!
@@ -287,8 +287,8 @@ fn load_from_csv(
 
 fn load_from_csv_with_keys_and_fields(
   env: &RuntimeEnvironment,
-  keys: &Vec<String>,
-  fields: &Vec<String>,
+  keys: &[String],
+  fields: &[String],
   has_probability: bool,
   loaded_file_content: &io::CSVFileContent,
   types: &TupleType,
@@ -354,7 +354,7 @@ fn load_from_csv_with_keys_and_fields(
     // TODO: this could generate multiple facts with the duplicated same tag
     // Get the tag
     let tag = if has_probability {
-      let s = row.get(0).ok_or(IOError::IndexOutOfBounds { index: 0 })?;
+      let s = row.first().ok_or(IOError::IndexOutOfBounds { index: 0 })?;
       s.parse::<DynamicInputTag>()
         .map_err(|_| IOError::CannotParseProbability { value: s.to_string() })?
     } else {
@@ -370,37 +370,17 @@ fn load_from_csv_with_keys_and_fields(
       })
       .collect::<Result<Vec<_>, _>>()?;
 
-    // Get all other values
-    let field_values = row
+    for (i, s) in row
       .iter()
       .enumerate()
-      .skip(probability_offset) // we skip the tag in the front
-      .filter(|(i, _)| {
-        // We want to skip the fields that are keys
-        key_value_ids.iter().find(|(j, _)| i == j).is_none() && fields_id_set.contains(i)
-      })
-      .map(|(i, s)| {
-        let field = field_symbols
-          .get(i)
-          .ok_or(IOError::IndexOutOfBounds { index: i })?
-          .clone();
-        let value = Value::String(s.to_string());
-        Ok((field, value))
-      })
-      .collect::<Result<Vec<_>, _>>()?;
-
-    // Create the results
-    let curr_results = field_values
-      .into_iter()
-      .map(|(field, value)| {
-        let tuple = Tuple::from_values(keys.iter().cloned().chain(vec![field, value]));
-        let element = (tag.clone(), tuple);
-        element
-      })
-      .collect::<Vec<_>>();
-
-    // Extend the results
-    result.extend(curr_results);
+      .skip(probability_offset)
+      .filter(|(i, _)| fields_id_set.contains(i) && !key_value_ids.iter().any(|(j, _)| i == j))
+    {
+      let field = field_symbols.get(i).ok_or(IOError::IndexOutOfBounds { index: i })?;
+      let value = Value::String(s.to_string());
+      let tuple = Tuple::from_values(keys.iter().cloned().chain([field.clone(), value]));
+      result.push((tag.clone(), tuple));
+    }
   }
 
   // Return
@@ -409,7 +389,7 @@ fn load_from_csv_with_keys_and_fields(
 
 fn load_from_csv_with_keys(
   env: &RuntimeEnvironment,
-  keys: &Vec<String>,
+  keys: &[String],
   has_probability: bool,
   loaded_file_content: &io::CSVFileContent,
   types: &TupleType,
@@ -465,7 +445,7 @@ fn load_from_csv_with_keys(
     // TODO: this could generate multiple facts with the duplicated same tag
     // Get the tag
     let tag = if has_probability {
-      let s = row.get(0).ok_or(IOError::IndexOutOfBounds { index: 0 })?;
+      let s = row.first().ok_or(IOError::IndexOutOfBounds { index: 0 })?;
       s.parse::<DynamicInputTag>()
         .map_err(|_| IOError::CannotParseProbability { value: s.to_string() })?
     } else {
@@ -481,37 +461,17 @@ fn load_from_csv_with_keys(
       })
       .collect::<Result<Vec<_>, _>>()?;
 
-    // Get all other values
-    let field_values = row
+    for (i, s) in row
       .iter()
       .enumerate()
-      .skip(probability_offset) // we skip the tag in the front
-      .filter(|(i, _)| {
-        // We want to skip the fields that are keys
-        key_value_ids.iter().find(|(j, _)| i == j).is_none()
-      })
-      .map(|(i, s)| {
-        let field = field_symbols
-          .get(i)
-          .ok_or(IOError::IndexOutOfBounds { index: i })?
-          .clone();
-        let value = Value::String(s.to_string());
-        Ok((field, value))
-      })
-      .collect::<Result<Vec<_>, _>>()?;
-
-    // Create the results
-    let curr_results = field_values
-      .into_iter()
-      .map(|(field, value)| {
-        let tuple = Tuple::from_values(keys.iter().cloned().chain(vec![field, value]));
-        let element = (tag.clone(), tuple);
-        element
-      })
-      .collect::<Vec<_>>();
-
-    // Extend the results
-    result.extend(curr_results);
+      .skip(probability_offset)
+      .filter(|(i, _)| !key_value_ids.iter().any(|(j, _)| i == j))
+    {
+      let field = field_symbols.get(i).ok_or(IOError::IndexOutOfBounds { index: i })?;
+      let value = Value::String(s.to_string());
+      let tuple = Tuple::from_values(keys.iter().cloned().chain([field.clone(), value]));
+      result.push((tag.clone(), tuple));
+    }
   }
 
   // Return
@@ -519,7 +479,7 @@ fn load_from_csv_with_keys(
 }
 
 fn load_from_csv_with_fields(
-  fields: &Vec<String>,
+  fields: &[String],
   has_probability: bool,
   loaded_file_content: &io::CSVFileContent,
   types: &TupleType,
@@ -552,7 +512,7 @@ fn load_from_csv_with_fields(
   for row in loaded_file_content.get_rows() {
     // Get the tag
     let tag = if has_probability {
-      let s = row.get(0).ok_or(IOError::IndexOutOfBounds { index: 0 })?;
+      let s = row.first().ok_or(IOError::IndexOutOfBounds { index: 0 })?;
       s.parse::<DynamicInputTag>()
         .map_err(|_| IOError::CannotParseProbability { value: s.to_string() })?
     } else {
@@ -598,7 +558,7 @@ fn load_from_csv_raw(
 
     // Get the tag
     let tag = if has_probability {
-      let s = row.get(0).ok_or(IOError::IndexOutOfBounds { index: 0 })?;
+      let s = row.first().ok_or(IOError::IndexOutOfBounds { index: 0 })?;
       s.parse::<DynamicInputTag>()
         .map_err(|_| IOError::CannotParseProbability { value: s.to_string() })?
     } else {

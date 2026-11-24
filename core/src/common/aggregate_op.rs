@@ -86,16 +86,10 @@ impl AggregateOp {
   }
 
   pub fn is_min_max(&self) -> bool {
-    match self {
-      Self::Min | Self::Max | Self::Argmin | Self::Argmax => true,
-      _ => false,
-    }
+    matches!(self, Self::Min | Self::Max | Self::Argmin | Self::Argmax)
   }
 
   pub fn is_sum_prod(&self) -> bool {
-    match self {
-      Self::Sum { .. } | Self::Prod { .. } => true,
-      _ => false,
-    }
+    matches!(self, Self::Sum { .. } | Self::Prod { .. })
   }
 }

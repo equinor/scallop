@@ -1,9 +1,9 @@
 mod deduplicate;
-mod optimizations;
+mod pipeline;
 mod project_cascade;
 
 pub use deduplicate::*;
-pub use optimizations::*;
+pub use pipeline::*;
 pub use project_cascade::*;
 
 use super::*;

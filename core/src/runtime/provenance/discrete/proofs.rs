@@ -89,7 +89,6 @@ impl Proofs {
   pub fn cartesian_product(t1: &Self, t2: &Self) -> Self {
     Self {
       proofs: iproduct!(&t1.proofs, &t2.proofs)
-        .into_iter()
         .map(|(p1, p2)| Proof::merge(p1, p2))
         .collect(),
     }
@@ -163,7 +162,7 @@ impl<P: PointerFamily> Provenance for ProofsProvenance<P> {
   type OutputTag = Proofs;
 
   fn name(&self) -> String {
-    format!("proofs")
+    "proofs".to_string()
   }
 
   fn tagging_fn(&self, exclusion: Self::InputTag) -> Self::Tag {

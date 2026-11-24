@@ -31,10 +31,7 @@ impl Item {
   }
 
   pub fn is_query(&self) -> bool {
-    match self {
-      Self::QueryDecl(_) => true,
-      _ => false,
-    }
+    matches!(self, Self::QueryDecl(_))
   }
 }
 

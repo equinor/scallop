@@ -45,7 +45,7 @@ where
   fn clone(&self) -> Self {
     Self {
       relations: Ref::clone(&self.relations),
-      rela_id: self.rela_id.clone(),
+      rela_id: self.rela_id,
     }
   }
 }
@@ -65,9 +65,9 @@ where
         elem_id: 0,
       };
       self.rela_id += 1;
-      return Some(result);
+      Some(result)
     } else {
-      return None;
+      None
     }
   }
 
@@ -103,8 +103,8 @@ where
   fn clone(&self) -> Self {
     Self {
       relations: Ref::clone(&self.relations),
-      rela_id: self.rela_id.clone(),
-      elem_id: self.elem_id.clone(),
+      rela_id: self.rela_id,
+      elem_id: self.elem_id,
     }
   }
 }
@@ -121,9 +121,9 @@ where
     if self.elem_id < relation.len() {
       let elem = &relation[self.elem_id];
       self.elem_id += 1;
-      return Some(elem.clone());
+      Some(elem.clone())
     } else {
-      return None;
+      None
     }
   }
 
@@ -173,9 +173,9 @@ where
     if self.elem_id < self.relation.len() {
       let elem = &self.relation[self.elem_id];
       self.elem_id += 1;
-      return Some(elem.clone());
+      Some(elem.clone())
     } else {
-      return None;
+      None
     }
   }
 

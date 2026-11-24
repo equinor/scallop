@@ -148,3 +148,26 @@ fn issue_96() {
     |e| e.contains("unknown custom type `Expr`"),
   )
 }
+
+#[test]
+fn demand_is_rejected_for_later_disjunctive_head_predicates() {
+  for source in [
+    r#"
+    type first(i32)
+    @demand("b")
+    type second(i32)
+    rel input = {1}
+    rel {first(x); second(x)} = input(x)
+    "#,
+    r#"
+    rel input = {1}
+    rel {first(x); second(x)} = input(x)
+    @demand("b")
+    type second(i32)
+    "#,
+  ] {
+    expect_front_compile_failure(source, |err| {
+      err.contains("`second` being annotated by `demand` but occurs in a disjunctive rule head")
+    });
+  }
+}

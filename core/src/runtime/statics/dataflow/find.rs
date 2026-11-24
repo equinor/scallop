@@ -134,21 +134,19 @@ where
   type Item = StaticElement<(T1, T2), Prov>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    let key = self.key.clone();
+    let key = &self.key;
     loop {
-      match &self.curr_elem {
-        Some(curr_elem) => match curr_elem.tuple.0.partial_cmp(&self.key).unwrap() {
-          Ordering::Less => {
-            self.curr_elem = self.source_iter.search_ahead(|x| x.0 < key);
-          }
-          Ordering::Equal => {
-            let result = curr_elem.clone();
-            self.curr_elem = self.source_iter.next();
-            return Some(result);
-          }
-          Ordering::Greater => return None,
-        },
-        None => return None,
+      let curr_elem = self.curr_elem.as_ref()?;
+      match curr_elem.tuple.0.cmp_tuple(key) {
+        Ordering::Less => {
+          self.curr_elem = self.source_iter.search_ahead(|x| x.0.cmp_tuple(key).is_lt());
+        }
+        Ordering::Equal => {
+          let result = curr_elem.clone();
+          self.curr_elem = self.source_iter.next();
+          return Some(result);
+        }
+        Ordering::Greater => return None,
       }
     }
   }

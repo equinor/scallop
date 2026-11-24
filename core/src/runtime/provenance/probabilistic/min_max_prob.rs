@@ -42,7 +42,7 @@ impl Provenance for MinMaxProbProvenance {
   }
 
   fn tagging_fn(&self, p: Self::InputTag) -> Self::Tag {
-    p.into()
+    p
   }
 
   fn recover_fn(&self, t: &Self::Tag) -> Self::OutputTag {
@@ -107,14 +107,13 @@ impl Aggregator<MinMaxProbProvenance> for CountAggregator {
   }
 }
 
-fn max_min_prob_of_k_count<E>(sorted_set: &Vec<E>, k: usize) -> f64
+fn max_min_prob_of_k_count<E>(sorted_set: &[E], k: usize) -> f64
 where
   E: Element<MinMaxProbProvenance>,
 {
-  let prob = sorted_set
+  sorted_set
     .iter()
     .enumerate()
     .map(|(id, elem)| if id < k { *elem.tag() } else { 1.0 - *elem.tag() })
-    .fold(f64::INFINITY, |a, b| a.min(b));
-  prob.into()
+    .fold(f64::INFINITY, |a, b| a.min(b))
 }

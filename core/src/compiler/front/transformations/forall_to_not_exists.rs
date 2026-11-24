@@ -27,7 +27,7 @@ impl TransformForall {
     // First check if this reduce is a forall aggregation
     if r.operator().name().name() == "forall" && r.num_left() == 1 {
       // Unwrap ok since num_left is 1
-      if let VariableOrWildcard::Variable(left_var) = &r.left().get(0).unwrap() {
+      if let VariableOrWildcard::Variable(left_var) = &r.left().first().unwrap() {
         // Do the transformation
         match r.body() {
           Formula::Implies(i) => {
@@ -50,7 +50,7 @@ impl TransformForall {
               ReduceOp::new_with_loc(
                 Identifier::new_with_loc("exists".to_string(), r.operator().name().location().clone_without_id()),
                 vec![],
-                r.operator().has_exclaimation_mark().clone(),
+                *r.operator().has_exclaimation_mark(),
                 r.operator().location().clone_without_id(),
               ), // Reduce op
               r.args().clone(),                             // args
@@ -78,15 +78,18 @@ impl TransformForall {
   }
 }
 
+impl Default for TransformForall {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<Formula> for TransformForall {
   fn visit_mut(&mut self, formula: &mut Formula) {
-    match formula {
-      Formula::Reduce(r) => {
-        if let Some(f) = self.transform_forall(r) {
-          *formula = f;
-        }
-      }
-      _ => {}
+    if let Formula::Reduce(r) = formula
+      && let Some(f) = self.transform_forall(r)
+    {
+      *formula = f;
     }
   }
 }

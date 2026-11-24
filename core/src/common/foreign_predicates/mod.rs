@@ -1,7 +1,5 @@
 //! Library of foreign predicates
 
-use std::convert::*;
-
 use crate::utils::*;
 
 use super::foreign_predicate::*;

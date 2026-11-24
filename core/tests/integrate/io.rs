@@ -2,7 +2,7 @@ use scallop_core::common::value::*;
 use scallop_core::runtime::provenance::*;
 use scallop_core::testing::*;
 
-static CARGO_MANIFEST_DIR: &'static str = env!("CARGO_MANIFEST_DIR");
+static CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 #[test]
 fn io_edge() {

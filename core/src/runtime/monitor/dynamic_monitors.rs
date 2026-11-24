@@ -45,6 +45,12 @@ impl<Prov: Provenance> DynamicMonitors<Prov> {
   }
 }
 
+impl<Prov: Provenance> Default for DynamicMonitors<Prov> {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 macro_rules! dynamic_monitors_observe_event {
   ($func:ident, ($($arg:ident: $ty:ty),*)) => {
     fn $func(&self, $($arg : $ty,)*) {

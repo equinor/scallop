@@ -47,9 +47,9 @@ impl<'a, Prov: Provenance> BatchBinaryOp<'a, Prov> for IntersectOp<'a, Prov> {
     let i1_curr = i1.next_elem();
     let i2_curr = i2.next_elem();
     DynamicBatch::new(DynamicIntersectBatch {
-      i1: i1,
+      i1,
       i1_curr,
-      i2: i2,
+      i2,
       i2_curr,
       ctx: self.ctx,
     })

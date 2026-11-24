@@ -1,5 +1,6 @@
-from typing import Dict, List, Optional, Tuple
-import sys
+from collections.abc import Iterator
+from typing import Dict, List, Optional
+import logging
 
 import torch
 from PIL import Image
@@ -8,7 +9,7 @@ import scallopy
 
 from scallop_gpu import get_device
 
-ERR_HEAD = f"[@plip]"
+ERR_HEAD = "[@plip]"
 DELIMITER = ";"
 
 class ScallopPLIPPlugin(scallopy.Plugin):
@@ -23,8 +24,10 @@ class ScallopPLIPPlugin(scallopy.Plugin):
     self._plip_model = None
     self._plip_preprocess = None
 
-  def setup_arg_parser(self, parser):
+  def setup_argparse(self, parser):
     parser.add_argument("--plip-model-checkpoint", type=str, default=self._default_plip_model_checkpoint)
+
+  setup_arg_parser = setup_argparse
 
   def configure(self, args: Dict = {}, unknown_args: List = []):
     if "plip_model_checkpoint" in args:
@@ -37,18 +40,16 @@ class ScallopPLIPPlugin(scallopy.Plugin):
           print(f"[scallop-plip] Loading PLIP model `{self._plip_model_checkpoint}`...")
         from transformers import CLIPProcessor, CLIPModel
 
-        model = CLIPModel.from_pretrained(self._plip_model_checkpoint)
+        model = CLIPModel.from_pretrained(self._plip_model_checkpoint).to(get_device())
         preprocess = CLIPProcessor.from_pretrained(self._plip_model_checkpoint)
 
-        # model, preprocess = plip.load(_PLIP_MODEL_CHECKPOINT, device=get_device())
         self._plip_model = model
         self._plip_preprocess = preprocess
 
         if debug:
-          print(f"[scallop-plip] Done!")
-      except Exception as ex:
-        if debug:
-          print(ex, file=sys.stderr)
+          print("[scallop-plip] Done!")
+      except (OSError, RuntimeError, ValueError):
+        logging.getLogger(__name__).exception("Failed to load PLIP checkpoint %s", self._plip_model_checkpoint)
         return None
 
     if debug:
@@ -56,7 +57,7 @@ class ScallopPLIPPlugin(scallopy.Plugin):
 
     return (self._plip_model, self._plip_preprocess)
 
-  def load_into_context(self, ctx: scallopy.Context):
+  def load_into_ctx(self, ctx: scallopy.Context):
     # Define the plip foreign attribute
     @scallopy.foreign_attribute
     def plip(
@@ -86,8 +87,7 @@ class ScallopPLIPPlugin(scallopy.Plugin):
         assert args[1].ty.is_string() and args[1].adornment.is_bound(), f"{ERR_HEAD} second argument has to be a bounded type `String`"
         assert args[2].ty.is_string() and (args[2].adornment is None or args[2].adornment.is_free()), f"{ERR_HEAD} third argument has to be of free type `String`"
 
-      @scallopy.foreign_predicate(name=relation_decl.name.name)
-      def plip_classify(img: scallopy.Tensor) -> scallopy.Facts[float, Tuple[str]]:
+      def classify(img: torch.Tensor, class_labels: list[str]) -> Iterator[tuple[float, tuple[str]]]:
         device = get_device()
         maybe_plip_model = self.get_plip_model(debug=debug)
         if maybe_plip_model is None:
@@ -98,30 +98,34 @@ class ScallopPLIPPlugin(scallopy.Plugin):
 
         # Enter non-training mode
         with torch.no_grad():
-          class_prompts = [get_class_prompt(prompt, class_str) for class_str in labels]
-          txt_tokens = plip.tokenize(class_prompts).to(device=device)
-          img_proc = plip_preprocess(Image.fromarray(img.numpy())).unsqueeze(0).to(device=device)
-          logits_per_image, _ = plip_model(img_proc, txt_tokens)
-          probs = logits_per_image.softmax(dim=-1).cpu()[0]
-          for prob, class_prompt, class_str in zip(probs, class_prompts, labels):
+          class_prompts = [get_class_prompt(prompt, class_str) for class_str in class_labels]
+          inputs = plip_preprocess(text=class_prompts, images=Image.fromarray(img.numpy()), return_tensors="pt", padding=True).to(device)
+          probs = plip_model(**inputs).logits_per_image.softmax(dim=-1).cpu()[0]
+          for prob, class_prompt, class_str in zip(probs.tolist(), class_prompts, class_labels):
             if debug:
               print(f"[@plip_classifier] {prob:.4f} :: {class_prompt} (Class Name: {class_str})")
             if prob >= score_threshold: yield (prob, (class_str,))
             else: yield (0.0, (unknown_class,))
 
-      # Generate the foreign predicate for dynamic labels
-      @scallopy.foreign_predicate(name=relation_decl.name.name)
-      def plip_classify_with_labels(img: scallopy.Tensor, list: scallopy.String) -> scallopy.Facts[float, Tuple[str]]:
-        nonlocal labels
-        labels = [item.strip() for item in list.split(DELIMITER)]
-        return plip_classify(img)
+      if labels is not None:
+        fixed_labels = labels
 
-      # Return the appropriate foreign predicate
-      if labels is not None: return plip_classify
-      else: return plip_classify_with_labels
+        @scallopy.foreign_predicate(name=relation_decl.name.name)
+        def plip_classify(img: torch.Tensor) -> scallopy.Facts[float, tuple[str]]:
+          yield from classify(img, fixed_labels)
+
+        return plip_classify
+
+      @scallopy.foreign_predicate(name=relation_decl.name.name)
+      def plip_classify_with_labels(img: torch.Tensor, label_text: str) -> scallopy.Facts[float, tuple[str]]:
+        yield from classify(img, [item.strip() for item in label_text.split(DELIMITER)])
+
+      return plip_classify_with_labels
 
     # Register the foreign attribute
     ctx.register_foreign_attribute(plip)
+
+  load_into_context = load_into_ctx
 
 def get_class_prompt(prompt: Optional[str], class_name: str):
   if prompt: return prompt.replace("{{}}", class_name)

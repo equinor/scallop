@@ -44,11 +44,11 @@ where
       })
       .collect();
     let results = agg.aggregate(ctx, rt, dyn_elems);
-    let stat_elems = results
+
+    results
       .into_iter()
       .map(|e| StaticElement::new(e.tuple.as_bool(), e.tag))
-      .collect();
-    stat_elems
+      .collect()
   }
 }
 

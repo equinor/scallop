@@ -5,7 +5,7 @@ use crate::runtime::provenance::*;
 
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct DisjunctAggregate;
 
 impl DisjunctAggregate {
@@ -14,9 +14,9 @@ impl DisjunctAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for DisjunctAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::Disjunct(self)
+impl From<DisjunctAggregate> for DynamicAggregate {
+  fn from(val: DisjunctAggregate) -> Self {
+    DynamicAggregate::Disjunct(val)
   }
 }
 
@@ -93,7 +93,7 @@ impl<Prov: Provenance> Aggregator<Prov> for DisjunctAggregator {
         let exc_dyn_input_tag = DynamicInputTag::Exclusive(curr_exclusion);
         let exc_sta_input_tag = <Prov::InputTag as StaticInputTag>::from_dynamic_input_tag(&exc_dyn_input_tag);
         let exc_tag = p.tagging_optional_fn(exc_sta_input_tag);
-        let new_tag = p.mult(&tag, &exc_tag);
+        let new_tag = p.mult(tag, &exc_tag);
 
         // Create new element
         let new_elem = DynamicElement::new(tuple.clone(), new_tag);

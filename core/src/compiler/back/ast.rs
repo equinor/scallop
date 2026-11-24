@@ -18,6 +18,8 @@ pub type Type = crate::common::value_type::ValueType;
 
 pub type Constant = crate::common::value::Value;
 
+pub type IndexedArguments<'a, T> = Vec<(usize, &'a T)>;
+
 #[derive(Clone, Debug)]
 pub struct Program {
   pub relations: Vec<Relation>,
@@ -100,7 +102,7 @@ pub struct Rule {
 
 impl Rule {
   pub fn head_predicate(&self) -> &String {
-    &self.head.predicate()
+    self.head.predicate()
   }
 
   pub fn body_literals(&self) -> impl Iterator<Item = &Literal> {
@@ -137,10 +139,10 @@ impl Rule {
       Literal::Assign(assign) => match &assign.right {
         AssignExpr::Call(c) => {
           if let Some(f) = foreign_function_registry.get(&c.function) {
-            match f.return_type() {
-              ForeignFunctionParameterType::BaseType(ValueType::Entity) => true,
-              _ => false,
-            }
+            matches!(
+              f.return_type(),
+              ForeignFunctionParameterType::BaseType(ValueType::Entity)
+            )
           } else {
             false
           }
@@ -263,18 +265,12 @@ impl Term {
 
   /// Check if the term is a variable
   pub fn is_variable(&self) -> bool {
-    match self {
-      Self::Variable(_) => true,
-      _ => false,
-    }
+    matches!(self, Self::Variable(_))
   }
 
   /// Check if the term is a constant
   pub fn is_constant(&self) -> bool {
-    match self {
-      Self::Constant(_) => true,
-      _ => false,
-    }
+    matches!(self, Self::Constant(_))
   }
 
   /// Get the variable if the term is a variable
@@ -415,7 +411,7 @@ impl Atom {
         }
       }
     }
-    return true;
+    true
   }
 
   /// Get the atom's arguments which are variables
@@ -427,7 +423,7 @@ impl Atom {
   }
 
   /// Get a set of unique variables in the atom's arguments
-  pub fn unique_variable_args(&self) -> impl Iterator<Item = Variable> {
+  pub fn unique_variable_args(&self) -> impl Iterator<Item = Variable> + use<> {
     self.variable_args().cloned().collect::<BTreeSet<_>>().into_iter()
   }
 
@@ -451,7 +447,7 @@ impl Atom {
         }
       }
     }
-    return true;
+    true
   }
 
   /// Get the constant arguments
@@ -463,22 +459,15 @@ impl Atom {
   }
 
   /// Create a partition of the atom's arguments into constant and variable
-  pub fn const_var_partition(&self) -> (Vec<(usize, &Constant)>, Vec<(usize, &Variable)>) {
-    let (constants, variables): (Vec<_>, Vec<_>) = self.args.iter().enumerate().partition(|(_, t)| t.is_constant());
-    let constants = constants
-      .into_iter()
-      .map(|(i, c)| match c {
-        Term::Constant(c) => (i, c),
-        _ => panic!("Should not happen"),
-      })
-      .collect();
-    let variables = variables
-      .into_iter()
-      .map(|(i, v)| match v {
-        Term::Variable(v) => (i, v),
-        _ => panic!("Should not happen"),
-      })
-      .collect();
+  pub fn const_var_partition(&self) -> (IndexedArguments<'_, Constant>, IndexedArguments<'_, Variable>) {
+    let mut constants = vec![];
+    let mut variables = vec![];
+    for (i, term) in self.args.iter().enumerate() {
+      match term {
+        Term::Constant(c) => constants.push((i, c)),
+        Term::Variable(v) => variables.push((i, v)),
+      }
+    }
     (constants, variables)
   }
 
@@ -486,7 +475,7 @@ impl Atom {
   pub fn substitute<F: Fn(&Term) -> Term>(&self, f: F) -> Self {
     Self {
       predicate: self.predicate.clone(),
-      args: self.args.iter().map(|a| f(a)).collect(),
+      args: self.args.iter().map(f).collect(),
     }
   }
 }
@@ -544,10 +533,7 @@ pub enum AssignExpr {
 
 impl AssignExpr {
   pub fn is_new_expr(&self) -> bool {
-    match self {
-      Self::New(_) => true,
-      _ => false,
-    }
+    matches!(self, Self::New(_))
   }
 }
 
@@ -736,40 +722,6 @@ pub struct Reduce {
 }
 
 impl Reduce {
-  pub fn new(
-    aggregator: String,
-    params: Vec<Constant>,
-    named_params: BTreeMap<String, Constant>,
-    has_exclamation_mark: bool,
-    left_var_types: Vec<ValueType>,
-    arg_var_types: Vec<ValueType>,
-    input_var_types: Vec<ValueType>,
-    left_vars: Vec<Variable>,
-    group_by_vars: Vec<Variable>,
-    other_group_by_vars: Vec<Variable>,
-    arg_vars: Vec<Variable>,
-    to_aggregate_vars: Vec<Variable>,
-    body_formula: Atom,
-    group_by_formula: Option<Atom>,
-  ) -> Self {
-    Self {
-      aggregator,
-      params,
-      named_params,
-      has_exclamation_mark,
-      left_var_types,
-      arg_var_types,
-      input_var_types,
-      left_vars,
-      group_by_vars,
-      other_group_by_vars,
-      arg_vars,
-      to_aggregate_vars,
-      body_formula,
-      group_by_formula,
-    }
-  }
-
   pub fn variable_args(&self) -> impl Iterator<Item = &Variable> {
     self
       .left_vars

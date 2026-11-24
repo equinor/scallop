@@ -1,36 +1,25 @@
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum OutputOption {
   /// Hidden output means that the relation would not be returned or printed by default
   Hidden,
 
   /// Default output means that the relation is either printed or returned
+  #[default]
   Default,
 
   /// File output means that we will output the thing into a file
   File(OutputFile),
 }
 
-impl Default for OutputOption {
-  fn default() -> Self {
-    Self::Default
-  }
-}
-
 impl OutputOption {
   pub fn is_hidden(&self) -> bool {
-    match self {
-      Self::Hidden => true,
-      _ => false,
-    }
+    matches!(self, Self::Hidden)
   }
 
   pub fn is_default(&self) -> bool {
-    match self {
-      Self::Default => true,
-      _ => false,
-    }
+    matches!(self, Self::Default)
   }
 
   pub fn is_not_hidden(&self) -> bool {
@@ -48,7 +37,7 @@ impl std::fmt::Display for OutputOption {
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OutputFile {
   CSV(OutputCSVFile),
 }
@@ -61,7 +50,7 @@ impl std::fmt::Display for OutputFile {
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct OutputCSVFile {
   pub file_path: PathBuf,
   pub deliminator: u8,

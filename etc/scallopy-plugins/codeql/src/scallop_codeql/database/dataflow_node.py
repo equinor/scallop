@@ -1,11 +1,26 @@
+from __future__ import annotations
+
 from typing import List
+from collections.abc import Callable
 import csv
 
 import scallopy
 
 from ..plugin import ScallopCodeQLPlugin
+from ._fields import FieldMetadata
 
-FIELDS = {
+
+class DataflowField(FieldMetadata):
+  retrieve: Callable[[int, list[str], MethodDefinition | None], int | str]
+
+
+def _retrieve_method_id(row_id: int, row: list[str], method_def: MethodDefinition | None) -> int:
+  if method_def is None:
+    raise RuntimeError("Method definitions are required for enclosing_method_id")
+  return method_def.retrieve_id(row[4], row[1], int(row[5]), int(row[6]))
+
+
+FIELDS: dict[str, DataflowField] = {
   "id": {
     "name": "id",
     "type": "usize",
@@ -34,7 +49,7 @@ FIELDS = {
   "enclosing_method_id": {
     "name": "enclosing_method_id",
     "type": "usize",
-    "retrieve": lambda id, row, method_def: method_def.retrieve_id(row[4], row[1], int(row[5]), int(row[6])),
+    "retrieve": _retrieve_method_id,
   }
 }
 
@@ -73,7 +88,7 @@ def get_dataflow_node(arg_names: List[str], arg_types: List[scallopy.AstTypeNode
       try:
         fact = tuple([FIELDS[field_name]["retrieve"](row_id, row, method_def) for field_name in arg_names])
         yield fact
-      except:
+      except (IndexError, KeyError, ValueError):
         pass
 
   # Return the foreign predicate

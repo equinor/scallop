@@ -16,7 +16,7 @@ impl Program {
     for stratum in &self.strata {
       for (predicate, relation) in &stratum.relations {
         let relation_node_id = graph.add_node(relation);
-        relation_node_ids.insert(predicate.clone(), relation_node_id.clone());
+        relation_node_ids.insert(predicate.clone(), relation_node_id);
       }
     }
 
@@ -27,8 +27,8 @@ impl Program {
         let target = relation_node_ids[&update.target];
         for dep_pred in update.dependency() {
           let source = relation_node_ids[&dep_pred];
-          if let Some(edge_id) = edge_ids.get(&(source.clone(), target.clone())) {
-            graph.edge_weight_mut(edge_id.clone()).unwrap().insert(update);
+          if let Some(edge_id) = edge_ids.get(&(source, target)) {
+            graph.edge_weight_mut(*edge_id).unwrap().insert(update);
           } else {
             let edge_id = graph.add_edge(source, target, std::iter::once(update).collect::<BTreeSet<_>>());
             edge_ids.insert((source, target), edge_id);

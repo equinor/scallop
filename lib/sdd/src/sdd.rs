@@ -86,11 +86,21 @@ impl SDDNodes {
     self.nodes.len()
   }
 
+  pub fn is_empty(&self) -> bool {
+    self.nodes.is_empty()
+  }
+
   pub fn retain<F>(&mut self, mut f: F)
   where
     F: FnMut(SDDNodeIndex) -> bool,
   {
-    self.nodes.retain(|n, _| f(SDDNodeIndex(n.clone())))
+    self.nodes.retain(|n, _| f(SDDNodeIndex(*n)))
+  }
+}
+
+impl Default for SDDNodes {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
@@ -165,8 +175,8 @@ impl SDD {
   {
     match &self.sdd_nodes[node_id] {
       SDDNode::Or { children } => children.iter().fold(semiring.zero(), |acc, SDDElement { prime, sub }| {
-        let prime_res = self.eval_node_t(prime.clone(), var_assign, semiring);
-        let sub_res = self.eval_node_t(sub.clone(), var_assign, semiring);
+        let prime_res = self.eval_node_t(*prime, var_assign, semiring);
+        let sub_res = self.eval_node_t(*sub, var_assign, semiring);
         semiring.add(acc, semiring.mult(prime_res, sub_res))
       }),
       SDDNode::Literal { literal } => match literal {
@@ -181,8 +191,8 @@ impl SDD {
   pub fn dot(&self) -> String {
     fn literal_label(literal: &SDDLiteral) -> String {
       match literal {
-        SDDLiteral::True => format!("⊤"),
-        SDDLiteral::False => format!("⊥"),
+        SDDLiteral::True => "⊤".to_string(),
+        SDDLiteral::False => "⊥".to_string(),
         SDDLiteral::PosVar { var_id } => format!("V{}", var_id),
         SDDLiteral::NegVar { var_id } => format!("¬V{}", var_id),
       }
@@ -207,7 +217,7 @@ impl SDD {
       elem_id: &mut usize,
     ) {
       let curr_label = node_identifier(curr_node);
-      match &nodes[curr_node.clone()] {
+      match &nodes[curr_node] {
         SDDNode::Or { children } => {
           node_strs.push(format!("{} [label=\"OR\", shape=circle];", curr_label));
           for SDDElement { prime, sub } in children {
@@ -216,8 +226,8 @@ impl SDD {
             *elem_id += 1;
 
             // Get child label
-            let prime_label = literal_label_or_node_identifier(nodes, prime.clone());
-            let sub_label = literal_label_or_node_identifier(nodes, sub.clone());
+            let prime_label = literal_label_or_node_identifier(nodes, *prime);
+            let sub_label = literal_label_or_node_identifier(nodes, *sub);
 
             // Add nodes
             node_strs.push(format!(
@@ -229,19 +239,13 @@ impl SDD {
             edge_strs.push(format!("{} -> {};", curr_label, elem_label));
 
             // Add Elem to Child edge and continue traverse
-            match &nodes[prime.clone()] {
-              SDDNode::Or { .. } => {
-                edge_strs.push(format!("{}:prime -> {};", elem_label, prime_label));
-                traverse(nodes, prime.clone(), node_strs, edge_strs, elem_id);
-              }
-              _ => {}
+            if let SDDNode::Or { .. } = &nodes[*prime] {
+              edge_strs.push(format!("{}:prime -> {};", elem_label, prime_label));
+              traverse(nodes, *prime, node_strs, edge_strs, elem_id);
             }
-            match &nodes[sub.clone()] {
-              SDDNode::Or { .. } => {
-                edge_strs.push(format!("{}:sub -> {};", elem_label, sub_label));
-                traverse(nodes, sub.clone(), node_strs, edge_strs, elem_id);
-              }
-              _ => {}
+            if let SDDNode::Or { .. } = &nodes[*sub] {
+              edge_strs.push(format!("{}:sub -> {};", elem_label, sub_label));
+              traverse(nodes, *sub, node_strs, edge_strs, elem_id);
             }
           }
         }
@@ -257,13 +261,7 @@ impl SDD {
     let mut elem_id = 0;
 
     for root in &self.roots {
-      traverse(
-        &self.sdd_nodes,
-        root.clone(),
-        &mut node_strs,
-        &mut edge_strs,
-        &mut elem_id,
-      );
+      traverse(&self.sdd_nodes, *root, &mut node_strs, &mut edge_strs, &mut elem_id);
     }
 
     format!(

@@ -70,6 +70,12 @@ impl DynamicEntityStorage {
   }
 }
 
+impl Default for DynamicEntityStorage {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 #[derive(Debug)]
 pub struct DynamicEntityStorage2 {
   storage: Mutex<DynamicEntityStorage>,
@@ -108,5 +114,11 @@ impl DynamicEntityStorage2 {
 
   pub fn drain_entities<F: Fn(&str) -> bool>(&self, f: F) -> HashMap<String, Vec<Tuple>> {
     self.storage.lock().unwrap().drain_entities(f)
+  }
+}
+
+impl Default for DynamicEntityStorage2 {
+  fn default() -> Self {
+    Self::new()
   }
 }

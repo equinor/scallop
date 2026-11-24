@@ -65,11 +65,10 @@ impl Program {
 
   /// Get the tuple type of a relation by its name; returns `None` if the relation does not exist.
   pub fn relation_tuple_type(&self, predicate: &str) -> Option<TupleType> {
-    if let Some(stratum_id) = self.relation_to_stratum.get(predicate) {
-      Some(self.strata[*stratum_id].relations[predicate].tuple_type.clone())
-    } else {
-      None
-    }
+    self
+      .relation_to_stratum
+      .get(predicate)
+      .map(|stratum_id| self.strata[*stratum_id].relations[predicate].tuple_type.clone())
   }
 
   /// Get the input file option of a relation by its name, returns `None` if the relation does not exist.
@@ -110,6 +109,12 @@ impl Program {
   }
 }
 
+impl Default for Program {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
 pub struct Stratum {
   pub is_recursive: bool,
@@ -123,7 +128,7 @@ impl Stratum {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Relation {
   /// The name of the relation
   pub predicate: String,
@@ -174,48 +179,10 @@ impl Relation {
   }
 }
 
-impl std::cmp::Ord for Relation {
-  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    use std::cmp::Ordering::*;
-
-    // First compare predicate
-    let pcmp = self.predicate.cmp(&other.predicate);
-    if pcmp != Equal {
-      return pcmp;
-    };
-
-    // Then compare tuple type
-    let tcmp = self.tuple_type.cmp(&other.tuple_type);
-    if tcmp != Equal {
-      return tcmp;
-    };
-
-    // Then compare input file
-    let icmp = self.input_file.cmp(&other.input_file);
-    if icmp != Equal {
-      return icmp;
-    };
-
-    // Finally compare facts
-    self.facts.cmp(&other.facts)
-  }
-}
-
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Fact {
   pub tag: DynamicInputTag,
   pub tuple: Tuple,
-}
-
-impl std::cmp::Eq for Fact {}
-
-impl std::cmp::Ord for Fact {
-  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    match self.partial_cmp(other) {
-      Some(ord) => ord,
-      _ => panic!("[Internal Error] No ordering found between facts"),
-    }
-  }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -366,7 +333,7 @@ impl Dataflow {
       | Self::ForeignPredicateConstraint(d, _, _)
       | Self::ForeignPredicateJoin(d, _, _)
       | Self::Exclusion(d, _) => d.source_relations(),
-      Self::JoinIndexedVec(d, s) => std::iter::once(s).chain(d.source_relations().into_iter()).collect(),
+      Self::JoinIndexedVec(d, s) => std::iter::once(s).chain(d.source_relations()).collect(),
       Self::Reduce(r) => std::iter::once(r.source_relation()).collect(),
       Self::Relation(r) => std::iter::once(r).collect(),
       Self::ForeignPredicateGround(_, _) | Self::UntaggedVec(_) => HashSet::new(),
@@ -418,9 +385,7 @@ impl Dataflow {
           false
         }
       }
-      Self::ForeignPredicateGround(_, _) | Self::UntaggedVec(_) => {
-        false
-      },
+      Self::ForeignPredicateGround(_, _) | Self::UntaggedVec(_) => false,
     }
   }
 }
@@ -447,9 +412,7 @@ impl ReduceGroupByType {
 
   pub fn substitute_relation(&mut self, source: &str, target: &str) -> bool {
     match self {
-      Self::None | Self::Implicit => {
-        false
-      }
+      Self::None | Self::Implicit => false,
       Self::Join(s) => {
         if s == source {
           *s = target.to_string();
@@ -477,7 +440,7 @@ impl Reduce {
 
   pub fn substitute_relation(&mut self, source: &str, target: &str) -> bool {
     let mut has_update = false;
-    if &self.predicate == source {
+    if self.predicate == source {
       self.predicate = target.to_string();
       has_update = true;
     }

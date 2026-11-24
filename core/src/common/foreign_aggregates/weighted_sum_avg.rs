@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use std::convert::*;
 
 use crate::common::tuple::*;
 use crate::common::type_family::*;
@@ -26,9 +25,9 @@ impl WeightedSumAvgAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for WeightedSumAvgAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::WeightedSumAvg(self)
+impl From<WeightedSumAvgAggregate> for DynamicAggregate {
+  fn from(val: WeightedSumAvgAggregate) -> Self {
+    DynamicAggregate::WeightedSumAvg(val)
   }
 }
 
@@ -171,16 +170,7 @@ impl<P: Provenance> Aggregator<P> for WeightedSumAvgAggregator {
             .iter()
             .map(|i| (prov.weight(&batch[*i].tag), &batch[*i].tuple)),
         );
-        let maybe_tag = batch.iter().enumerate().fold(Some(prov.one()), |maybe_acc, (i, elem)| {
-          maybe_acc.and_then(|acc| {
-            if chosen_set.contains(&i) {
-              Some(prov.mult(&acc, &elem.tag))
-            } else {
-              prov.negate(&elem.tag).map(|neg_tag| prov.mult(&acc, &neg_tag))
-            }
-          })
-        });
-        if let Some(tag) = maybe_tag {
+        if let Some(tag) = super::chosen_set_tag(prov, &batch, &chosen_set) {
           result.push(DynamicElement::new(res, tag));
         }
       }

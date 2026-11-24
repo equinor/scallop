@@ -57,13 +57,9 @@ where
   }
 
   fn iter_recent(self) -> Self::Recent {
-    // Sanitize input relation
-    let mut batch = if let Some(b) = self.d.iter_recent().next() {
-      b
-    } else {
+    let Some(mut batch) = self.d.iter_recent().next() else {
       return Self::Recent::empty();
     };
-
     // Cache the context
     let agg = self.agg;
     let rt = self.rt;
@@ -79,10 +75,7 @@ where
         result.extend(joined_results);
       };
 
-    // Get the first element from the batch; otherwise, return empty
-    let first_elem = if let Some(e) = batch.next() {
-      e
-    } else {
+    let Some(first_elem) = batch.next() else {
       return Self::Recent::empty();
     };
 
@@ -92,18 +85,15 @@ where
     let mut agg_group = vec![StaticElement::new(first_elem.tuple.1.clone(), first_elem.tag.clone())];
 
     // Enter main loop
-    while let Some(curr_elem) = batch.next() {
+    for curr_elem in batch {
       let curr_key = curr_elem.tuple.0.clone();
-      if curr_key == agg_key {
-        // If the key is the same, add this element to the same batch
-        agg_group.push(StaticElement::new(curr_elem.tuple.1.clone(), curr_elem.tag.clone()));
+      let elem = StaticElement::new(curr_elem.tuple.1.clone(), curr_elem.tag.clone());
+      if curr_key.cmp_tuple(&agg_key).is_eq() {
+        agg_group.push(elem);
       } else {
-        // Add the group into the results
-        let mut new_agg_key = curr_elem.tuple.0.clone();
-        std::mem::swap(&mut new_agg_key, &mut agg_key);
-        let mut new_agg_group = vec![StaticElement::new(curr_elem.tuple.1.clone(), curr_elem.tag.clone())];
-        std::mem::swap(&mut new_agg_group, &mut agg_group);
-        consolidate_group(&mut result, new_agg_key, new_agg_group);
+        let prev_key = std::mem::replace(&mut agg_key, curr_key);
+        let prev_group = std::mem::replace(&mut agg_group, vec![elem]);
+        consolidate_group(&mut result, prev_key, prev_group);
       }
     }
 

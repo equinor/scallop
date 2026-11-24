@@ -32,6 +32,15 @@ fn parse_rule() {
 }
 
 #[test]
+fn display_range_round_trips() {
+  for source in ["rel numbers(x) = x in 0..10", "rel numbers(x) = x in (0 + 1)..=10"] {
+    let printed = str_to_item(source).unwrap().to_string();
+    assert_eq!(printed, source);
+    assert!(str_to_item(&printed).is_ok());
+  }
+}
+
+#[test]
 fn ignore_comment_1() {
   assert!(str_to_item(r#"rel relate = { /* this is a comment */ }"#).is_ok());
   assert!(str_to_item(r#"rel relate = /* this is a comment */ {  }"#).is_ok());

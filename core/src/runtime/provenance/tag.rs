@@ -20,7 +20,7 @@ impl<Tup: Clone + Ord + Sized, Prov: Provenance> Eq for Tagged<Tup, Prov> {}
 
 impl<Tup: Clone + Ord + Sized, Prov: Provenance> PartialOrd for Tagged<Tup, Prov> {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    self.tuple.partial_cmp(&other.tuple)
+    Some(self.cmp(other))
   }
 }
 

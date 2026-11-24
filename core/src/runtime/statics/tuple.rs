@@ -1,16 +1,26 @@
+use std::cmp::Ordering;
+
 use crate::common::tuple::*;
 use crate::common::value::*;
+use crate::utils::FloatKey;
 
 pub trait StaticTupleTrait: 'static + Sized + Clone + std::fmt::Debug + std::cmp::PartialOrd {
   fn from_dyn_tuple(dyn_tuple: Tuple) -> Self;
 
   fn into_dyn_tuple(self) -> Tuple;
+
+  /// Compare tuple keys with the same total ordering used to sort static collections.
+  ///
+  /// The default requires a total `PartialOrd`; types with unordered values must override this.
+  fn cmp_tuple(&self, other: &Self) -> Ordering {
+    self
+      .partial_cmp(other)
+      .expect("static tuple keys with unordered values must implement cmp_tuple")
+  }
 }
 
 impl StaticTupleTrait for () {
-  fn from_dyn_tuple(_: Tuple) -> Self {
-    ()
-  }
+  fn from_dyn_tuple(_: Tuple) -> Self {}
   fn into_dyn_tuple(self) -> Tuple {
     Tuple::Tuple(Box::new([]))
   }
@@ -131,6 +141,9 @@ impl StaticTupleTrait for f32 {
   fn into_dyn_tuple(self) -> Tuple {
     Tuple::Value(Value::F32(self))
   }
+  fn cmp_tuple(&self, other: &Self) -> Ordering {
+    FloatKey(*self).cmp(&FloatKey(*other))
+  }
 }
 
 impl StaticTupleTrait for f64 {
@@ -139,6 +152,9 @@ impl StaticTupleTrait for f64 {
   }
   fn into_dyn_tuple(self) -> Tuple {
     Tuple::Value(Value::F64(self))
+  }
+  fn cmp_tuple(&self, other: &Self) -> Ordering {
+    FloatKey(*self).cmp(&FloatKey(*other))
   }
 }
 
@@ -192,6 +208,10 @@ where
   fn into_dyn_tuple(self) -> Tuple {
     Tuple::Tuple(Box::new([self.0.into_dyn_tuple()]))
   }
+
+  fn cmp_tuple(&self, other: &Self) -> Ordering {
+    self.0.cmp_tuple(&other.0)
+  }
 }
 
 impl<T1, T2> StaticTupleTrait for (T1, T2)
@@ -211,6 +231,10 @@ where
 
   fn into_dyn_tuple(self) -> Tuple {
     Tuple::Tuple(Box::new([self.0.into_dyn_tuple(), self.1.into_dyn_tuple()]))
+  }
+
+  fn cmp_tuple(&self, other: &Self) -> Ordering {
+    self.0.cmp_tuple(&other.0).then_with(|| self.1.cmp_tuple(&other.1))
   }
 }
 
@@ -237,6 +261,14 @@ where
       self.1.into_dyn_tuple(),
       self.2.into_dyn_tuple(),
     ]))
+  }
+
+  fn cmp_tuple(&self, other: &Self) -> Ordering {
+    self
+      .0
+      .cmp_tuple(&other.0)
+      .then_with(|| self.1.cmp_tuple(&other.1))
+      .then_with(|| self.2.cmp_tuple(&other.2))
   }
 }
 
@@ -266,6 +298,15 @@ where
       self.2.into_dyn_tuple(),
       self.3.into_dyn_tuple(),
     ]))
+  }
+
+  fn cmp_tuple(&self, other: &Self) -> Ordering {
+    self
+      .0
+      .cmp_tuple(&other.0)
+      .then_with(|| self.1.cmp_tuple(&other.1))
+      .then_with(|| self.2.cmp_tuple(&other.2))
+      .then_with(|| self.3.cmp_tuple(&other.3))
   }
 }
 
@@ -299,9 +340,19 @@ where
       self.4.into_dyn_tuple(),
     ]))
   }
+
+  fn cmp_tuple(&self, other: &Self) -> Ordering {
+    self
+      .0
+      .cmp_tuple(&other.0)
+      .then_with(|| self.1.cmp_tuple(&other.1))
+      .then_with(|| self.2.cmp_tuple(&other.2))
+      .then_with(|| self.3.cmp_tuple(&other.3))
+      .then_with(|| self.4.cmp_tuple(&other.4))
+  }
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone)]
 pub struct StaticTupleWrapper<T: StaticTupleTrait>(T);
 
 impl<T: StaticTupleTrait> StaticTupleWrapper<T> {
@@ -318,14 +369,23 @@ impl<T: StaticTupleTrait> StaticTupleWrapper<T> {
   }
 }
 
-impl<T: StaticTupleTrait> std::cmp::Eq for StaticTupleWrapper<T> {}
+impl<T: StaticTupleTrait> PartialEq for StaticTupleWrapper<T> {
+  fn eq(&self, other: &Self) -> bool {
+    self.cmp(other).is_eq()
+  }
+}
 
-impl<T: StaticTupleTrait> std::cmp::Ord for StaticTupleWrapper<T> {
-  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    match self.0.partial_cmp(&other.0) {
-      Some(ord) => ord,
-      None => panic!("[Internal Error] Unable to find ordering"),
-    }
+impl<T: StaticTupleTrait> Eq for StaticTupleWrapper<T> {}
+
+impl<T: StaticTupleTrait> PartialOrd for StaticTupleWrapper<T> {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl<T: StaticTupleTrait> Ord for StaticTupleWrapper<T> {
+  fn cmp(&self, other: &Self) -> Ordering {
+    self.0.cmp_tuple(&other.0)
   }
 }
 

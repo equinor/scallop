@@ -103,18 +103,18 @@ impl TypeInference {
   }
 
   pub fn extend_constant_types(&mut self, constant_types: HashMap<Loc, Type>) {
-    self.constant_types.extend(constant_types.into_iter());
+    self.constant_types.extend(constant_types);
   }
 
   pub fn relations(&self) -> Vec<String> {
     if self.query_relations.is_empty() {
       self
         .inferred_relation_types
-        .iter()
-        .filter_map(|(n, _)| if !n.contains("#") { Some(n.clone()) } else { None })
+        .keys()
+        .filter_map(|n| if !n.contains("#") { Some(n.clone()) } else { None })
         .collect()
     } else {
-      self.query_relations.iter().map(|(n, _)| n.clone()).collect()
+      self.query_relations.keys().cloned().collect()
     }
   }
 
@@ -125,7 +125,7 @@ impl TypeInference {
   pub fn relation_arg_types(&self, relation: &str) -> Option<Vec<ValueType>> {
     let inferred_relation_types = &self.inferred_relation_types;
     if let Some((tys, _)) = &inferred_relation_types.get(relation) {
-      Some(tys.iter().map(type_inference::TypeSet::to_default_value_type).collect())
+      Some(tys.iter().map(TypeSet::to_default_value_type).collect())
     } else {
       None
     }
@@ -179,7 +179,7 @@ impl TypeInference {
     }
   }
 
-  pub fn check_and_add_relation_type<'a>(&mut self, predicate: &str, tys: &Vec<ArgTypeBinding>, loc: &Loc) {
+  pub fn check_and_add_relation_type(&mut self, predicate: &str, tys: &[ArgTypeBinding], loc: &Loc) {
     // Check if the relation has been declared
     if self.relation_type_decl_loc.contains_key(predicate) {
       let source_loc = &self.relation_type_decl_loc[predicate];
@@ -296,16 +296,7 @@ impl TypeInference {
 
       // Go through all unifications
       for ctx in &self.rule_local_contexts {
-        ctx.unify_expr_types(
-          &self.custom_types,
-          &self.constant_types,
-          &self.inferred_relation_types,
-          &self.foreign_function_type_registry,
-          &self.foreign_predicate_type_registry,
-          &self.foreign_aggregate_type_registry,
-          &mut inferred_expr_types,
-          false,
-        )?;
+        ctx.unify_expr_types(self, &mut inferred_expr_types, false)?;
         ctx.propagate_variable_types(&mut inferred_var_expr, &mut inferred_expr_types)?;
         ctx.propagate_relation_types(
           &inferred_relation_expr,
@@ -319,16 +310,7 @@ impl TypeInference {
     // and make sure everything is fine
     for ctx in &self.rule_local_contexts {
       // Try unify one last time; this time using "strict" option
-      ctx.unify_expr_types(
-        &self.custom_types,
-        &self.constant_types,
-        &self.inferred_relation_types,
-        &self.foreign_function_type_registry,
-        &self.foreign_predicate_type_registry,
-        &self.foreign_aggregate_type_registry,
-        &mut inferred_expr_types,
-        true,
-      )?;
+      ctx.unify_expr_types(self, &mut inferred_expr_types, true)?;
       ctx.propagate_variable_types(&mut inferred_var_expr, &mut inferred_expr_types)?;
       ctx.propagate_relation_types(
         &inferred_relation_expr,
@@ -406,12 +388,9 @@ impl NodeVisitor<RelationTypeDecl> for TypeInference {
         .expect("[Internal Error] internally annotated adt attribute does not have a list of boolean as the argument 1")
         .iter()
         .map(|arg| {
-          arg
-            .as_boolean()
-            .expect(
-              "[Internal Error] internally annotated adt attribute does not have a list of boolean as the argument 1",
-            )
-            .clone()
+          arg.as_boolean().expect(
+            "[Internal Error] internally annotated adt attribute does not have a list of boolean as the argument 1",
+          )
         })
         .collect();
 
@@ -500,20 +479,19 @@ impl NodeVisitor<EnumTypeDecl> for TypeInference {
     // And then declare all the constant types
     // Note: we do not check for duplicated names here, as they are handled by `ConstantDeclAnalysis`.
     for member in enum_type_decl.iter_members() {
-      match member.assigned_num() {
-        Some(c) => match c {
+      if let Some(c) = member.assigned_num() {
+        match c {
           Constant::Integer(i) => {
             if i.int() < &0 {
               self
                 .errors
-                .push(Error::negative_enum_value(i.int().clone(), c.location().clone()))
+                .push(Error::negative_enum_value(*i.int(), c.location().clone()))
             }
           }
           _ => self
             .errors
             .push(Error::bad_enum_value_kind(c.kind(), c.location().clone())),
-        },
-        _ => {}
+        }
       }
     }
   }
@@ -576,23 +554,16 @@ impl NodeVisitor<ConstantSetDecl> for TypeInference {
       let maybe_arity = constant_set_decl
         .set()
         .iter_tuples()
-        .fold(Ok(None), |acc, tuple| match acc {
-          Ok(maybe_arity) => {
-            let current_arity = tuple.arity();
-            if let Some(previous_arity) = &maybe_arity {
-              if previous_arity != &current_arity {
-                return Err(Error::constant_set_arity_mismatch(
-                  pred.clone(),
-                  tuple.location().clone(),
-                ));
-              } else {
-                Ok(Some(current_arity))
-              }
-            } else {
-              Ok(Some(current_arity))
-            }
+        .try_fold(None, |maybe_arity, tuple| {
+          let current_arity = tuple.arity();
+          if maybe_arity.is_some_and(|previous_arity| previous_arity != current_arity) {
+            Err(Error::constant_set_arity_mismatch(
+              pred.clone(),
+              tuple.location().clone(),
+            ))
+          } else {
+            Ok(Some(current_arity))
           }
-          Err(err) => Err(err),
         });
 
       // If there is arity mismatch inside the set, add the error and stop
@@ -664,7 +635,7 @@ impl NodeVisitor<FactDecl> for TypeInference {
     let pred = fact_decl.predicate_name();
 
     // Check if the relation is a foreign predicate
-    if self.foreign_predicate_type_registry.contains_predicate(&pred) {
+    if self.foreign_predicate_type_registry.contains_predicate(pred) {
       self.errors.push(Error::cannot_redefine_foreign_predicate(
         pred.to_string(),
         fact_decl.location().clone(),

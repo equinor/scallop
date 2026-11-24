@@ -80,11 +80,16 @@ impl DesugarCaseIs {
   }
 }
 
+impl Default for DesugarCaseIs {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<Formula> for DesugarCaseIs {
   fn visit_mut(&mut self, formula: &mut Formula) {
-    match formula {
-      Formula::Case(c) => *formula = self.transform_case_is_to_formula(c),
-      _ => {}
+    if let Formula::Case(c) = formula {
+      *formula = self.transform_case_is_to_formula(c);
     }
   }
 }

@@ -31,3 +31,9 @@ impl SymbolRegistry2 {
     self.registry.lock().unwrap().get_symbol(id).cloned()
   }
 }
+
+impl Default for SymbolRegistry2 {
+  fn default() -> Self {
+    Self::new()
+  }
+}

@@ -100,8 +100,7 @@ impl Program {
     // populate the EDB permutations
     let mut ram_strata = strata
       .iter()
-      .enumerate()
-      .map(|(_, s)| {
+      .map(|s| {
         // Compute the ram stratum
         let ram_stratum = self.stratum_to_ram_stratum(
           s,
@@ -146,7 +145,7 @@ impl Program {
     // Add negative dataflow into the earliest stratum possible
     let mut accumulated_sources = HashSet::new();
     for ram_stratum in &mut ram_strata {
-      accumulated_sources.extend(ram_stratum.relations.iter().map(|(n, _)| n.clone()));
+      accumulated_sources.extend(ram_stratum.relations.keys().cloned());
 
       // Get the negative dataflows that can be computed at this stratum
       let curr_neg_dfs = negative_dataflows
@@ -204,7 +203,7 @@ impl Program {
     }
 
     // Create the stratum
-    let all_updates = vec![temp_updates, updates].concat();
+    let all_updates = [temp_updates, updates].concat();
     ram::Stratum {
       is_recursive: stratum.is_recursive,
       relations,
@@ -265,7 +264,7 @@ impl Program {
       .iter()
       .filter_map(|fact| {
         if &fact.predicate == pred {
-          Some(self.fact_to_ram_fact(&fact))
+          Some(self.fact_to_ram_fact(fact))
         } else {
           None
         }
@@ -283,7 +282,7 @@ impl Program {
           Some(
             disjunction
               .iter()
-              .map(|f| self.exclusive_fact_to_ram_fact(disjunction_id.clone(), f))
+              .map(|f| self.exclusive_fact_to_ram_fact(disjunction_id, f))
               .collect::<Vec<_>>(),
           )
         } else {
@@ -294,11 +293,10 @@ impl Program {
       .collect::<Vec<_>>();
 
     // Check input file
-    let input_file = if let Some(input_file_attr) = rel.attributes.get::<InputFileAttribute>() {
-      Some(input_file_attr.input_file.clone())
-    } else {
-      None
-    };
+    let input_file = rel
+      .attributes
+      .get::<InputFileAttribute>()
+      .map(|input_file_attr| input_file_attr.input_file.clone());
 
     // Check output file
     let output = self.outputs.get(pred).cloned().unwrap_or(OutputOption::Hidden);
@@ -314,19 +312,25 @@ impl Program {
         .is_none();
 
     // The Final Relation
-    let ram_relation = ram::Relation {
+
+    ram::Relation {
       predicate: pred.clone(),
       tuple_type,
-      facts: vec![facts, disjunctive_facts].concat(),
+      facts: [facts, disjunctive_facts].concat(),
       input_file,
       output,
       is_goal: rel.attributes.get::<GoalAttribute>().is_some(),
-      scheduler: rel.attributes.get::<SchedulerAttribute>().map(|sa| sa.scheduler.clone()),
-      storage: rel.attributes.get::<StorageAttribute>().map(|attr| attr.metadata.clone()).unwrap_or(StorageMetadata::default()),
+      scheduler: rel
+        .attributes
+        .get::<SchedulerAttribute>()
+        .map(|sa| sa.scheduler.clone()),
+      storage: rel
+        .attributes
+        .get::<StorageAttribute>()
+        .map(|attr| attr.metadata.clone())
+        .unwrap_or_default(),
       immutable,
-    };
-
-    ram_relation
+    }
   }
 
   fn fact_to_ram_fact(&self, fact: &Fact) -> ram::Fact {
@@ -343,13 +347,7 @@ impl Program {
     }
   }
 
-  fn plan_to_ram_update(
-    &self,
-    ctx: &mut B2RContext,
-    head: &Head,
-    plan: &Plan,
-    prefer_in_place: bool,
-  ) -> ram::Update {
+  fn plan_to_ram_update(&self, ctx: &mut B2RContext, head: &Head, plan: &Plan, prefer_in_place: bool) -> ram::Update {
     // Check if the dataflow needs projection and update the dataflow
     let dataflow = match head {
       Head::Atom(head_atom) => {
@@ -371,13 +369,12 @@ impl Program {
 
         // Check if the head predicate is a magic-set; if so we wrap an overwrite_one dataflow around
         // NOTE: only head atom predicate can be magic-set predicate
-        let dataflow = if self.is_magic_set_predicate(&head.predicate()) == Some(true) {
+
+        if self.is_magic_set_predicate(head.predicate()) == Some(true) {
           dataflow.overwrite_one()
         } else {
           dataflow
-        };
-
-        dataflow
+        }
       }
       Head::Disjunction(head_atoms) => {
         if !head.has_multiple_patterns() {
@@ -443,14 +440,14 @@ impl Program {
     match &plan.ram_node {
       HighRamNode::Unit => ram::Dataflow::unit(goal.unit_type()),
       HighRamNode::Ground(atom) => self.ground_plan_to_ram_dataflow(ctx, goal, atom, prop),
-      HighRamNode::Filter(d, f) => self.filter_plan_to_ram_dataflow(ctx, goal, &*d, f, prop),
-      HighRamNode::Project(d, p) => self.project_plan_to_ram_dataflow(ctx, goal, &*d, p, prop),
-      HighRamNode::Join(d1, d2) => self.join_plan_to_ram_dataflow(ctx, goal, &*d1, &*d2, prop),
-      HighRamNode::Antijoin(d1, d2) => self.antijoin_plan_to_ram_dataflow(ctx, goal, &*d1, &*d2, prop),
+      HighRamNode::Filter(d, f) => self.filter_plan_to_ram_dataflow(ctx, goal, d, f, prop),
+      HighRamNode::Project(d, p) => self.project_plan_to_ram_dataflow(ctx, goal, d, p, prop),
+      HighRamNode::Join(d1, d2) => self.join_plan_to_ram_dataflow(ctx, goal, d1, d2, prop),
+      HighRamNode::Antijoin(d1, d2) => self.antijoin_plan_to_ram_dataflow(ctx, goal, d1, d2, prop),
       HighRamNode::Reduce(r) => self.reduce_plan_to_ram_dataflow(ctx, goal, r, prop),
       HighRamNode::ForeignPredicateGround(a) => self.fp_ground_plan_to_ram_dataflow(ctx, goal, a, prop),
-      HighRamNode::ForeignPredicateConstraint(d, a) => self.fp_constraint_plan_to_ram_dataflow(ctx, goal, &*d, a, prop),
-      HighRamNode::ForeignPredicateJoin(d, a) => self.fp_join_plan_to_ram_dataflow(ctx, goal, &*d, a, prop),
+      HighRamNode::ForeignPredicateConstraint(d, a) => self.fp_constraint_plan_to_ram_dataflow(ctx, goal, d, a, prop),
+      HighRamNode::ForeignPredicateJoin(d, a) => self.fp_join_plan_to_ram_dataflow(ctx, goal, d, a, prop),
     }
   }
 
@@ -544,7 +541,7 @@ impl Program {
       VariableTuple::Tuple(
         constants
           .iter()
-          .map(|(i, c)| VariableTuple::Value(const_var(i.clone(), c.value_type())))
+          .map(|(i, c)| VariableTuple::Value(const_var(*i, c.value_type())))
           .collect(),
       )
     };
@@ -604,28 +601,31 @@ impl Program {
       ram::Dataflow::Relation(atom.predicate.clone())
     } else {
       let perm = goal.permutation(atom);
-      if let Some(filter) = Self::atom_filter(atom) {
-        let dataflow = ram::Dataflow::project(
-          ram::Dataflow::filter(ram::Dataflow::Relation(atom.predicate.clone()), filter),
-          perm.expr(),
-        );
-        if prop.need_sorted && !perm.order_preserving() {
-          ctx.add_permutation(atom.predicate.clone(), perm);
-          if prop.is_negative {
-            Self::create_negative_temp_relation(ctx, goal, dataflow)
+      match Self::atom_filter(atom) {
+        Some(filter) => {
+          let dataflow = ram::Dataflow::project(
+            ram::Dataflow::filter(ram::Dataflow::Relation(atom.predicate.clone()), filter),
+            perm.expr(),
+          );
+          if prop.need_sorted && !perm.order_preserving() {
+            ctx.add_permutation(atom.predicate.clone(), perm);
+            if prop.is_negative {
+              Self::create_negative_temp_relation(ctx, goal, dataflow)
+            } else {
+              Self::create_temp_relation(ctx, goal, dataflow)
+            }
           } else {
-            Self::create_temp_relation(ctx, goal, dataflow)
+            dataflow
           }
-        } else {
-          dataflow
         }
-      } else {
-        if prop.need_sorted && !perm.order_preserving() {
-          let perm_name = Self::permutated_predicate_name(&atom.predicate, &perm);
-          ctx.add_permutation(atom.predicate.clone(), perm);
-          ram::Dataflow::Relation(perm_name)
-        } else {
-          ram::Dataflow::project(ram::Dataflow::Relation(atom.predicate.clone()), perm.expr())
+        None => {
+          if prop.need_sorted && !perm.order_preserving() {
+            let perm_name = Self::permutated_predicate_name(&atom.predicate, &perm);
+            ctx.add_permutation(atom.predicate.clone(), perm);
+            ram::Dataflow::Relation(perm_name)
+          } else {
+            ram::Dataflow::project(ram::Dataflow::Relation(atom.predicate.clone()), perm.expr())
+          }
         }
       }
     }
@@ -652,14 +652,10 @@ impl Program {
     ctx: &mut B2RContext,
     goal: &VariableTuple,
     subplan: &Plan,
-    filters: &Vec<Constraint>,
+    filters: &[Constraint],
     prop: DataflowProp,
   ) -> ram::Dataflow {
-    let sub_goal = goal.expand(
-      filters
-        .iter()
-        .flat_map(|c| c.unique_variable_args().into_iter().cloned()),
-    );
+    let sub_goal = goal.expand(filters.iter().flat_map(|c| c.unique_variable_args().cloned()));
     let sub_dataflow = self.plan_to_ram_dataflow(ctx, &sub_goal, subplan, prop);
     let filter = self.constraints_to_ram_filter(&sub_goal, filters);
     let project = ram::Dataflow::project(ram::Dataflow::filter(sub_dataflow, filter), sub_goal.projection(goal));
@@ -672,7 +668,7 @@ impl Program {
     ctx: &mut B2RContext,
     goal: &VariableTuple,
     subplan: &Plan,
-    assigns: &Vec<Assign>,
+    assigns: &[Assign],
     prop: DataflowProp,
   ) -> ram::Dataflow {
     let goal_variables = goal.variables_set();
@@ -689,7 +685,7 @@ impl Program {
           .iter()
           .flat_map(|a| a.variable_args().into_iter().cloned()),
       );
-      let sub_goal = VariableTuple::from_vars(sub_goal_vars, false.into());
+      let sub_goal = VariableTuple::from_vars(sub_goal_vars, false);
       let current_assigns = current_assigns.into_iter().map(|a| (a.left, a.right)).collect();
       let sub_dataflow =
         self.project_plan_to_ram_dataflow(ctx, &sub_goal, subplan, &rest, prop.with_need_sorted(false));
@@ -738,11 +734,21 @@ impl Program {
   ) -> ram::Dataflow {
     // 1. Select the variables from the goal that comes from the left
     let sub_goal_1 = self.sub_tuple(goal, d1);
-    let sub_dataflow_1 = self.plan_to_ram_dataflow(ctx, &sub_goal_1, d1, prop.with_need_sorted(true).with_is_negative(false));
+    let sub_dataflow_1 = self.plan_to_ram_dataflow(
+      ctx,
+      &sub_goal_1,
+      d1,
+      prop.with_need_sorted(true).with_is_negative(false),
+    );
 
     // 2. Select the variables from the goal that comes from the right
     let sub_goal_2 = self.sub_tuple(goal, d2);
-    let sub_dataflow_2 = self.plan_to_ram_dataflow(ctx, &sub_goal_2, d2, prop.with_need_sorted(true).with_is_negative(false));
+    let sub_dataflow_2 = self.plan_to_ram_dataflow(
+      ctx,
+      &sub_goal_2,
+      d2,
+      prop.with_need_sorted(true).with_is_negative(false),
+    );
 
     // 3. Join the two dataflows
     let joint_sub_goal = VariableTuple::from((sub_goal_1, sub_goal_2));
@@ -1131,7 +1137,7 @@ impl Program {
     let rel = self.relation_of_predicate(&head.predicate).unwrap();
     if let Some(agg_attr) = rel.attributes.get::<AggregateBodyAttribute>() {
       // For an aggregate sub-relation
-      let head_args = head.variable_args().into_iter().cloned().collect::<Vec<_>>();
+      let head_args = head.variable_args().cloned().collect::<Vec<_>>();
       let num_group_by = agg_attr.num_group_by_vars;
 
       // Compute the items for aggregation
@@ -1154,9 +1160,9 @@ impl Program {
       (var_tuple, false)
     } else if let Some(agg_group_by_attr) = rel.attributes.get::<AggregateGroupByAttribute>() {
       let num_group_by = agg_group_by_attr.num_join_group_by_vars;
-      let var_args = head.variable_args().into_iter().cloned().collect::<Vec<_>>();
-      let joined = VariableTuple::from_vars((&var_args[..num_group_by]).into_iter().cloned(), true);
-      let others = VariableTuple::from_vars((&var_args[num_group_by..]).into_iter().cloned(), true);
+      let var_args = head.variable_args().cloned().collect::<Vec<_>>();
+      let joined = VariableTuple::from_vars(var_args[..num_group_by].iter().cloned(), true);
+      let others = VariableTuple::from_vars(var_args[num_group_by..].iter().cloned(), true);
 
       // Aggregate group by does not need projection too as there is no constant in head
       (VariableTuple::from((joined, others)), false)
@@ -1198,10 +1204,10 @@ impl Program {
 
   fn sub_tuple(&self, goal: &VariableTuple, plan: &Plan) -> VariableTuple {
     // Shortcut for pure atom where all args are distinct variables
-    if let Some(a) = plan.ram_node.direct_atom() {
-      if a.is_pure() {
-        return goal.subtuple(a.variable_args().cloned().into_iter());
-      }
+    if let Some(a) = plan.ram_node.direct_atom()
+      && a.is_pure()
+    {
+      return goal.subtuple(a.variable_args().cloned());
     }
 
     // Otherwise, use arbitrary order of bounded args to create subtuple
@@ -1210,7 +1216,7 @@ impl Program {
     goal.subtuple(sorted_vars.into_iter())
   }
 
-  fn constraints_to_ram_filter(&self, var_tuple: &VariableTuple, constraints: &Vec<Constraint>) -> Expr {
+  fn constraints_to_ram_filter(&self, var_tuple: &VariableTuple, constraints: &[Constraint]) -> Expr {
     let term_to_expr = |t: &Term| match t {
       Term::Constant(c) => Expr::Constant(c.clone()),
       Term::Variable(v) => Expr::Access(var_tuple.accessor_of(v).unwrap()),
@@ -1220,8 +1226,8 @@ impl Program {
       Constraint::Unary(u) => Expr::unary(UnaryOp::from(&u.op), term_to_expr(&u.op1)),
     };
     let mut expr = constraint_to_expr(&constraints[0]);
-    for i in 1..constraints.len() {
-      expr = Expr::binary(BinaryOp::And, expr, constraint_to_expr(&constraints[i]));
+    for constraint in &constraints[1..] {
+      expr = Expr::binary(BinaryOp::And, expr, constraint_to_expr(constraint));
     }
     expr
   }
@@ -1271,15 +1277,12 @@ impl Program {
     let mut var_id_map = HashMap::<Variable, usize>::new();
     let mut eq_vars = vec![];
     for (i, arg) in atom.args.iter().enumerate() {
-      match arg {
-        Term::Variable(v) => {
-          if let Some(var_id) = var_id_map.get(v) {
-            eq_vars.push((var_id.clone(), i));
-          } else {
-            var_id_map.insert(v.clone(), i);
-          }
+      if let Term::Variable(v) = arg {
+        if let Some(var_id) = var_id_map.get(v) {
+          eq_vars.push((*var_id, i));
+        } else {
+          var_id_map.insert(v.clone(), i);
         }
-        _ => {}
       }
     }
     eq_vars
@@ -1298,8 +1301,8 @@ impl Program {
         )
       };
       let mut expr = eq_expr(eq_vars[0]);
-      for i in 1..eq_vars.len() {
-        expr = Expr::binary(BinaryOp::And, expr, eq_expr(eq_vars[i]));
+      for &pair in &eq_vars[1..] {
+        expr = Expr::binary(BinaryOp::And, expr, eq_expr(pair));
       }
       Some(expr)
     }
@@ -1312,7 +1315,7 @@ impl Program {
           if let Some(storage_attr) = rel.attributes.get::<StorageAttribute>() {
             match &storage_attr.metadata {
               StorageMetadata::IndexedVec => Some(rel_name.clone()),
-              _ => None
+              _ => None,
             }
           } else {
             None
@@ -1321,14 +1324,14 @@ impl Program {
           None
         }
       }
-      _ => None
+      _ => None,
     }
   }
 
-  fn perm_to_ram_update(&self, perm_pred_name: String, pred_name: &String, perm: &Permutation) -> ram::Update {
+  fn perm_to_ram_update(&self, perm_pred_name: String, pred_name: &str, perm: &Permutation) -> ram::Update {
     ram::Update {
       target: perm_pred_name,
-      dataflow: ram::Dataflow::project(ram::Dataflow::relation(pred_name.clone()), perm.expr()),
+      dataflow: ram::Dataflow::project(ram::Dataflow::relation(pred_name), perm.expr()),
     }
   }
 

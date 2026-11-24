@@ -7,6 +7,12 @@ impl RealSemiring {
   }
 }
 
+impl Default for RealSemiring {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl sdd::Semiring for RealSemiring {
   type Element = f64;
 

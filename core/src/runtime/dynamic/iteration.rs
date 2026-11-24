@@ -1,10 +1,10 @@
 use std::collections::*;
 
 use crate::compiler::ram;
+use crate::runtime::database::*;
 use crate::runtime::env::*;
 use crate::runtime::monitor::*;
 use crate::runtime::provenance::*;
-use crate::runtime::database::*;
 
 use super::dataflow::*;
 use super::*;
@@ -59,11 +59,11 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
   }
 
   pub fn get_dynamic_relation<'c>(&'c self, name: &str) -> Option<&'c DynamicRelation<Prov>> {
-    self.dynamic_relations.get(name).map(|r| r)
+    self.dynamic_relations.get(name)
   }
 
   pub fn get_dynamic_relation_unsafe<'c>(&'c self, name: &str) -> &'c DynamicRelation<Prov> {
-    self.dynamic_relations.get(name).map(|r| r).unwrap()
+    self.dynamic_relations.get(name).unwrap()
   }
 
   pub fn add_update_dataflow(&mut self, target: &str, dataflow: ram::Dataflow) {
@@ -78,7 +78,9 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
   }
 
   pub fn add_output_relation_with_default_storage(&mut self, name: &str) {
-    self.output_relations.push((name.to_string(), StorageMetadata::default()))
+    self
+      .output_relations
+      .push((name.to_string(), StorageMetadata::default()))
   }
 
   pub fn add_output_relation(&mut self, name: &str, metadata: &StorageMetadata) {
@@ -144,19 +146,17 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
     // Check if it has been changed
     if self.changed(ctx, runtime) || self.is_first_iteration() {
       // Check iter count; if reaching limit then we need to stop
-      if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit() {
-        if self.iter_num > iter_limit {
-          self.changed(ctx, runtime);
-          return false;
-        }
+      if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit()
+        && self.iter_num > iter_limit
+      {
+        self.changed(ctx, runtime);
+        return false;
       }
 
       // Check if we have reached a goal
-      if runtime.stopping_criteria.stop_when_goal_relation_non_empty() {
-        if self.derived_non_empty_goal_relation() {
-          self.changed(ctx, runtime);
-          return false;
-        }
+      if runtime.stopping_criteria.stop_when_goal_relation_non_empty() && self.derived_non_empty_goal_relation() {
+        self.changed(ctx, runtime);
+        return false;
       }
 
       // If not reaching limit then we need to iterate
@@ -164,14 +164,14 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
     }
 
     // If it is no longer changing, but we are still less than expected iter limit, continue
-    if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit() {
-      if self.iter_num < iter_limit {
-        return true;
-      }
+    if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit()
+      && self.iter_num < iter_limit
+    {
+      return true;
     }
 
     // Finally, stop
-    return false;
+    false
   }
 
   pub fn run_with_monitor<M>(
@@ -217,25 +217,23 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
     // Check if it has been changed
     if self.changed(ctx, runtime) || self.is_first_iteration() {
       // Check iter count; if reaching limit then we need to stop
-      if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit() {
-        if self.iter_num > iter_limit {
-          // !SPECIAL MONITORING!
-          m.observe_hitting_iteration_limit();
+      if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit()
+        && self.iter_num > iter_limit
+      {
+        // !SPECIAL MONITORING!
+        m.observe_hitting_iteration_limit();
 
-          self.changed(ctx, runtime);
-          return false;
-        }
+        self.changed(ctx, runtime);
+        return false;
       }
 
       // Check if we have reached a goal
-      if runtime.stopping_criteria.stop_when_goal_relation_non_empty() {
-        if self.derived_non_empty_goal_relation() {
-          // !SPECIAL MONITORING!
-          m.observe_deriving_goal_relation();
+      if runtime.stopping_criteria.stop_when_goal_relation_non_empty() && self.derived_non_empty_goal_relation() {
+        // !SPECIAL MONITORING!
+        m.observe_deriving_goal_relation();
 
-          self.changed(ctx, runtime);
-          return false;
-        }
+        self.changed(ctx, runtime);
+        return false;
       }
 
       // If not reaching limit then we need to iterate
@@ -243,17 +241,17 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
     }
 
     // If it is no longer changing, but we are still less than expected iter limit, continue
-    if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit() {
-      if self.iter_num < iter_limit {
-        return true;
-      }
+    if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit()
+      && self.iter_num < iter_limit
+    {
+      return true;
     }
 
     // !SPECIAL MONITORING!
     m.observe_converging();
 
     // Finally, stop
-    return false;
+    false
   }
 
   fn derived_non_empty_goal_relation(&self) -> bool {
@@ -304,7 +302,7 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
   fn unsafe_get_input_dynamic_index_vec_collection(&self, name: &str) -> &'a DynamicIndexedVecCollection<Prov> {
     match self.unsafe_get_input_dynamic_collection(name) {
       DynamicCollectionRef::IndexedVec(i) => i,
-      _ => panic!("Relation `{}` is not stored as indexed vector; aborting", name)
+      _ => panic!("Relation `{}` is not stored as indexed vector; aborting", name),
     }
   }
 
@@ -381,9 +379,7 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
           .build_dynamic_dataflow(env, ctx, d1)
           .dynamic_exclusion(self.build_dynamic_dataflow(env, ctx, d2), ctx, env)
       }
-      ram::Dataflow::Sorted(d) => {
-        self.build_dynamic_dataflow(env, ctx, d).sorted()
-      }
+      ram::Dataflow::Sorted(d) => self.build_dynamic_dataflow(env, ctx, d).sorted(),
       ram::Dataflow::Filter(d, e) => {
         let internal_filter = env
           .internalize_expr(e)
@@ -441,7 +437,7 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
         let op = env
           .aggregate_registry
           .instantiate_aggregator::<Prov>(&a.aggregator, a.aggregate_info.clone())
-          .expect(&format!("cannot instantiate aggregator `{}`", a.aggregator));
+          .unwrap_or_else(|| panic!("cannot instantiate aggregator `{}`", a.aggregator));
         match &a.group_by {
           ram::ReduceGroupByType::None => {
             let c = self.build_dynamic_collection(&a.predicate);
@@ -453,7 +449,7 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
           }
           ram::ReduceGroupByType::Join(other) => {
             let c = self.build_dynamic_collection(&a.predicate);
-            let g = self.build_dynamic_collection(&other);
+            let g = self.build_dynamic_collection(other);
             DynamicDataflow::new(DynamicAggregationJoinGroupDataflow::new(op, g, c, ctx, env))
           }
         }
@@ -464,6 +460,12 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
   fn build_dynamic_collection(&self, r: &str) -> DynamicDataflow<'_, Prov> {
     let col = self.unsafe_get_input_dynamic_collection(r);
     DynamicDataflow::dynamic_collection(col, self.is_first_iteration())
+  }
+}
+
+impl<'a, Prov: Provenance> Default for DynamicIteration<'a, Prov> {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

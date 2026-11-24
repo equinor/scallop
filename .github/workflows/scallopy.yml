@@ -14,6 +14,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python-quality:
+    name: Python package lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          version: "0.13.9"
+          cache-dependency-glob: uv.lock
+      - run: make lint-python typecheck-python
+
   build-and-test:
     name: Scallopy tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -35,15 +49,10 @@ jobs:
             target
           key: cargo-wheels-${{ runner.os }}-${{ runner.arch }}-python-${{ matrix.python-version }}-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '.github/workflows/scallopy.yml') }}
           restore-keys: cargo-wheels-${{ runner.os }}-${{ runner.arch }}-python-${{ matrix.python-version }}-${{ hashFiles('rust-toolchain.toml') }}-
-      - uses: actions/cache@v6.1.0
+      - uses: astral-sh/setup-uv@v10.4.0
         with:
-          path: |
-            ~/.cache/pip
-            ~/.cache/uv
-          key: python-tests-${{ runner.os }}-${{ runner.arch }}-${{ matrix.python-version }}-${{ hashFiles('.github/workflows/scallopy.yml') }}
-          restore-keys: python-tests-${{ runner.os }}-${{ runner.arch }}-${{ matrix.python-version }}-
-      - name: Install uv
-        run: python -m pip install --disable-pip-version-check uv==0.13.9
+          version: "0.13.9"
+          cache-dependency-glob: uv.lock
       - name: Build Scallopy wheel
         run: |
           uvx maturin@1.16.0 build --release --locked --compatibility linux \
@@ -59,9 +68,7 @@ jobs:
           overwrite: true
       - name: Install test dependencies and Scallopy wheel
         run: |
-          uv venv --python "$(command -v python)"
-          uv pip install "numpy>=2.4.6,<3"
-          uv pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0
+          uv sync --locked --python "$(command -v python)"
           uv pip install --no-index dist/wheels/*.whl
       - name: Test
-        run: uv run --no-project python etc/scallopy/tests/test.py
+        run: uv run --no-sync python etc/scallopy/tests/test.py

@@ -29,9 +29,9 @@ impl From<&Bound<'_, PyAny>> for ExtTag {
   }
 }
 
-impl Into<Py<PyAny>> for ExtTag {
-  fn into(self) -> Py<PyAny> {
-    Arc::try_unwrap(self.tag).unwrap_or_else(|tag| Python::attach(|py| tag.clone_ref(py)))
+impl From<ExtTag> for Py<PyAny> {
+  fn from(val: ExtTag) -> Self {
+    Arc::try_unwrap(val.tag).unwrap_or_else(|tag| Python::attach(|py| tag.clone_ref(py)))
   }
 }
 

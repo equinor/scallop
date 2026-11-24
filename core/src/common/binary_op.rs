@@ -43,45 +43,27 @@ impl std::fmt::Display for BinaryOp {
 
 impl BinaryOp {
   pub fn is_arith(&self) -> bool {
-    match self {
-      Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Mod => true,
-      _ => false,
-    }
+    matches!(self, Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Mod)
   }
 
   pub fn is_add_sub(&self) -> bool {
-    match self {
-      Self::Add | Self::Sub => true,
-      _ => false,
-    }
+    matches!(self, Self::Add | Self::Sub)
   }
 
   pub fn is_logical(&self) -> bool {
-    match self {
-      Self::And | Self::Or | Self::Xor => true,
-      _ => false,
-    }
+    matches!(self, Self::And | Self::Or | Self::Xor)
   }
 
   pub fn is_eq_neq(&self) -> bool {
-    match self {
-      Self::Eq | Self::Neq => true,
-      _ => false,
-    }
+    matches!(self, Self::Eq | Self::Neq)
   }
 
   pub fn is_eq(&self) -> bool {
-    match self {
-      Self::Eq => true,
-      _ => false,
-    }
+    matches!(self, Self::Eq)
   }
 
   pub fn is_numeric_cmp(&self) -> bool {
-    match self {
-      Self::Lt | Self::Leq | Self::Gt | Self::Geq => true,
-      _ => false,
-    }
+    matches!(self, Self::Lt | Self::Leq | Self::Gt | Self::Geq)
   }
 
   pub fn add_sub_inv_op(&self) -> Option<Self> {

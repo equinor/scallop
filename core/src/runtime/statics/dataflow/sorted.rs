@@ -23,7 +23,7 @@ where
   S: Dataflow<T, Prov>,
 {
   source: S,
-  phantom: PhantomData<(T, Prov)>
+  phantom: PhantomData<(T, Prov)>,
 }
 
 impl<S, T, Prov> Dataflow<T, Prov> for Sorted<S, T, Prov>
@@ -53,6 +53,12 @@ pub struct SortedOp<T, Prov>(PhantomData<(T, Prov)>);
 impl<T: StaticTupleTrait, Prov: Provenance> SortedOp<T, Prov> {
   pub fn new() -> Self {
     Self(PhantomData)
+  }
+}
+
+impl<T: StaticTupleTrait, Prov: Provenance> Default for SortedOp<T, Prov> {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

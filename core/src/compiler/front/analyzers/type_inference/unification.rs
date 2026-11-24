@@ -82,15 +82,19 @@ impl Unification {
   /// Try unifying the data types, and store the expression types to `inferred_expr_types`
   pub fn unify(
     &self,
-    custom_types: &HashMap<String, (ValueType, Loc)>,
-    constant_types: &HashMap<Loc, Type>,
-    inferred_relation_types: &HashMap<String, (Vec<TypeSet>, Loc)>,
-    function_type_registry: &FunctionTypeRegistry,
-    predicate_type_registry: &PredicateTypeRegistry,
-    aggregate_type_registry: &AggregateTypeRegistry,
+    inference: &TypeInference,
     inferred_expr_types: &mut HashMap<Loc, TypeSet>,
     strict: bool,
   ) -> Result<(), Error> {
+    let TypeInference {
+      custom_types,
+      constant_types,
+      inferred_relation_types,
+      foreign_function_type_registry: function_type_registry,
+      foreign_predicate_type_registry: predicate_type_registry,
+      foreign_aggregate_type_registry: aggregate_type_registry,
+      ..
+    } = inference;
     match self {
       Self::IthArgOfRelation(e, p, i) => {
         if let Some(tys) = predicate_type_registry.get(p) {
@@ -110,23 +114,19 @@ impl Unification {
               )),
             }
           } else {
-            Err(Error::invalid_foreign_predicate_arg_index(
-              p.clone(),
-              i.clone(),
-              e.clone(),
-            ))
+            Err(Error::invalid_foreign_predicate_arg_index(p.clone(), *i, e.clone()))
           }
         } else {
           // It is user defined predicate
           let (tys, loc) = inferred_relation_types.get(p).unwrap();
           if i < &tys.len() {
             let ty = tys[*i].clone();
-            unify_ty(e, ty, inferred_expr_types).map_err(|e| e.into())?;
+            unify_ty(e, ty, inferred_expr_types)?;
             Ok(())
           } else {
             Err(Error::invalid_predicate_arg_index(
               p.clone(),
-              i.clone(),
+              *i,
               loc.clone(),
               e.clone(),
             ))
@@ -138,9 +138,9 @@ impl Unification {
         // Check if the constant is typed or not
         if let Some(const_decl_type) = constant_types.get(e) {
           // First try to resolve for the type name
-          let t = match find_value_type(custom_types, const_decl_type) {
-            Ok(base_ty) => TypeSet::BaseType(base_ty, const_decl_type.location().clone()),
-            Err(err) => return Err(err),
+          let t = {
+            let base_ty = find_value_type(custom_types, const_decl_type)?;
+            TypeSet::BaseType(base_ty, const_decl_type.location().clone())
           };
 
           // Unify the type name and the constant type
@@ -157,7 +157,7 @@ impl Unification {
           Ok(())
         } else {
           // If the constant is not typed, simply check the inferred expression types
-          unify_ty(e, ty.clone(), inferred_expr_types).map_err(|e| e.into())?;
+          unify_ty(e, ty.clone(), inferred_expr_types)?;
           Ok(())
         }
       }
@@ -201,7 +201,7 @@ impl Unification {
       }
       Self::EqNeq(op1, op2, e) => {
         // The type of e is boolean
-        unify_boolean(e, inferred_expr_types).map_err(|e| e.into())?;
+        unify_boolean(e, inferred_expr_types)?;
 
         // The two operators are of the same type
         let op_ty = TypeSet::Any(op1.clone());
@@ -221,9 +221,9 @@ impl Unification {
       }
       Self::AndOrXor(op1, op2, e) => {
         // All e, op1, and op2 are boolean
-        unify_boolean(e, inferred_expr_types).map_err(|e| e.into())?;
-        unify_boolean(op1, inferred_expr_types).map_err(|e| e.into())?;
-        unify_boolean(op2, inferred_expr_types).map_err(|e| e.into())?;
+        unify_boolean(e, inferred_expr_types)?;
+        unify_boolean(op1, inferred_expr_types)?;
+        unify_boolean(op2, inferred_expr_types)?;
 
         Ok(())
       }
@@ -253,14 +253,14 @@ impl Unification {
       }
       Self::Not(op1, e) => {
         // e and op1 should both be boolean
-        unify_boolean(e, inferred_expr_types).map_err(|e| e.into())?;
-        unify_boolean(op1, inferred_expr_types).map_err(|e| e.into())?;
+        unify_boolean(e, inferred_expr_types)?;
+        unify_boolean(op1, inferred_expr_types)?;
 
         Ok(())
       }
       Self::IfThenElse(e, cond, then_br, else_br) => {
         // cond should be boolean
-        unify_boolean(cond, inferred_expr_types).map_err(|e| e.into())?;
+        unify_boolean(cond, inferred_expr_types)?;
 
         // Make sure that the expression, the then branch, and the else branch all have the same type
         let e_ty = get_or_insert_ty(e, TypeSet::Any(e.clone()), inferred_expr_types);
@@ -281,14 +281,14 @@ impl Unification {
       }
       Self::TypeCast(op1, e, ty) => {
         // Resulting type should be ty
-        let ts = match find_value_type(custom_types, ty) {
-          Ok(base_ty) => TypeSet::BaseType(base_ty, ty.location().clone()),
-          Err(err) => return Err(err),
+        let ts = {
+          let base_ty = find_value_type(custom_types, ty)?;
+          TypeSet::BaseType(base_ty, ty.location().clone())
         };
-        unify_ty(e, ts, inferred_expr_types).map_err(|e| e.into())?;
+        unify_ty(e, ts, inferred_expr_types)?;
 
         // op1 can be any type (for now)
-        unify_any(op1, inferred_expr_types).map_err(|e| e.into())?;
+        unify_any(op1, inferred_expr_types)?;
 
         Ok(())
       }
@@ -314,7 +314,7 @@ impl Unification {
                 }
                 FunctionArgumentType::TypeSet(ts) => {
                   // Unify arg type for non-generic ones
-                  unify_ty(arg, ts, inferred_expr_types).map_err(|e| e.into())?;
+                  unify_ty(arg, ts, inferred_expr_types)?;
                 }
               }
             }
@@ -331,7 +331,7 @@ impl Unification {
               FunctionReturnType::BaseType(t) => {
                 // Unify the return type with the base type
                 let ts = TypeSet::base(t.clone());
-                unify_ty(e, ts, inferred_expr_types).map_err(|e| e.into())?;
+                unify_ty(e, ts, inferred_expr_types)?;
               }
             }
 
@@ -342,26 +342,24 @@ impl Unification {
             // 2. All arguments of each generic type parameter should be the same
             for (i, generic_type_family) in function_type.generic_type_parameters.iter().enumerate() {
               // Check if there is actually instance
-              if let Some(instances) = generic_type_param_instances.get(&i) {
-                if instances.len() >= 1 {
-                  // Keep an aggregated unified ts starting from the first instance
-                  let mut agg_unified_ts =
-                    unify_ty(&instances[0], generic_type_family.clone(), inferred_expr_types).map_err(|e| e.into())?;
+              if let Some(instances) = generic_type_param_instances.get(&i)
+                && !instances.is_empty()
+              {
+                // Keep an aggregated unified ts starting from the first instance
+                let mut agg_unified_ts = unify_ty(&instances[0], generic_type_family.clone(), inferred_expr_types)?;
 
-                  // Iterate from the next instance
-                  for j in 1..instances.len() {
-                    // Make sure the current type conform to the generic type parameter
-                    let curr_unified_ts = unify_ty(&instances[j], generic_type_family.clone(), inferred_expr_types)
-                      .map_err(|e| e.into())?;
+                // Iterate from the next instance
+                for instance in &instances[1..] {
+                  // Make sure the current type conform to the generic type parameter
+                  let curr_unified_ts = unify_ty(instance, generic_type_family.clone(), inferred_expr_types)?;
 
-                    // Unify with the aggregated type set
-                    agg_unified_ts = agg_unified_ts.unify(&curr_unified_ts).map_err(|e| e.into())?;
-                  }
+                  // Unify with the aggregated type set
+                  agg_unified_ts = agg_unified_ts.unify(&curr_unified_ts)?;
+                }
 
-                  // At the end, update all instances to have the `agg_unified_ts` type
-                  for instance in instances {
-                    inferred_expr_types.insert(instance.clone(), agg_unified_ts.clone());
-                  }
+                // At the end, update all instances to have the `agg_unified_ts` type
+                for instance in instances {
+                  inferred_expr_types.insert(instance.clone(), agg_unified_ts.clone());
                 }
               }
             }
@@ -414,7 +412,7 @@ impl Unification {
                     "error in aggregate `{aggregate_name}`: mandatory parameter must occur before optional parameter"
                   )));
                 } else if let Some(curr_param) = params.get(curr_param_const_id) {
-                  unify_ty(curr_param, TypeSet::base(vt.clone()), inferred_expr_types).map_err(|e| e.into())?;
+                  unify_ty(curr_param, TypeSet::base(vt.clone()), inferred_expr_types)?;
                   curr_param_const_id += 1;
                 } else {
                   return Err(
@@ -428,13 +426,10 @@ impl Unification {
               }
               ParamType::Optional(vt) => {
                 has_optional = true;
-                if let Some(curr_param) = params.get(curr_param_const_id) {
-                  match unify_ty(curr_param, TypeSet::base(vt.clone()), inferred_expr_types) {
-                    Ok(_) => {
-                      curr_param_const_id += 1;
-                    }
-                    Err(_) => {}
-                  }
+                if let Some(curr_param) = params.get(curr_param_const_id)
+                  && unify_ty(curr_param, TypeSet::base(vt.clone()), inferred_expr_types).is_ok()
+                {
+                  curr_param_const_id += 1;
                 }
               }
             }
@@ -458,7 +453,7 @@ impl Unification {
             if let Some((_, param_const)) = named_params.get(param_name) {
               // If presented, check the type
               let type_set = TypeSet::base(expected_param_type.value_type().clone());
-              unify_ty(param_const, type_set, inferred_expr_types).map_err(|e| e.into())?;
+              unify_ty(param_const, type_set, inferred_expr_types)?;
             } else {
               // If is mandatory, then throw error
               if expected_param_type.is_mandatory() {
@@ -475,7 +470,7 @@ impl Unification {
 
           // 4. Check if there is unspecified named parameters
           for (param_name, (name_loc, _)) in named_params {
-            if agg_type.named_param_types.get(param_name).is_none() {
+            if !agg_type.named_param_types.contains_key(param_name) {
               return Err(
                 Error::error()
                   .msg(format!(
@@ -499,23 +494,24 @@ impl Unification {
 
           // 3. trying to ground generics for the arg_vars or in_vars
           let mut grounded_generic_types = HashMap::new();
+          let binding_source = AggregateBindingSource {
+            aggregate: aggregate_name,
+            aggregate_loc: aggregate,
+            generic_type_families: &agg_type.generics,
+          };
           ground_input_aggregate_binding_type(
             "argument",
-            aggregate_name,
-            aggregate,
+            &binding_source,
             &agg_type.arg_type,
             arg_vars,
-            &agg_type.generics,
             &mut grounded_generic_types,
             inferred_expr_types,
           )?;
           ground_input_aggregate_binding_type(
             "input",
-            aggregate_name,
-            aggregate,
+            &binding_source,
             &agg_type.input_type,
             input_vars,
-            &agg_type.generics,
             &mut grounded_generic_types,
             inferred_expr_types,
           )?;
@@ -544,7 +540,7 @@ impl Unification {
         let adt_variant_relation_name = format!("adt#{functor}");
 
         // cond should be boolean
-        unify_entity(e, inferred_expr_types).map_err(|e| e.into())?;
+        unify_entity(e, inferred_expr_types)?;
 
         // Get the functor/relation
         if let Some((types, _)) = inferred_relation_types.get(&adt_variant_relation_name) {
@@ -611,9 +607,9 @@ fn unify_polymorphic_binary_expression(
   strict: bool,
 ) -> Result<(), Error> {
   // First get the already inferred types of op1, op2, and e
-  let op1_ty = unify_any(op1, inferred_expr_types).map_err(|e| e.into())?;
-  let op2_ty = unify_any(op2, inferred_expr_types).map_err(|e| e.into())?;
-  let e_ty = unify_any(e, inferred_expr_types).map_err(|e| e.into())?;
+  let op1_ty = unify_any(op1, inferred_expr_types)?;
+  let op2_ty = unify_any(op2, inferred_expr_types)?;
+  let e_ty = unify_any(e, inferred_expr_types)?;
 
   // Then iterate through all the rules to see if any could be applied
   let mut applied_rules = AppliedRules::new();
@@ -631,17 +627,17 @@ fn unify_polymorphic_binary_expression(
     }
     AppliedRules::One((t1, t2, te)) => {
       // If there is exactly one rule that can be applied, then unify them with the exact types
-      unify_ty(op1, TypeSet::BaseType(t1, e.clone()), inferred_expr_types).map_err(|e| e.into())?;
-      unify_ty(op2, TypeSet::BaseType(t2, e.clone()), inferred_expr_types).map_err(|e| e.into())?;
-      unify_ty(e, TypeSet::BaseType(te, e.clone()), inferred_expr_types).map_err(|e| e.into())?;
+      unify_ty(op1, TypeSet::BaseType(t1, e.clone()), inferred_expr_types)?;
+      unify_ty(op2, TypeSet::BaseType(t2, e.clone()), inferred_expr_types)?;
+      unify_ty(e, TypeSet::BaseType(te, e.clone()), inferred_expr_types)?;
       Ok(())
     }
     AppliedRules::Multiple((t1, t2, te), _) => {
       if strict {
         // If there is exactly one rule that can be applied, then unify them with the exact types
-        unify_ty(op1, TypeSet::BaseType(t1, e.clone()), inferred_expr_types).map_err(|e| e.into())?;
-        unify_ty(op2, TypeSet::BaseType(t2, e.clone()), inferred_expr_types).map_err(|e| e.into())?;
-        unify_ty(e, TypeSet::BaseType(te, e.clone()), inferred_expr_types).map_err(|e| e.into())?;
+        unify_ty(op1, TypeSet::BaseType(t1, e.clone()), inferred_expr_types)?;
+        unify_ty(op2, TypeSet::BaseType(t2, e.clone()), inferred_expr_types)?;
+        unify_ty(e, TypeSet::BaseType(te, e.clone()), inferred_expr_types)?;
         Ok(())
       } else {
         // If ther are multiple rules that can be applied, we are not sure about the exact types,
@@ -661,11 +657,11 @@ fn unify_comparison_expression(
   strict: bool,
 ) -> Result<(), Error> {
   // The result should be a boolean
-  let e_ty = unify_boolean(e, inferred_expr_types).map_err(|e| e.into())?;
+  let e_ty = unify_boolean(e, inferred_expr_types)?;
 
   // First get the already inferred types of op1, op2, and e
-  let op1_ty = unify_any(op1, inferred_expr_types).map_err(|e| e.into())?;
-  let op2_ty = unify_any(op2, inferred_expr_types).map_err(|e| e.into())?;
+  let op1_ty = unify_any(op1, inferred_expr_types)?;
+  let op2_ty = unify_any(op2, inferred_expr_types)?;
 
   // Then iterate through all the rules to see if any could be applied
   let mut applied_rules = AppliedRules::new();
@@ -683,15 +679,15 @@ fn unify_comparison_expression(
     }
     AppliedRules::One((t1, t2)) => {
       // If there is exactly one rule that can be applied, then unify them with the exact types
-      unify_ty(op1, TypeSet::BaseType(t1, e.clone()), inferred_expr_types).map_err(|e| e.into())?;
-      unify_ty(op2, TypeSet::BaseType(t2, e.clone()), inferred_expr_types).map_err(|e| e.into())?;
+      unify_ty(op1, TypeSet::BaseType(t1, e.clone()), inferred_expr_types)?;
+      unify_ty(op2, TypeSet::BaseType(t2, e.clone()), inferred_expr_types)?;
       Ok(())
     }
     AppliedRules::Multiple((t1, t2), _) => {
       if strict {
         // Under strict mode, directly unify with the first matched rule
-        unify_ty(op1, TypeSet::BaseType(t1, e.clone()), inferred_expr_types).map_err(|e| e.into())?;
-        unify_ty(op2, TypeSet::BaseType(t2, e.clone()), inferred_expr_types).map_err(|e| e.into())?;
+        unify_ty(op1, TypeSet::BaseType(t1, e.clone()), inferred_expr_types)?;
+        unify_ty(op2, TypeSet::BaseType(t2, e.clone()), inferred_expr_types)?;
         Ok(())
       } else {
         // If ther are multiple rules that can be applied, we are not sure about the exact types,
@@ -706,7 +702,7 @@ fn unify_ty(
   e: &Loc,
   ty: TypeSet,
   inferred_expr_types: &mut HashMap<Loc, TypeSet>,
-) -> Result<TypeSet, CannotUnifyTypes> {
+) -> Result<TypeSet, Box<CannotUnifyTypes>> {
   let old_e_ty = inferred_expr_types.entry(e.clone()).or_insert(ty.clone());
   match ty.unify(old_e_ty) {
     Ok(new_e_ty) => {
@@ -720,33 +716,42 @@ fn unify_ty(
   }
 }
 
-fn unify_any(e: &Loc, inferred_expr_types: &mut HashMap<Loc, TypeSet>) -> Result<TypeSet, CannotUnifyTypes> {
+fn unify_any(e: &Loc, inferred_expr_types: &mut HashMap<Loc, TypeSet>) -> Result<TypeSet, Box<CannotUnifyTypes>> {
   let e_ty = TypeSet::Any(e.clone());
   unify_ty(e, e_ty, inferred_expr_types)
 }
 
-fn unify_boolean(e: &Loc, inferred_expr_types: &mut HashMap<Loc, TypeSet>) -> Result<TypeSet, CannotUnifyTypes> {
+fn unify_boolean(e: &Loc, inferred_expr_types: &mut HashMap<Loc, TypeSet>) -> Result<TypeSet, Box<CannotUnifyTypes>> {
   let e_ty = TypeSet::BaseType(ValueType::Bool, e.clone());
   unify_ty(e, e_ty, inferred_expr_types)
 }
 
-fn unify_entity(e: &Loc, inferred_expr_types: &mut HashMap<Loc, TypeSet>) -> Result<TypeSet, CannotUnifyTypes> {
+fn unify_entity(e: &Loc, inferred_expr_types: &mut HashMap<Loc, TypeSet>) -> Result<TypeSet, Box<CannotUnifyTypes>> {
   let e_ty = TypeSet::BaseType(ValueType::Entity, e.clone());
   unify_ty(e, e_ty, inferred_expr_types)
+}
+
+struct AggregateBindingSource<'a> {
+  aggregate: &'a str,
+  aggregate_loc: &'a Loc,
+  generic_type_families: &'a HashMap<String, GenericTypeFamily>,
 }
 
 /// Given a binding type of an aggregate and the concrete variables for the aggregate, check the variable types and
 /// potentially ground the generic types if they present
 fn ground_input_aggregate_binding_type(
   kind: &str,
-  aggregate: &str,
-  aggregate_loc: &Loc,
+  source: &AggregateBindingSource<'_>,
   binding_types: &BindingTypes,
   variables: &Vec<Loc>,
-  generic_type_families: &HashMap<String, GenericTypeFamily>,
   grounded_generic_types: &mut HashMap<String, Vec<TypeSet>>,
   inferred_expr_types: &mut HashMap<Loc, TypeSet>,
 ) -> Result<(), Error> {
+  let AggregateBindingSource {
+    aggregate,
+    aggregate_loc,
+    generic_type_families,
+  } = *source;
   // First match on binding types
   match binding_types {
     BindingTypes::IfNotUnit { .. } => {
@@ -756,11 +761,11 @@ fn ground_input_aggregate_binding_type(
       )))
     }
     BindingTypes::TupleType(elems) => {
-      if elems.len() == 0 {
+      if elems.is_empty() {
         // If elems.len() is 0, it means that there should be no variable for this part of aggregation.
         // We throw error if there is at least 1 variable.
         // Otherwise, the type checking is done as there is no variable that needs to be unified for type
-        if variables.len() != 0 {
+        if !variables.is_empty() {
           Err(
             Error::error()
               .msg(format!(
@@ -791,7 +796,7 @@ fn ground_input_aggregate_binding_type(
                 )
               } else {
                 for (grounded_type_set, variable_loc) in grounded_type_sets.iter().zip(variables.iter()) {
-                  unify_ty(variable_loc, grounded_type_set.clone(), inferred_expr_types).map_err(|e| e.into())?;
+                  unify_ty(variable_loc, grounded_type_set.clone(), inferred_expr_types)?;
                 }
                 Ok(())
               }
@@ -815,11 +820,11 @@ fn ground_input_aggregate_binding_type(
           }
           BindingType::ValueType(v) => {
             if variables.len() == 1 {
-              unify_ty(&variables[0], TypeSet::base(v.clone()), inferred_expr_types).map_err(|e| e.into())?;
+              unify_ty(&variables[0], TypeSet::base(v.clone()), inferred_expr_types)?;
               Ok(())
             } else {
               // Arity mismatch
-              if variables.len() == 0 {
+              if variables.is_empty() {
                 Err(
                   Error::error()
                     .msg(format!(
@@ -863,8 +868,7 @@ fn ground_input_aggregate_binding_type(
               variable_loc,
               TypeSet::base(elem_value_type.clone()),
               inferred_expr_types,
-            )
-            .map_err(|e| e.into())?;
+            )?;
           }
           Ok(())
         }
@@ -884,7 +888,7 @@ fn solve_generic_type(
 ) -> Result<Vec<TypeSet>, Error> {
   match generic_type_family {
     GenericTypeFamily::NonEmptyTuple => {
-      if variables.len() == 0 {
+      if variables.is_empty() {
         Err(
           Error::error()
             .msg(format!(
@@ -923,7 +927,7 @@ fn solve_generic_type(
       }
     }
     GenericTypeFamily::UnitOr(child_generic_type_family) => {
-      if variables.len() == 0 {
+      if variables.is_empty() {
         Ok(vec![])
       } else {
         solve_generic_type(
@@ -947,7 +951,7 @@ fn solve_generic_type(
             .src(aggregate_loc.clone()),
         )
       } else {
-        let ts = unify_ty(&variables[0], TypeSet::from(tf.clone()), inferred_expr_types).map_err(|e| e.into())?;
+        let ts = unify_ty(&variables[0], TypeSet::from(tf.clone()), inferred_expr_types)?;
         Ok(vec![ts])
       }
     }
@@ -958,7 +962,7 @@ fn ground_output_aggregate_binding_type(
   aggregate: &str,
   aggregate_loc: &Loc,
   binding_types: &BindingTypes,
-  variables: &Vec<Loc>,
+  variables: &[Loc],
   grounded_generic_types: &HashMap<String, Vec<TypeSet>>,
   inferred_expr_types: &mut HashMap<Loc, TypeSet>,
 ) -> Result<(), Error> {
@@ -975,7 +979,7 @@ fn ground_output_aggregate_binding_type(
     )
   } else {
     for (expected_var_type, variable_loc) in expected_variable_types.into_iter().zip(variables.iter()) {
-      unify_ty(variable_loc, expected_var_type, inferred_expr_types).map_err(|e| e.into())?;
+      unify_ty(variable_loc, expected_var_type, inferred_expr_types)?;
     }
     Ok(())
   }
@@ -993,7 +997,7 @@ fn solve_binding_types(
       else_type,
     } => {
       if let Some(type_sets) = grounded_generic_types.get(generic_type) {
-        if type_sets.len() > 0 {
+        if !type_sets.is_empty() {
           solve_binding_types(aggregate, then_type, grounded_generic_types)
         } else {
           solve_binding_types(aggregate, else_type, grounded_generic_types)
@@ -1021,7 +1025,7 @@ fn solve_binding_types(
         })
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
-        .flat_map(|es| es)
+        .flatten()
         .collect(),
     ),
   }

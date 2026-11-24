@@ -18,6 +18,12 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> MaxAggregator<Tup, Prov> {
   }
 }
 
+impl<Tup: StaticTupleTrait, Prov: Provenance> Default for MaxAggregator<Tup, Prov> {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl<Tup, Prov> Aggregator<Tup, Prov> for MaxAggregator<Tup, Prov>
 where
   Tup: StaticTupleTrait,
@@ -40,11 +46,11 @@ where
       })
       .collect();
     let results = agg.aggregate(ctx, rt, dyn_elems);
-    let stat_elems = results
+
+    results
       .into_iter()
       .map(|e| StaticElement::new(Tup::from_dyn_tuple(e.tuple), e.tag))
-      .collect();
-    stat_elems
+      .collect()
   }
 }
 

@@ -2,8 +2,7 @@
 name = "sdd"
 version = "0.1.1"
 authors = ["Ziyang Li <liby99@icloud.com>"]
-edition = "2018"
+edition.workspace = true
 
 [dependencies]
 petgraph = "0.8"
-itertools = "0.15"

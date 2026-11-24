@@ -1,5 +1,7 @@
 use super::*;
 
+pub(super) type ReduceGroup = (Vec<VariableBinding>, Box<Formula>);
+
 /// Parse a string into a single `Item`
 pub fn str_to_item(s: &str) -> Result<Item, ParserError> {
   let parser = grammar::ItemParser::new();
@@ -29,12 +31,12 @@ pub fn str_to_query(s: &str) -> Result<Vec<Item>, ParserError> {
 
 pub fn str_to_entity(s: &str) -> Result<Entity, ParserError> {
   let parser = grammar::EntityParser::new();
-  parser.parse(s).map(|q| q.into()).map_err(ParserError::from)
+  parser.parse(s).map_err(ParserError::from)
 }
 
 pub fn str_to_specialized_predicate(s: &str) -> Result<(Identifier, Vec<Identifier>), ParserError> {
   let parser = grammar::SpecializedPredicateParser::new();
-  parser.parse(s).map(|q| q.into()).map_err(ParserError::from)
+  parser.parse(s).map_err(ParserError::from)
 }
 
 pub type RawParserError<'a> = lalrpop_util::ParseError<usize, grammar::Token<'a>, &'static str>;
@@ -80,10 +82,8 @@ impl FrontCompileErrorTrait for ParserError {
       // First compute offset span
       let offset_span = if let Some((l, r)) = self.location_span {
         Some((l, r))
-      } else if let Some(p) = self.location_point {
-        Some((p, p + 1))
       } else {
-        None
+        self.location_point.map(|p| (p, p + 1))
       };
 
       // Turn offset span into locations

@@ -1,6 +1,7 @@
+import logging
+
 import scallopy
 
-from PIL import Image
 import face_detection as face_detection_lib
 from scallop_gpu import get_device
 
@@ -23,7 +24,8 @@ class ScallopFaceDetectionPlugin(scallopy.Plugin):
           nms_iou_threshold=0.3,
           device=get_device(),
         )
-      except:
+      except (OSError, RuntimeError, ValueError):
+        logging.getLogger(__name__).exception("Failed to load the face detection model")
         return None
 
     return self._face_model

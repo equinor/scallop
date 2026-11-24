@@ -88,7 +88,7 @@ impl<'a, Prov: Provenance> Batches<'a, Prov> for ForeignPredicateJoinBatches<'a,
 
       // Generate a new batch
       DynamicBatch::new(ForeignPredicateJoinBatch {
-        batch: batch,
+        batch,
         foreign_predicate: self.foreign_predicate.clone(),
         args: self.args.clone(),
         current_output_batch: first_output_batch,
@@ -112,15 +112,18 @@ pub struct ForeignPredicateJoinBatch<'a, Prov: Provenance> {
 impl<'a, Prov: Provenance> Batch<'a, Prov> for ForeignPredicateJoinBatch<'a, Prov> {
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
     while let Some((left_elem, current_output_batch)) = &mut self.current_output_batch {
-      if let Some(right_elem) = current_output_batch.next() {
-        let tuple = (left_elem.tuple.clone(), right_elem.tuple);
-        let new_tag = self.ctx.mult(&left_elem.tag, &right_elem.tag);
-        return Some(DynamicElement::new(tuple, new_tag));
-      } else {
-        self.current_output_batch = self
-          .batch
-          .next_elem()
-          .map(|elem| eval_foreign_predicate(elem, &self.foreign_predicate, &self.args, self.env, self.ctx));
+      match current_output_batch.next() {
+        Some(right_elem) => {
+          let tuple = (left_elem.tuple.clone(), right_elem.tuple);
+          let new_tag = self.ctx.mult(&left_elem.tag, &right_elem.tag);
+          return Some(DynamicElement::new(tuple, new_tag));
+        }
+        None => {
+          self.current_output_batch = self
+            .batch
+            .next_elem()
+            .map(|elem| eval_foreign_predicate(elem, &self.foreign_predicate, &self.args, self.env, self.ctx));
+        }
       }
     }
     None
@@ -131,7 +134,7 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for ForeignPredicateJoinBatch<'a, Pro
 fn eval_foreign_predicate<Prov: Provenance>(
   elem: DynamicElement<Prov>,
   fp: &DynamicForeignPredicate,
-  args: &Vec<Expr>,
+  args: &[Expr],
   env: &RuntimeEnvironment,
   ctx: &Prov,
 ) -> (DynamicElement<Prov>, std::vec::IntoIter<DynamicElement<Prov>>) {

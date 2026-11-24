@@ -228,7 +228,9 @@ where
       match (&self.i1_curr, &self.i2_curr) {
         (Some(i1_curr), Some(i2_curr)) => match i1_curr.tuple.cmp(&i2_curr.tuple) {
           Ordering::Less => {
-            self.i1_curr = self.i1.search_ahead(|i1_next| i1_next < &i2_curr.tuple);
+            self.i1_curr = self
+              .i1
+              .search_ahead(|i1_next| i1_next.cmp_tuple(&i2_curr.tuple).is_lt());
           }
           Ordering::Equal => {
             let tag = self.semiring_ctx.mult(&i1_curr.tag, &i2_curr.tag);
@@ -238,7 +240,9 @@ where
             return Some(result);
           }
           Ordering::Greater => {
-            self.i2_curr = self.i2.search_ahead(|i2_next| i2_next < &i1_curr.tuple);
+            self.i2_curr = self
+              .i2
+              .search_ahead(|i2_next| i2_next.cmp_tuple(&i1_curr.tuple).is_lt());
           }
         },
         _ => return None,

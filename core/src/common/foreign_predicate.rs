@@ -26,17 +26,11 @@ impl std::fmt::Display for Binding {
 
 impl Binding {
   pub fn is_bound(&self) -> bool {
-    match self {
-      Self::Bound => true,
-      _ => false,
-    }
+    matches!(self, Self::Bound)
   }
 
   pub fn is_free(&self) -> bool {
-    match self {
-      Self::Free => true,
-      _ => false,
-    }
+    matches!(self, Self::Free)
   }
 }
 
@@ -95,6 +89,10 @@ impl BindingPattern {
     self.pattern.len()
   }
 
+  pub fn is_empty(&self) -> bool {
+    self.pattern.is_empty()
+  }
+
   /// Check if all argument needs to be bounded
   pub fn is_bounded(&self) -> bool {
     self.pattern.iter().all(|p| p.is_bound())
@@ -138,7 +136,7 @@ pub trait ForeignPredicate: DynClone {
   fn internal_name(&self) -> String {
     let name = self.name();
     let type_params = self.generic_type_parameters();
-    if type_params.len() > 0 {
+    if !type_params.is_empty() {
       format!(
         "{}#{}",
         name,
@@ -341,7 +339,7 @@ impl ForeignPredicateRegistry {
   pub fn register<P: ForeignPredicate + Send + Sync + 'static>(&mut self, p: P) -> Result<(), ForeignPredicateError> {
     let id = p.internal_name();
     if self.contains(&id) {
-      Err(ForeignPredicateError::AlreadyExisted { id: format!("{}", id) })
+      Err(ForeignPredicateError::AlreadyExisted { id: id.to_string() })
     } else {
       let p = DynamicForeignPredicate::new(p);
       self.registry.insert(id, p);
@@ -361,6 +359,12 @@ impl ForeignPredicateRegistry {
 
   pub fn iter<'a>(&'a self) -> hash_map::Iter<'a, String, DynamicForeignPredicate> {
     self.into_iter()
+  }
+}
+
+impl Default for ForeignPredicateRegistry {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

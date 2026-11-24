@@ -42,9 +42,9 @@ impl MinMaxAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for MinMaxAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::MinMax(self)
+impl From<MinMaxAggregate> for DynamicAggregate {
+  fn from(val: MinMaxAggregate) -> Self {
+    DynamicAggregate::MinMax(val)
   }
 }
 
@@ -207,7 +207,7 @@ impl MinMaxAggregator {
     // Check if there is argument variables
     if self.num_args > 0 {
       // First, we sort all the tuples
-      batch.sort_by_key(|e| e.tuple[self.num_args..].iter().cloned().collect::<Vec<_>>());
+      batch.sort_by_key(|e| e.tuple[self.num_args..].to_vec());
       let tagged_tuples = batch;
 
       // Then we compute the strata
@@ -242,18 +242,19 @@ impl MinMaxAggregator {
         } else {
           tagged_tuples.len()
         };
-        let false_range = if self.is_min {
+        let mut false_range = if self.is_min {
           0..stratum_start
         } else {
           stratum_end..tagged_tuples.len()
         };
-        let maybe_false_tag = false_range.fold(Some(prov.one()), |maybe_acc, j| {
-          maybe_acc.and_then(|acc| prov.negate(&tagged_tuples[j].tag).map(|neg| prov.mult(&acc, &neg)))
+        let maybe_false_tag = false_range.try_fold(prov.one(), |acc, j| {
+          let negated = prov.negate(&tagged_tuples[j].tag)?;
+          Some(prov.mult(&acc, &negated))
         });
         if let Some(false_tag) = maybe_false_tag {
-          for j in stratum_start..stratum_end {
-            let and_true_tag: P::Tag = prov.mult(&false_tag, &tagged_tuples[j].tag);
-            result.push(DynamicElement::<P>::new(tagged_tuples[j].tuple.clone(), and_true_tag));
+          for elem in &tagged_tuples[stratum_start..stratum_end] {
+            let and_true_tag = prov.mult(&false_tag, &elem.tag);
+            result.push(DynamicElement::<P>::new(elem.tuple.clone(), and_true_tag));
           }
         }
       }

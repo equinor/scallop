@@ -17,7 +17,7 @@ impl RuleContext {
     Self { head_vars, body }
   }
 
-  pub fn from_qualified(bindings: &Vec<VariableBinding>, args: &Vec<Variable>, body: &Formula) -> Self {
+  pub fn from_qualified(bindings: &[VariableBinding], args: &[Variable], body: &Formula) -> Self {
     let bindings = bindings
       .iter()
       .map(|b| (b.name().to_string(), b.location().clone()))
@@ -26,7 +26,7 @@ impl RuleContext {
       .iter()
       .map(|v| (v.name().to_string(), v.location().clone()))
       .collect();
-    let head_vars = vec![bindings, args].concat();
+    let head_vars = [bindings, args].concat();
     let body = DisjunctionContext::from_formula(body);
     Self { head_vars, body }
   }
@@ -55,11 +55,7 @@ pub struct DisjunctionContext {
 impl DisjunctionContext {
   pub fn from_formula(formula: &Formula) -> Self {
     let conjuncts: Vec<ConjunctionContext> = match formula {
-      Formula::Disjunction(d) => d
-        .iter_args()
-        .map(|a| Self::from_formula(a).conjuncts)
-        .flatten()
-        .collect(),
+      Formula::Disjunction(d) => d.iter_args().flat_map(|a| Self::from_formula(a).conjuncts).collect(),
       Formula::Conjunction(c) => {
         let ctxs = c.iter_args().map(|a| Self::from_formula(a).conjuncts);
         let cp = ctxs.multi_cartesian_product();
@@ -122,9 +118,9 @@ pub struct ConjunctionContext {
 impl ConjunctionContext {
   pub fn join(conjs: Vec<Self>) -> Self {
     conjs.into_iter().fold(Self::default(), |acc, new| Self {
-      pos_atoms: vec![acc.pos_atoms, new.pos_atoms].concat(),
-      neg_atoms: vec![acc.neg_atoms, new.neg_atoms].concat(),
-      agg_contexts: vec![acc.agg_contexts, new.agg_contexts].concat(),
+      pos_atoms: [acc.pos_atoms, new.pos_atoms].concat(),
+      neg_atoms: [acc.neg_atoms, new.neg_atoms].concat(),
+      agg_contexts: [acc.agg_contexts, new.agg_contexts].concat(),
     })
   }
 
@@ -215,7 +211,7 @@ impl AggregationContext {
   }
 
   pub fn binding_variable_names(&self) -> Vec<String> {
-    self.binding_vars.iter().cloned().collect()
+    self.binding_vars.to_vec()
   }
 
   pub fn argument_variable_names(&self) -> Vec<String> {
@@ -245,7 +241,7 @@ impl AggregationContext {
 
     // Get the group_by context
     let group_by = reduce.group_by().as_ref().map(|(bindings, formula)| {
-      let ctx = RuleContext::from_qualified(&bindings, &vec![], &formula);
+      let ctx = RuleContext::from_qualified(bindings, &[], formula);
       let vars = bindings.iter().map(|b| b.to_variable()).collect::<Vec<_>>();
       (Box::new(ctx), vars, *formula.clone())
     });

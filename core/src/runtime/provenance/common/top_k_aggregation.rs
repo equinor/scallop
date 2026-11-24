@@ -1,69 +1,66 @@
-use std::collections::*;
+use std::cmp::{Ordering, Reverse};
+use std::collections::BinaryHeap;
+
+use crate::utils::FloatKey;
+
+pub(super) struct ByPriority<T> {
+  priority: Reverse<FloatKey<f64>>,
+  pub(super) value: T,
+}
+
+impl<T> ByPriority<T> {
+  pub(super) fn max(weight: f64, value: T) -> Self {
+    // Negate before reversing the key so NaN has the lowest priority, not the highest.
+    Self {
+      priority: Reverse(FloatKey(-weight)),
+      value,
+    }
+  }
+}
+
+impl<T> PartialEq for ByPriority<T> {
+  fn eq(&self, other: &Self) -> bool {
+    self.priority == other.priority
+  }
+}
+
+impl<T> Eq for ByPriority<T> {}
+
+impl<T> PartialOrd for ByPriority<T> {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl<T> Ord for ByPriority<T> {
+  fn cmp(&self, other: &Self) -> Ordering {
+    self.priority.cmp(&other.priority)
+  }
+}
 
 pub fn aggregate_top_k_helper<F>(num_elements: usize, k: usize, weight_fn: F) -> Vec<usize>
 where
   F: Fn(usize) -> f64,
 {
-  #[derive(Clone, Debug)]
-  struct Element {
-    id: usize,
-    weight: f64,
-  }
-
-  impl std::cmp::PartialEq for Element {
-    fn eq(&self, other: &Self) -> bool {
-      self.id == other.id
-    }
-  }
-
-  impl std::cmp::Eq for Element {}
-
-  impl std::cmp::PartialOrd for Element {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-      other.weight.partial_cmp(&self.weight)
-    }
-  }
-
-  impl std::cmp::Ord for Element {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-      if let Some(ord) = other.weight.partial_cmp(&self.weight) {
-        ord
-      } else {
-        other.id.cmp(&self.id)
-      }
-    }
-  }
-
-  // Create a min-heap
-  let mut heap = BinaryHeap::new();
-
-  // First insert k elements into the heap
   let size = k.min(num_elements);
-  for id in 0..size {
-    let elem = Element {
-      id,
-      weight: weight_fn(id),
-    };
-    heap.push(elem);
+  if size == 0 {
+    return vec![];
   }
 
-  // Then iterate through all other elements
-  if heap.len() > 0 {
-    for id in size..num_elements {
-      let elem = Element {
-        id,
-        weight: weight_fn(id),
-      };
-      let min_elem_in_heap = heap.peek().unwrap();
-      if &elem < min_elem_in_heap {
-        heap.pop();
-        heap.push(elem);
-      }
+  // Keep the weakest retained candidate at the root of the heap.
+  let mut heap = BinaryHeap::with_capacity(size);
+  for id in 0..size {
+    heap.push(Reverse(ByPriority::max(weight_fn(id), id)));
+  }
+  for id in size..num_elements {
+    let elem = Reverse(ByPriority::max(weight_fn(id), id));
+    if &elem < heap.peek().unwrap() {
+      heap.pop();
+      heap.push(elem);
     }
   }
 
-  // Return the list of ids in the heap
-  heap.into_iter().map(|elem| elem.id).collect()
+  heap.into_iter().map(|Reverse(elem)| elem.value).collect()
 }
 
 pub fn unweighted_aggregate_top_k_helper<T>(elements: Vec<T>, k: usize) -> Vec<T> {

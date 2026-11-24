@@ -1,4 +1,4 @@
-from typing import *
+from typing import Callable, List
 
 from . import function
 from . import predicate

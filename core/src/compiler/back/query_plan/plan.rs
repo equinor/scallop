@@ -76,7 +76,7 @@ impl Plan {
 #[derive(Clone, Debug)]
 pub enum HighRamNode {
   Unit,
-  Reduce(Reduce),
+  Reduce(Box<Reduce>),
   Ground(Atom),
   Project(Box<Plan>, Vec<Assign>),
   Filter(Box<Plan>, Vec<Constraint>),
@@ -88,6 +88,10 @@ pub enum HighRamNode {
 }
 
 impl HighRamNode {
+  pub fn reduce(reduce: Reduce) -> Self {
+    Self::Reduce(Box::new(reduce))
+  }
+
   /// Create a new FILTER high level ram node
   pub fn filter(p1: Plan, cs: Vec<Constraint>) -> Self {
     Self::Filter(Box::new(p1), cs)

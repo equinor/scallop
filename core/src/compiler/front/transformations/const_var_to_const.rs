@@ -83,36 +83,30 @@ impl<'a> TransformConstVarToConst<'a> {
 
 impl<'a> NodeVisitor<Expr> for TransformConstVarToConst<'a> {
   fn visit_mut(&mut self, expr: &mut Expr) {
-    match expr {
-      Expr::Variable(v) => {
-        // First make sure that we are about to change this variable
-        if self.const_decl_analysis.variable_use.contains_key(v.location()) {
-          // Then get the constant that the const variable maps to
-          let (_, _, c) = self.const_decl_analysis.get_variable(v.name().name()).unwrap();
+    if let Expr::Variable(v) = expr {
+      // First make sure that we are about to change this variable
+      if self.const_decl_analysis.variable_use.contains_key(v.location()) {
+        // Then get the constant that the const variable maps to
+        let (_, _, c) = self.const_decl_analysis.get_variable(v.name().name()).unwrap();
 
-          // Update the expression to be a constant
-          *expr = Expr::Constant(c.clone_with_loc(v.location().clone()));
-        }
+        // Update the expression to be a constant
+        *expr = Expr::Constant(c.clone_with_loc(v.location().clone()));
       }
-      _ => {}
     }
   }
 }
 
 impl<'a> NodeVisitor<ConstantOrVariable> for TransformConstVarToConst<'a> {
   fn visit_mut(&mut self, cov: &mut ConstantOrVariable) {
-    match cov {
-      ConstantOrVariable::Variable(v) => {
-        // First make sure that we are about to change this variable
-        if self.const_decl_analysis.variable_use.contains_key(v.location()) {
-          // Then get the constant that the const variable maps to
-          let (_, _, c) = self.const_decl_analysis.get_variable(v.name().name()).unwrap();
+    if let ConstantOrVariable::Variable(v) = cov {
+      // First make sure that we are about to change this variable
+      if self.const_decl_analysis.variable_use.contains_key(v.location()) {
+        // Then get the constant that the const variable maps to
+        let (_, _, c) = self.const_decl_analysis.get_variable(v.name().name()).unwrap();
 
-          // Update the expression to be a constant
-          *cov = ConstantOrVariable::Constant(c.clone_with_loc(v.location().clone()));
-        }
+        // Update the expression to be a constant
+        *cov = ConstantOrVariable::Constant(c.clone_with_loc(v.location().clone()));
       }
-      _ => {}
     }
   }
 }

@@ -11,15 +11,15 @@ impl Provenance for RealTropicalProvenance {
   type OutputTag = f64;
 
   fn name(&self) -> String {
-    format!("realtropical")
+    "realtropical".to_string()
   }
 
   fn tagging_fn(&self, ext_tag: Self::InputTag) -> Self::Tag {
-    ext_tag.into()
+    ext_tag
   }
 
   fn recover_fn(&self, t: &Self::Tag) -> Self::OutputTag {
-    t.clone()
+    *t
   }
 
   fn discard(&self, t: &Self::Tag) -> bool {
@@ -31,7 +31,7 @@ impl Provenance for RealTropicalProvenance {
   }
 
   fn zero(&self) -> Self::Tag {
-    std::f64::INFINITY
+    f64::INFINITY
   }
 
   fn one(&self) -> Self::Tag {

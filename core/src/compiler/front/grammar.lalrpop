@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use super::ast::*;
+use super::parser::ReduceGroup;
 
 grammar;
 
@@ -594,12 +595,7 @@ ReduceArgsFull: Vec<Variable> = {
 }
 
 ReduceArgs: Vec<Variable> = {
-  <args: ReduceArgsFull?> => {
-    match args {
-      Some(args) => args,
-      None => vec![],
-    }
-  }
+  <args: ReduceArgsFull?> => args.unwrap_or_default(),
 }
 
 ReduceLeft: Vec<VariableOrWildcard> = {
@@ -607,7 +603,7 @@ ReduceLeft: Vec<VariableOrWildcard> = {
   "(" <vs: AtLeastTwoSeparated<VariableOrWildcard, ",">> ")" => vs,
 }
 
-ReduceGroupBy: (Vec<VariableBinding>, Box<Formula>) = {
+ReduceGroupBy: ReduceGroup = {
   "where" <bs: AtLeastOneSeparatedStrict<VariableBinding, ",">> ":" <f: Formula> => (bs, Box::new(f)),
 }
 
@@ -987,7 +983,6 @@ _CharLiteral: _CharLiteral = {
         .replace("\\n", "\n")
         .replace("\\'", "'")
         .replace("\\\\", "\\")
-        .into()
     )
   }
 }
@@ -1008,7 +1003,6 @@ _StringLiteral: _StringLiteral = {
         .replace("\\\"", "\"")
         .replace("\\\'", "\'")
         .replace("\\\\", "\\")
-        .into()
     )
   },
   <s: triple_quote_string> => {
@@ -1021,7 +1015,6 @@ _StringLiteral: _StringLiteral = {
         .replace("\\\"", "\"")
         .replace("\\\'", "\'")
         .replace("\\\\", "\\")
-        .into()
     )
   }
 }
@@ -1052,29 +1045,28 @@ _DurationLiteral: _DurationLiteral = {
 /// =========================== ///
 
 Separated<E, S>: Vec<E> = {
-  <rs: (<E> S)*> <e: E?> => rs.into_iter().chain(e.into_iter()).collect()
-}
-
-SeparatedStrict<E, S>: Vec<E> = {
-  <rs: (<E> S)*> <e: E> => rs.into_iter().chain(vec![e].into_iter()).collect()
+  <mut rs: (<E> S)*> <e: E?> => {
+    rs.extend(e);
+    rs
+  }
 }
 
 AtLeastOneSeparated<E, S>: Vec<E> = {
   <r1: E> => vec![r1],
-  <r1: E> <rs: (S <E>)+> S? => vec![vec![r1], rs].concat(),
+  <r1: E> <rs: (S <E>)+> S? => std::iter::once(r1).chain(rs).collect(),
 }
 
 AtLeastOneSeparatedStrict<E, S>: Vec<E> = {
   <r1: E> => vec![r1],
-  <r1: E> <rs: (S <E>)+> => vec![vec![r1], rs].concat(),
+  <r1: E> <rs: (S <E>)+> => std::iter::once(r1).chain(rs).collect(),
 }
 
 AtLeastTwoSeparated<E, S>: Vec<E> = {
-  <r1: E> <rs: (S <E>)+> S? => vec![vec![r1], rs].concat(),
+  <r1: E> <rs: (S <E>)+> S? => std::iter::once(r1).chain(rs).collect(),
 }
 
 AtLeastTwoSeparatedStrict<E, S>: Vec<E> = {
-  <r1: E> <rs: (S <E>)+> => vec![vec![r1], rs].concat(),
+  <r1: E> <rs: (S <E>)+> => std::iter::once(r1).chain(rs).collect(),
 }
 
 Spanned<T>: AstNodeWrapper<T> = {

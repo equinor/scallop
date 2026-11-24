@@ -20,7 +20,7 @@ impl DesugarArgTypeAdornment {
     )
   }
 
-  pub fn retain_relation(&mut self, rel_type: &RelationType, existing_attrs: &Vec<Attribute>) -> bool {
+  pub fn retain_relation(&mut self, rel_type: &RelationType, existing_attrs: &[Attribute]) -> bool {
     if rel_type.has_adornment() {
       let demand_attr = Self::generate_demand_attribute(rel_type);
       let attrs: Vec<_> = existing_attrs
@@ -38,6 +38,12 @@ impl DesugarArgTypeAdornment {
     } else {
       true
     }
+  }
+}
+
+impl Default for DesugarArgTypeAdornment {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

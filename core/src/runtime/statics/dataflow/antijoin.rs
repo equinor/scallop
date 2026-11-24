@@ -243,26 +243,29 @@ where
     loop {
       // First go through curr joint product iterator
       if let Some(curr_iter) = &mut self.curr_iter {
-        if let Some((e1, e2)) = curr_iter.next() {
-          let maybe_tag = self.semiring_ctx.minus(&e1.tag, &e2.tag);
-          if let Some(tag) = maybe_tag {
-            let result = StaticElement::new(e1.tuple().clone(), tag);
-            return Some(result);
-          } else {
-            continue;
+        match curr_iter.next() {
+          Some((e1, e2)) => {
+            let maybe_tag = self.semiring_ctx.minus(&e1.tag, &e2.tag);
+            if let Some(tag) = maybe_tag {
+              let result = StaticElement::new(e1.tuple().clone(), tag);
+              return Some(result);
+            } else {
+              continue;
+            }
           }
-        } else {
-          self.i1.step(curr_iter.v1.len() - 1);
-          self.i1_curr = self.i1.next();
-          self.i2.step(curr_iter.v2.len() - 1);
-          self.i2_curr = self.i2.next();
-          self.curr_iter = None;
+          None => {
+            self.i1.step(curr_iter.v1.len() - 1);
+            self.i1_curr = self.i1.next();
+            self.i2.step(curr_iter.v2.len() - 1);
+            self.i2_curr = self.i2.next();
+            self.curr_iter = None;
+          }
         }
       }
 
       // Then continue
       match (&self.i1_curr, &self.i2_curr) {
-        (Some(i1_curr), Some(i2_curr)) => match i1_curr.tuple.0.partial_cmp(&i2_curr.tuple).unwrap() {
+        (Some(i1_curr), Some(i2_curr)) => match i1_curr.tuple.0.cmp_tuple(&i2_curr.tuple) {
           Ordering::Less => {
             let result = i1_curr.clone();
             self.i1_curr = self.i1.next();
@@ -271,13 +274,17 @@ where
           Ordering::Equal => {
             let key = &i1_curr.tuple.0;
             let v1 = std::iter::once(i1_curr.clone())
-              .chain(self.i1.clone().take_while(|x| &x.tuple.0 == key))
+              .chain(self.i1.clone().take_while(|x| x.tuple.0.cmp_tuple(key).is_eq()))
               .collect::<Vec<_>>();
             let v2 = std::iter::once(i2_curr.clone()).collect::<Vec<_>>();
             let iter = JoinProductIterator::new(v1, v2);
             self.curr_iter = Some(iter);
           }
-          Ordering::Greater => self.i2_curr = self.i2.search_ahead(|i2_next| i2_next < &i1_curr.tuple.0),
+          Ordering::Greater => {
+            self.i2_curr = self
+              .i2
+              .search_ahead(|i2_next| i2_next.cmp_tuple(&i1_curr.tuple.0).is_lt())
+          }
         },
         (Some(i1_curr), None) => {
           let result = i1_curr.clone();

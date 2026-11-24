@@ -28,9 +28,9 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> Element<Prov> for StaticElement<Tu
   }
 }
 
-impl<Tup: StaticTupleTrait, Prov: Provenance> Into<(Tup, Prov::Tag)> for StaticElement<Tup, Prov> {
-  fn into(self) -> (Tup, Prov::Tag) {
-    let Self { tuple, tag } = self;
+impl<Tup: StaticTupleTrait, Prov: Provenance> From<StaticElement<Tup, Prov>> for (Tup, Prov::Tag) {
+  fn from(element: StaticElement<Tup, Prov>) -> Self {
+    let StaticElement { tuple, tag } = element;
     (tuple.into(), tag)
   }
 }

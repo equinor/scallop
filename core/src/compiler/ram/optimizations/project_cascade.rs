@@ -17,33 +17,33 @@ pub fn project_cascade(ram: &mut Program) -> bool {
 fn project_cascade_on_dataflow(d0: &mut Dataflow) -> bool {
   match d0 {
     Dataflow::Union(d1, d2) => {
-      let r1 = project_cascade_on_dataflow(&mut **d1);
-      let r2 = project_cascade_on_dataflow(&mut **d2);
+      let r1 = project_cascade_on_dataflow(d1);
+      let r2 = project_cascade_on_dataflow(d2);
       r1 || r2
     }
     Dataflow::Join(d1, d2) => {
-      let r1 = project_cascade_on_dataflow(&mut **d1);
-      let r2 = project_cascade_on_dataflow(&mut **d2);
+      let r1 = project_cascade_on_dataflow(d1);
+      let r2 = project_cascade_on_dataflow(d2);
       r1 || r2
     }
     Dataflow::Intersect(d1, d2) => {
-      let r1 = project_cascade_on_dataflow(&mut **d1);
-      let r2 = project_cascade_on_dataflow(&mut **d2);
+      let r1 = project_cascade_on_dataflow(d1);
+      let r2 = project_cascade_on_dataflow(d2);
       r1 || r2
     }
     Dataflow::Product(d1, d2) => {
-      let r1 = project_cascade_on_dataflow(&mut **d1);
-      let r2 = project_cascade_on_dataflow(&mut **d2);
+      let r1 = project_cascade_on_dataflow(d1);
+      let r2 = project_cascade_on_dataflow(d2);
       r1 || r2
     }
     Dataflow::Antijoin(d1, d2) => {
-      let r1 = project_cascade_on_dataflow(&mut **d1);
-      let r2 = project_cascade_on_dataflow(&mut **d2);
+      let r1 = project_cascade_on_dataflow(d1);
+      let r2 = project_cascade_on_dataflow(d2);
       r1 || r2
     }
     Dataflow::Difference(d1, d2) => {
-      let r1 = project_cascade_on_dataflow(&mut **d1);
-      let r2 = project_cascade_on_dataflow(&mut **d2);
+      let r1 = project_cascade_on_dataflow(d1);
+      let r2 = project_cascade_on_dataflow(d2);
       r1 || r2
     }
     Dataflow::Project(d1, p1) => match &**d1 {
@@ -54,14 +54,14 @@ fn project_cascade_on_dataflow(d0: &mut Dataflow) -> bool {
       }
       _ => project_cascade_on_dataflow(d1),
     },
-    Dataflow::JoinIndexedVec(d, _) => project_cascade_on_dataflow(&mut **d),
-    Dataflow::Filter(d, _) => project_cascade_on_dataflow(&mut **d),
-    Dataflow::Find(d, _) => project_cascade_on_dataflow(&mut **d),
-    Dataflow::Sorted(d) => project_cascade_on_dataflow(&mut **d),
-    Dataflow::OverwriteOne(d) => project_cascade_on_dataflow(&mut **d),
-    Dataflow::Exclusion(d, _) => project_cascade_on_dataflow(&mut **d),
-    Dataflow::ForeignPredicateConstraint(d, _, _) => project_cascade_on_dataflow(&mut **d),
-    Dataflow::ForeignPredicateJoin(d, _, _) => project_cascade_on_dataflow(&mut **d),
+    Dataflow::JoinIndexedVec(d, _) => project_cascade_on_dataflow(d),
+    Dataflow::Filter(d, _) => project_cascade_on_dataflow(d),
+    Dataflow::Find(d, _) => project_cascade_on_dataflow(d),
+    Dataflow::Sorted(d) => project_cascade_on_dataflow(d),
+    Dataflow::OverwriteOne(d) => project_cascade_on_dataflow(d),
+    Dataflow::Exclusion(d, _) => project_cascade_on_dataflow(d),
+    Dataflow::ForeignPredicateConstraint(d, _, _) => project_cascade_on_dataflow(d),
+    Dataflow::ForeignPredicateJoin(d, _, _) => project_cascade_on_dataflow(d),
     Dataflow::ForeignPredicateGround(_, _)
     | Dataflow::Unit(_)
     | Dataflow::Relation(_)

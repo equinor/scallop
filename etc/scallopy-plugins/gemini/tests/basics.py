@@ -4,8 +4,17 @@ from unittest.mock import patch
 from google.genai import types
 import scallopy
 import scallop_gemini
+from scallop_gemini._response import response_text
 
 class TestBasics(unittest.TestCase):
+  def test_empty_responses_report_what_is_missing(self):
+    for response, error in (
+      (types.GenerateContentResponse(), "no candidates"),
+      (types.GenerateContentResponse(candidates=[types.Candidate()]), "no text"),
+    ):
+      with self.subTest(error=error), self.assertRaisesRegex(ValueError, error):
+        response_text(response)
+
   def test_ff_gemini(self):
     ctx = scallopy.Context()
     plugin = scallop_gemini.ScallopGeminiPlugin()
@@ -35,7 +44,7 @@ class TestBasics(unittest.TestCase):
     self.assertEqual(request["model"], "gemini-test")
     self.assertEqual(request["config"].temperature, 0.25)
 
-  @unittest.skipUnless(scallopy.torch_tensor_enabled(), "requires Scallopy tensor support")
+  @unittest.skipUnless(scallopy.torch_tensor_enabled() and scallopy.torch_importer.has_pytorch(), "requires Scallopy tensor support and PyTorch")
   def test_encoder_uses_configured_client_and_attribute_model(self):
     ctx = scallopy.Context()
     plugin = scallop_gemini.ScallopGeminiPlugin()

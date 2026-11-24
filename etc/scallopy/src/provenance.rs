@@ -191,10 +191,11 @@ impl PythonProvenance for top_bottom_k_clauses::TopBottomKClausesProvenance<ArcF
 fn extract_diff_probability(tag: &Bound<'_, PyAny>) -> PyResult<f64> {
   if !tag.is_instance_of::<PyFloat>() && !tag.is_instance_of::<PyInt>() {
     let modules = tag.py().import("sys")?.getattr("modules")?;
-    if let Some(torch) = modules.cast::<PyDict>()?.get_item("torch")? {
-      if !torch.is_none() && tag.is_instance(&torch.getattr("Tensor")?)? {
-        return tag.call_method0("item")?.extract();
-      }
+    if let Some(torch) = modules.cast::<PyDict>()?.get_item("torch")?
+      && !torch.is_none()
+      && tag.is_instance(&torch.getattr("Tensor")?)?
+    {
+      return tag.call_method0("item")?.extract();
     }
   }
   tag.extract()
@@ -379,7 +380,7 @@ impl PythonProvenance for diff_top_k_proofs_debug::DiffTopKProofsDebugProvenance
       let prob = extract_diff_probability(&prob)?;
       let tag_disj_id: (Bound<'_, PyAny>, usize, Option<usize>) = tag.extract()?;
       let tag: ExtTag = (&tag_disj_id.0).into();
-      let id: usize = tag_disj_id.1.into();
+      let id: usize = tag_disj_id.1;
       if id == 0 {
         Err(PyErr::new::<PyValueError, _>("The input ID to the diff-top-k-proofs-debug provenance cannot be 0; consider changing it to starting from 1."))
       } else {

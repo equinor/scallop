@@ -64,6 +64,10 @@ impl TupleAccessor {
     self.len as usize
   }
 
+  pub fn is_empty(&self) -> bool {
+    self.len == 0
+  }
+
   pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
     self.indices.iter().take(self.len as usize).map(|i| *i as usize)
   }

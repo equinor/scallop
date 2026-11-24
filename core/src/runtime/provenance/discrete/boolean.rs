@@ -18,7 +18,7 @@ impl Provenance for BooleanProvenance {
   type OutputTag = bool;
 
   fn name(&self) -> String {
-    format!("boolean")
+    "boolean".to_string()
   }
 
   fn tagging_fn(&self, ext_tag: Self::InputTag) -> Self::Tag {

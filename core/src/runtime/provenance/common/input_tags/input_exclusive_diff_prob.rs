@@ -71,27 +71,27 @@ impl<T: FromTensor> StaticInputTag for InputExclusiveDiffProb<T> {
       DynamicInputTag::Exclusive(i) => Some(Self {
         prob: 1.0,
         external_tag: None,
-        exclusion: Some(i.clone()),
+        exclusion: Some(*i),
       }),
       DynamicInputTag::Float(prob) => Some(Self {
-        prob: prob.clone(),
+        prob: *prob,
         external_tag: None,
         exclusion: None,
       }),
       DynamicInputTag::ExclusiveFloat(prob, i) => Some(Self {
-        prob: prob.clone(),
+        prob: *prob,
         external_tag: None,
-        exclusion: Some(i.clone()),
+        exclusion: Some(*i),
       }),
       DynamicInputTag::FloatWithID(_, prob) => Some(Self {
-        prob: prob.clone(),
+        prob: *prob,
         external_tag: None,
         exclusion: None,
       }),
       DynamicInputTag::ExclusiveFloatWithID(_, prob, i) => Some(Self {
-        prob: prob.clone(),
+        prob: *prob,
         external_tag: None,
-        exclusion: Some(i.clone()),
+        exclusion: Some(*i),
       }),
       DynamicInputTag::Tensor(t) => Some(Self {
         prob: t.get_f64(),
@@ -145,7 +145,7 @@ impl<T: FromTensor> ConvertFromInputTag<f64> for InputExclusiveDiffProb<T> {
 
 impl<T: FromTensor> ConvertFromInputTag<InputExclusiveProb> for InputExclusiveDiffProb<T> {
   fn from_input_tag(t: InputExclusiveProb) -> Option<Self> {
-    Some(Self::new_without_gradient(t.prob.clone(), t.exclusion.clone()))
+    Some(Self::new_without_gradient(t.prob, t.exclusion))
   }
 }
 

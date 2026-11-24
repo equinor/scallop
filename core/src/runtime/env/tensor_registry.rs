@@ -31,3 +31,9 @@ impl TensorRegistry2 {
     self.registry.lock().unwrap().eval(value)
   }
 }
+
+impl Default for TensorRegistry2 {
+  fn default() -> Self {
+    Self::new()
+  }
+}

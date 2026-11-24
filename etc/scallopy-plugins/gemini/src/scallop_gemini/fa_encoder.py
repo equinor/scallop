@@ -2,7 +2,7 @@ from google.genai import types
 import torch
 
 import scallopy
-from scallop_gpu import get_device
+from scallopy.plugin.utils import get_device
 
 from . import ScallopGeminiPlugin
 
@@ -25,7 +25,7 @@ def get_gemini_encoder(plugin: ScallopGeminiPlugin):
 
     # Generate foreign function
     @scallopy.foreign_function(name=item.function_decl_name())
-    def encode_text(text: str) -> scallopy.Tensor:
+    def encode_text(text: str) -> torch.Tensor:
       # Check memoization
       if text not in STORAGE:
         # Make sure that we can do request

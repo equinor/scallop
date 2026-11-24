@@ -1,15 +1,16 @@
 import scallopy
 import re
+from torch import Tensor
 
-@scallopy.foreign_function
+@scallopy.foreign_function(arg_types=[Tensor, scallopy.u32, scallopy.u32, scallopy.u32, scallopy.u32])
 def crop_image(
-  img: scallopy.Tensor,
-  bbox_x: scallopy.u32,
-  bbox_y: scallopy.u32,
-  bbox_w: scallopy.u32,
-  bbox_h: scallopy.u32,
-  loc: str = None,
-) -> scallopy.Tensor:
+  img: Tensor,
+  bbox_x: int,
+  bbox_y: int,
+  bbox_w: int,
+  bbox_h: int,
+  loc: str | None = None,
+) -> Tensor:
   img_h, img_w, _ = img.shape
 
   # Clip bounding box
@@ -19,7 +20,7 @@ def crop_image(
   # Determine crop region
   if loc is not None:
     if loc.startswith("enlarge") or loc.startswith("expand"):
-      matches = re.findall("\d*\.*\d+", loc)
+      matches = re.findall(r"\d*\.*\d+", loc)
       if len(matches) > 0:
         enlarge_box_factor = float(matches[0])
         w, h = int((enlarge_box_factor - 1) * (x2 - x1) / 2), int((enlarge_box_factor - 1) * (y2 - y1) / 2)

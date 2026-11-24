@@ -34,25 +34,28 @@ impl TransformConjunctiveHead {
   }
 }
 
+impl Default for TransformConjunctiveHead {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<Rule> for TransformConjunctiveHead {
   fn visit_mut(&mut self, rule: &mut Rule) {
-    match rule.head() {
-      RuleHead::Conjunction(c) => {
-        for atom in c.iter_atoms() {
-          self
-            .to_add_items
-            .push(Item::RelationDecl(RelationDecl::Rule(RuleDecl::new(
-              Attributes::new(),
-              None,
-              Rule::new_with_loc(
-                RuleHead::atom(atom.clone()),
-                rule.body().clone(),
-                rule.location().clone_without_id(),
-              ),
-            ))));
-        }
+    if let RuleHead::Conjunction(c) = rule.head() {
+      for atom in c.iter_atoms() {
+        self
+          .to_add_items
+          .push(Item::RelationDecl(RelationDecl::Rule(RuleDecl::new(
+            Attributes::new(),
+            None,
+            Rule::new_with_loc(
+              RuleHead::atom(atom.clone()),
+              rule.body().clone(),
+              rule.location().clone_without_id(),
+            ),
+          ))));
       }
-      _ => {}
     }
   }
 }

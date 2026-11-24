@@ -2,7 +2,7 @@
 
 use super::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct NewTagVariable;
 
 impl NewTagVariable {
@@ -35,8 +35,6 @@ impl ForeignPredicate for NewTagVariable {
 
   #[allow(unused)]
   fn evaluate(&self, bounded: &[Value]) -> Vec<(DynamicInputTag, Vec<Value>)> {
-    vec![
-      (DynamicInputTag::NewVariable, vec![]),
-    ]
+    vec![(DynamicInputTag::NewVariable, vec![])]
   }
 }

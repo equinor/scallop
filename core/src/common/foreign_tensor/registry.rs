@@ -26,11 +26,10 @@ impl DynamicTensorRegistry {
   }
 
   pub fn register(&mut self, ext_tensor: DynamicExternalTensor) -> Option<InternalTensorSymbol> {
-    if let Some(registry) = &mut self.maybe_registry {
-      Some(registry.register(ext_tensor))
-    } else {
-      None
-    }
+    self
+      .maybe_registry
+      .as_mut()
+      .map(|registry| registry.register(ext_tensor))
   }
 
   pub fn get(&self, int_tensor: &InternalTensorSymbol) -> Option<DynamicExternalTensor> {
@@ -42,5 +41,11 @@ impl DynamicTensorRegistry {
 
   pub fn eval(&self, value: &TensorValue) -> Option<DynamicExternalTensor> {
     self.maybe_registry.as_ref().map(|registry| registry.eval(value))
+  }
+}
+
+impl Default for DynamicTensorRegistry {
+  fn default() -> Self {
+    Self::new()
   }
 }

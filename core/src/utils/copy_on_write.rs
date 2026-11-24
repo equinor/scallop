@@ -8,7 +8,7 @@ impl<T: Clone, P: PointerFamily> CopyOnWrite<T, P> {
   }
 
   pub fn borrow(&self) -> &T {
-    &*self.0
+    &self.0
   }
 
   pub fn modify<F, O>(&mut self, f: F) -> O

@@ -151,11 +151,7 @@ impl CollectionEnum<ArcFamily> {
   }
 
   fn has_empty_tag(&self) -> bool {
-    match self {
-      Self::Unit { .. } => true,
-      Self::Proofs { .. } => true,
-      _ => false,
-    }
+    matches!(self, Self::Unit { .. } | Self::Proofs { .. })
   }
 
   fn ith_tuple(&self, i: usize) -> &common::tuple::Tuple {
@@ -173,7 +169,7 @@ impl CollectionEnum<ArcFamily> {
     match_collection!(self, c, ith_tag_helper(ArcFamily::get_rc(c), i))
   }
 
-  pub fn to_collection(self, env: &RuntimeEnvironment) -> Collection {
+  pub fn into_collection(self, env: &RuntimeEnvironment) -> Collection {
     Collection {
       env: env.into(),
       collection: self,

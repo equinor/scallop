@@ -198,6 +198,27 @@ class TestDigitForward(unittest.TestCase):
 
 
 class TestDirectForward(unittest.TestCase):
+  def test_forward_hooks_on_both_modules_preserve_gradients(self):
+    compute = scallopy.Module(
+      program="type value(usize)\nrel answer(x) = value(x)",
+      input_mappings={"value": [0]},
+      output_mappings={"answer": [0]},
+    )
+    weights = torch.tensor([[0.75]], requires_grad=True)
+    calls = []
+
+    def record(module, args, kwargs, output):
+      calls.append(module)
+      self.assertIs(kwargs["value"], weights)
+
+    with compute.register_forward_hook(record, with_kwargs=True), \
+         compute.forward_fn.register_forward_hook(record, with_kwargs=True):
+      result = compute(value=weights)
+    self.assertEqual(calls, [compute.forward_fn, compute])
+    torch.testing.assert_close(result, weights)
+    result.sum().backward()
+    torch.testing.assert_close(weights.grad, torch.ones_like(weights))
+
   def test_forward(self):
     sum_2_program = """
     type digit_a(usize), digit_b(usize)

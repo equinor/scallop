@@ -31,11 +31,13 @@ impl<'a, Prov: Provenance> DynamicAggregationSingleGroupDataflow<'a, Prov> {
 
 impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicAggregationSingleGroupDataflow<'a, Prov> {
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
-    if let Some(b) = self.d.iter_recent().next_batch() {
-      let batch = b.collect::<Vec<_>>();
-      DynamicBatches::single(ElementsBatch::new(self.agg.aggregate(self.ctx, self.runtime, batch)))
-    } else {
-      DynamicBatches::empty()
-    }
+    let Some(batch) = self.d.iter_recent().next_batch() else {
+      return DynamicBatches::empty();
+    };
+    DynamicBatches::single(ElementsBatch::new(self.agg.aggregate(
+      self.ctx,
+      self.runtime,
+      batch.collect(),
+    )))
   }
 }

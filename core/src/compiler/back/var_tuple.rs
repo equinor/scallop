@@ -90,7 +90,7 @@ impl VariableTuple {
               .into_iter()
               .filter(|v| !visited_variables.contains(v))
               .collect::<Vec<_>>();
-            visited_variables.extend(vars.clone().into_iter());
+            visited_variables.extend(vars.clone());
             vars.into_iter()
           })
           .collect()
@@ -109,18 +109,12 @@ impl VariableTuple {
     self.matches_args(&atom.args)
   }
 
-  pub fn matches_args(&self, args: &Vec<Term>) -> bool {
+  pub fn matches_args(&self, args: &[Term]) -> bool {
     match self {
-      Self::Tuple(ts) => {
-        if ts.len() == args.len() {
-          args.iter().zip(ts.iter()).all(|(t1, t2)| match (t1, t2) {
-            (Term::Variable(v1), Self::Value(v2)) => v1 == v2,
-            _ => false,
-          })
-        } else {
-          false
-        }
-      }
+      Self::Tuple(ts) if ts.len() == args.len() => args.iter().zip(ts.iter()).all(|(t1, t2)| match (t1, t2) {
+        (Term::Variable(v1), Self::Value(v2)) => v1 == v2,
+        _ => false,
+      }),
       _ => false,
     }
   }

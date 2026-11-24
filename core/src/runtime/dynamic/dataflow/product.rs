@@ -47,7 +47,7 @@ impl<'a, Prov: Provenance> BatchBinaryOp<'a, Prov> for ProductOp<'a, Prov> {
   fn apply(&self, mut i1: DynamicBatch<'a, Prov>, i2: DynamicBatch<'a, Prov>) -> DynamicBatch<'a, Prov> {
     let i1_curr = i1.next_elem();
     DynamicBatch::new(DynamicProductBatch {
-      i1: i1,
+      i1,
       i1_curr,
       i2_source: i2.clone(),
       i2_clone: i2,

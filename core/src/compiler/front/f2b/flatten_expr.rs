@@ -213,14 +213,14 @@ impl<'a> FlattenExprContext<'a> {
   pub fn collect_flattened_literals_of_call_op(
     &self,
     left: &back::Variable,
-    function: &String,
-    args: &Vec<Loc>,
+    function: &str,
+    args: &[Loc],
   ) -> Vec<back::Literal> {
     let mut curr_literals = vec![];
 
     // The call expression literal
     let arg_terms = args.iter().map(|a| self.get_loc_term(a)).collect::<Vec<_>>();
-    let literal = back::Literal::call_expr(left.clone(), function.clone(), arg_terms);
+    let literal = back::Literal::call_expr(left.clone(), function.to_owned(), arg_terms);
     curr_literals.push(literal);
 
     // Collect flattened literals from args
@@ -235,14 +235,14 @@ impl<'a> FlattenExprContext<'a> {
   pub fn collect_flattened_literals_of_new_op(
     &self,
     left: &back::Variable,
-    functor: &String,
-    args: &Vec<Loc>,
+    functor: &str,
+    args: &[Loc],
   ) -> Vec<back::Literal> {
     let mut curr_literals = vec![];
 
     // The call expression literal
     let arg_terms = args.iter().map(|a| self.get_loc_term(a)).collect::<Vec<_>>();
-    let literal = back::Literal::new_expr(left.clone(), functor.clone(), arg_terms);
+    let literal = back::Literal::new_expr(left.clone(), functor.to_owned(), arg_terms);
     curr_literals.push(literal);
 
     // Collect flattened literals from args
@@ -368,11 +368,10 @@ impl<'a> FlattenExprContext<'a> {
     }
   }
 
-  pub fn to_back_literals(&self, conj: &Vec<Formula>) -> Vec<back::Literal> {
+  pub fn to_back_literals(&self, conj: &[Formula]) -> Vec<back::Literal> {
     conj
       .iter()
-      .map(|f| self.front_literal_to_back_literal(f))
-      .flatten()
+      .flat_map(|f| self.front_literal_to_back_literal(f))
       .collect()
   }
 }

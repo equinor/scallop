@@ -2,10 +2,12 @@
 
 ## Quick Start
 
-This can be quickly installed using the following command through Github
+With [uv](https://docs.astral.sh/uv/getting-started/installation/) and Rust installed,
+you can build and install Scallopy from GitHub:
 
 ``` bash
-pip install "git+https://github.com/scallop-lang/scallop.git#egg=scallopy&subdirectory=etc/scallopy"
+uv venv --python 3.14
+uv pip install "scallopy @ git+https://github.com/equinor/scallop.git#subdirectory=etc/scallopy"
 ```
 
 ## Sample usage
@@ -33,47 +35,32 @@ for (s, t) in paths:
 
 ## Build and Use
 
-Assume you are inside of the root `scallop` directory.
-First, we need to create a virtual environment for Scallop to operate in.
+Run these commands from the repository root. CI tests CPython 3.11 through 3.15.
 
 ``` bash
-# Mac/Linux (venv, requirement: Python 3.8)
-$ python3 -m venv .env
-$ source .env/bin/activate # if you are using fish, use .env/bin/activate.fish
-
-# Linux (Conda)
-$ conda create --name scallop-lab python=3.8 # change the name to whatever you want
-$ conda activate scallop-lab
+uv venv --python 3.14
+make install-scallopy
+uv run --no-project python etc/scallopy/examples/edge_path.py
 ```
 
-And let's install the core dependencies
+To develop and run the Python tests, sync the locked dependencies into `.venv`
+(including CPU PyTorch on Linux), then build the editable package and run the tests:
 
 ``` bash
-$ pip install maturin
+UV_PYTHON=3.14 make init-venv
+make test-scallopy
 ```
 
-With this, we can build our `scallopy` library
+Run `make lint-python typecheck-python` from the repository root to check the
+library and native extension stubs, CLI, and all plugins with Ruff and `ty`.
+Both checks match CI, use tools locked by `uv`, and target Python 3.11.
+
+Install experiment dependencies as needed; they are not part of the test lockfile.
+For example, the MNIST experiment uses PyTorch, TorchVision, and `tqdm`:
 
 ``` bash
-$ cd etc/scallopy # Go to this directory
-$ make            # Build the library
-$ cd ../..        # Going back to the root `scallop` directory
-```
-
-If succeed, please run some examples just to confirm that `scallopy` is indeed installed successfully.
-When doing so (and all of the above), please make sure that you are inside of the virtual environment or
-conda environment.
-
-``` bash
-$ python examples/edge_path.py
-```
-
-If you want to run the experiments in `/experiments` folder, you should additionally install PyTorch,
-PyTorch Vision, and `tqdm`.
-
-``` bash
-$ pip install tqdm torch torchvision
-$ python experiments/mnist/sum_2.py
+uv pip install torch torchvision tqdm
+uv run --no-project python experiments/mnist/sum_2.py
 ```
 
 ## Documentation

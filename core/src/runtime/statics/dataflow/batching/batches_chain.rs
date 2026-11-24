@@ -27,8 +27,8 @@ where
 {
   pub fn chain(b1: B1, b2: B2) -> Self {
     Self {
-      b1: b1,
-      b2: b2,
+      b1,
+      b2,
       use_b1: true,
       phantom: PhantomData,
     }
@@ -46,10 +46,13 @@ where
 
   fn next(&mut self) -> Option<Self::Item> {
     if self.use_b1 {
-      if let Some(b1_curr) = self.b1.next() {
-        return Some(EitherBatch::first(b1_curr));
-      } else {
-        self.use_b1 = false;
+      match self.b1.next() {
+        Some(b1_curr) => {
+          return Some(EitherBatch::first(b1_curr));
+        }
+        None => {
+          self.use_b1 = false;
+        }
       }
     }
     self.b2.next().map(EitherBatch::second)

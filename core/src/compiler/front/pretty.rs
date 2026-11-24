@@ -755,7 +755,8 @@ impl Display for ReduceOp {
 
 impl Display for Range {
   fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-    f.write_str(&self.to_string())
+    let operator = if *self.inclusive() { "..=" } else { ".." };
+    write!(f, "{} in {}{operator}{}", self.left(), self.lower(), self.upper())
   }
 }
 

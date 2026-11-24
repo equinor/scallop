@@ -7,7 +7,7 @@ use crate::runtime::env::*;
 
 use super::*;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct CategoricalAggregate;
 
 impl CategoricalAggregate {
@@ -16,9 +16,9 @@ impl CategoricalAggregate {
   }
 }
 
-impl Into<DynamicAggregate> for CategoricalAggregate {
-  fn into(self) -> DynamicAggregate {
-    DynamicAggregate::Sampler(DynamicSampleAggregate::new(self))
+impl From<CategoricalAggregate> for DynamicAggregate {
+  fn from(val: CategoricalAggregate) -> Self {
+    DynamicAggregate::Sampler(DynamicSampleAggregate::new(val))
   }
 }
 
@@ -44,9 +44,9 @@ pub struct CategoricalSampler {
   k: usize,
 }
 
-impl Into<DynamicSampler> for CategoricalSampler {
-  fn into(self) -> DynamicSampler {
-    DynamicSampler::new(self)
+impl From<CategoricalSampler> for DynamicSampler {
+  fn from(val: CategoricalSampler) -> Self {
+    DynamicSampler::new(val)
   }
 }
 

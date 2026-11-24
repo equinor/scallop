@@ -50,7 +50,7 @@ impl ConstantSetDecl {
   }
 
   pub fn is_disjunction(&self) -> bool {
-    self.set().is_disjunction().clone()
+    *self.set().is_disjunction()
   }
 }
 
@@ -59,7 +59,7 @@ impl ConstantSetDecl {
 pub struct _FactDecl {
   pub attrs: Attributes,
   pub tag: Option<Expr>,
-  pub atom: Atom,
+  pub atom: Box<Atom>,
 }
 
 impl FactDecl {
@@ -85,7 +85,7 @@ impl FactDecl {
 pub struct _RuleDecl {
   pub attrs: Attributes,
   pub tag: Option<Expr>,
-  pub rule: Rule,
+  pub rule: Box<Rule>,
 }
 
 impl RuleDecl {
@@ -106,7 +106,7 @@ impl RuleDecl {
 #[doc(hidden)]
 pub struct _ReduceRuleDecl {
   pub attrs: Attributes,
-  pub rule: ReduceRule,
+  pub rule: Box<ReduceRule>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, AstNode)]

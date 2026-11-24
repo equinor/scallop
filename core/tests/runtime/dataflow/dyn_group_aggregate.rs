@@ -9,7 +9,7 @@ use scallop_core::testing::*;
 
 #[test]
 fn test_dynamic_group_and_count_1() {
-  let mut ctx = unit::UnitProvenance;
+  let ctx = unit::UnitProvenance;
   let rt = RuntimeEnvironment::new_std();
 
   // Relations
@@ -18,7 +18,7 @@ fn test_dynamic_group_and_count_1() {
 
   // Initial
   color.insert_untagged(
-    &mut ctx,
+    &ctx,
     vec![
       (0usize, "red"),
       (1usize, "red"),
@@ -75,7 +75,7 @@ fn test_dynamic_group_and_count_1() {
 
 #[test]
 fn test_dynamic_group_count_max_1() {
-  let mut ctx = unit::UnitProvenance;
+  let ctx = unit::UnitProvenance;
   let rt = RuntimeEnvironment::default();
 
   // Relations
@@ -84,7 +84,7 @@ fn test_dynamic_group_count_max_1() {
 
   // Initial
   color.insert_untagged(
-    &mut ctx,
+    &ctx,
     vec![
       (0usize, "red"),
       (1usize, "red"),

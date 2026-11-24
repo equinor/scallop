@@ -84,14 +84,11 @@ impl<'a> NodeVisitor<Constraint> for LocalBoundnessAnalysisContext<'a> {
     self.constraints.push(constraint.expr().location().clone());
 
     // Then put the equality if the constraint is a binary equality
-    match constraint.expr() {
-      Expr::Binary(b) => {
-        if b.op().is_eq() {
-          let dep = BoundnessDependency::ConstraintEquality(b.op1().location().clone(), b.op2().location().clone());
-          self.dependencies.push(dep);
-        }
-      }
-      _ => {}
+    if let Expr::Binary(b) = constraint.expr()
+      && b.op().is_eq()
+    {
+      let dep = BoundnessDependency::ConstraintEquality(b.op1().location().clone(), b.op2().location().clone());
+      self.dependencies.push(dep);
     }
   }
 }
@@ -235,7 +232,7 @@ impl<'a> LocalBoundnessAnalysisContext<'a> {
       }
 
       // Then propagate the boundness through variables
-      for (_, locs) in &self.variable_locations {
+      for locs in self.variable_locations.values() {
         let var_bounded = locs.iter().any(|loc| get(&self.expr_boundness, loc));
         for loc in locs {
           update(&mut self.expr_boundness, loc, var_bounded);

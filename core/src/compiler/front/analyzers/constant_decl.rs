@@ -56,16 +56,16 @@ impl ConstantDeclAnalysis {
           .variables
           .get(var_name)
           .and_then(|(_, ty, _)| ty.clone())
-          .and_then(|ty| Some((var_loc.clone(), ty)))
+          .map(|ty| (var_loc.clone(), ty))
       })
       .collect()
   }
 
-  pub fn process_enum_type_decl(&mut self, etd: &ast::EnumTypeDecl) -> Result<(), ConstantDeclError> {
-    let extract_value = |member: &ast::EnumTypeMember, prev_max: Option<i64>| -> Result<i64, ConstantDeclError> {
+  pub fn process_enum_type_decl(&mut self, etd: &ast::EnumTypeDecl) -> Result<(), Box<ConstantDeclError>> {
+    let extract_value = |member: &ast::EnumTypeMember, prev_max: Option<i64>| -> Result<i64, Box<ConstantDeclError>> {
       // First check if there is an integer number assignment to the enum
-      match member.assigned_num() {
-        Some(c) => match c {
+      if let Some(c) = member.assigned_num() {
+        match c {
           // If there is, we check if the integer is greater than or equal to zero and greater than the previous maximum
           Constant::Integer(i) if i.int() >= &0 => {
             let i = *i.int();
@@ -76,11 +76,11 @@ impl ConstantDeclAnalysis {
                 return Ok(i);
               } else {
                 // If the number is not greater, then this enum value ID is invalid
-                return Err(ConstantDeclError::EnumIDAlreadyAssigned {
+                return Err(Box::new(ConstantDeclError::EnumIDAlreadyAssigned {
                   curr_name: member.name().to_string(),
                   id: i,
                   loc: member.location().clone(),
-                });
+                }));
               }
             } else {
               // If there is no previous max, then directly give it `i`.
@@ -90,25 +90,24 @@ impl ConstantDeclAnalysis {
           _ => {
             // We don't care other cases
           }
-        },
-        _ => {}
+        }
       };
 
       // If the assignment is not presented, we simply increment the previous maximum value
       if let Some(prev_max) = prev_max {
-        return Ok(prev_max + 1);
+        Ok(prev_max + 1)
       } else {
-        return Ok(0);
+        Ok(0)
       }
     };
 
-    let mut process_member = |member: &ast::EnumTypeMember, id: i64| -> Result<(), ConstantDeclError> {
+    let mut process_member = |member: &ast::EnumTypeMember, id: i64| -> Result<(), Box<ConstantDeclError>> {
       if let Some((first_decl_loc, _, _)) = self.variables.get(member.member_name()) {
-        Err(ConstantDeclError::DuplicatedConstant {
+        Err(Box::new(ConstantDeclError::DuplicatedConstant {
           name: member.name().to_string(),
           first_decl: first_decl_loc.clone(),
           second_decl: member.location().clone(),
-        })
+        }))
       } else {
         // Then store the variable into the storage
         self.variables.insert(
@@ -116,7 +115,7 @@ impl ConstantDeclAnalysis {
           (
             member.location().clone(),
             Some(Type::usize()),
-            Constant::integer(IntLiteral::new(id as i64)),
+            Constant::integer(IntLiteral::new(id)),
           ),
         );
         Ok(())
@@ -132,12 +131,18 @@ impl ConstantDeclAnalysis {
     process_member(first_member, curr_id)?;
 
     // Then process the rest
-    while let Some(curr_member) = members_iterator.next() {
+    for curr_member in members_iterator {
       curr_id = extract_value(curr_member, Some(curr_id))?;
       process_member(curr_member, curr_id)?;
     }
 
     Ok(())
+  }
+}
+
+impl Default for ConstantDeclAnalysis {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
@@ -187,7 +192,7 @@ impl NodeVisitor<ConstAssignment> for ConstantDeclAnalysis {
 impl NodeVisitor<EnumTypeDecl> for ConstantDeclAnalysis {
   fn visit(&mut self, etd: &EnumTypeDecl) {
     if let Err(e) = self.process_enum_type_decl(etd) {
-      self.errors.push(e);
+      self.errors.push(*e);
     }
   }
 }
