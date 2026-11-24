@@ -59,18 +59,15 @@ impl AttributeValue {
   }
 
   pub fn as_integer(&self) -> Option<i64> {
-    self.as_constant().and_then(|c| c.as_integer()).map(|b| b.int().clone())
+    self.as_constant().and_then(|c| c.as_integer()).map(|b| *b.int())
   }
 
   pub fn as_float(&self) -> Option<f64> {
-    self.as_constant().and_then(|c| c.as_float()).map(|b| b.float().clone())
+    self.as_constant().and_then(|c| c.as_float()).map(|b| *b.float())
   }
 
   pub fn as_boolean(&self) -> Option<bool> {
-    self
-      .as_constant()
-      .and_then(|c| c.as_boolean())
-      .map(|b| b.value().clone())
+    self.as_constant().and_then(|c| c.as_boolean()).map(|b| *b.value())
   }
 
   pub fn as_string(&self) -> Option<String> {
@@ -87,9 +84,9 @@ impl FromIterator<AttributeValue> for AttributeValue {
   }
 }
 
-impl Into<AttributeArg> for AttributeValue {
-  fn into(self) -> AttributeArg {
-    AttributeArg::Pos(self)
+impl From<AttributeValue> for AttributeArg {
+  fn from(val: AttributeValue) -> Self {
+    AttributeArg::Pos(val)
   }
 }
 
@@ -193,11 +190,6 @@ pub trait AttributesTrait {
 
 impl AttributesTrait for Attributes {
   fn find(&self, name: &str) -> Option<&Attribute> {
-    for attr in self {
-      if attr.attr_name() == name {
-        return Some(attr);
-      }
-    }
-    None
+    self.iter().find(|&attr| attr.attr_name() == name).map(|v| v as _)
   }
 }

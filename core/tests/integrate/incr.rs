@@ -5,7 +5,7 @@ use scallop_core::utils::RcFamily;
 
 #[test]
 fn incr_edge_path_left_recursion() {
-  let prov_ctx = provenance::unit::UnitProvenance::default();
+  let prov_ctx = provenance::unit::UnitProvenance;
   let mut ctx = integrate::IntegrateContext::<_, RcFamily>::new(prov_ctx);
 
   // Source
@@ -36,7 +36,7 @@ fn incr_edge_path_left_recursion() {
 
 #[test]
 fn incr_edge_path_left_branching_1() {
-  let prov_ctx = provenance::unit::UnitProvenance::default();
+  let prov_ctx = provenance::unit::UnitProvenance;
   let mut ctx = integrate::IntegrateContext::<_>::new_incremental(prov_ctx);
 
   // Base context
@@ -93,7 +93,7 @@ fn incr_edge_path_left_branching_1() {
 
 #[test]
 fn incr_fib_test_0() {
-  let prov_ctx = provenance::unit::UnitProvenance::default();
+  let prov_ctx = provenance::unit::UnitProvenance;
   let mut ctx = integrate::IntegrateContext::<_>::new_incremental(prov_ctx);
 
   ctx.add_relation("fib(i32, i32)").expect("Compile error");
@@ -116,7 +116,7 @@ fn incr_fib_test_0() {
 
 #[test]
 fn incr_fib_test_1() {
-  let prov_ctx = provenance::unit::UnitProvenance::default();
+  let prov_ctx = provenance::unit::UnitProvenance;
   let mut ctx = integrate::IntegrateContext::<_>::new_incremental(prov_ctx);
 
   ctx

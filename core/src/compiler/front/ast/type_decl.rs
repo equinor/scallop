@@ -73,12 +73,12 @@ pub struct _RelationType {
   pub arg_bindings: Vec<ArgTypeBinding>,
 }
 
-impl Into<Vec<Item>> for RelationType {
-  fn into(self) -> Vec<Item> {
+impl From<RelationType> for Vec<Item> {
+  fn from(val: RelationType) -> Self {
     vec![Item::TypeDecl(TypeDecl::Relation(RelationTypeDecl::new(
       Attributes::new(),
       None,
-      vec![self],
+      vec![val],
     )))]
   }
 }

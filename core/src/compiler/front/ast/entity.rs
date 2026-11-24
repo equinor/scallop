@@ -70,7 +70,7 @@ impl Entity {
           let args = obj.iter_args().map(|a| helper(a, facts, f)).collect::<Vec<_>>();
 
           // Create a hash value
-          let raw_id = entity::encode_entity(functor.name(), args.iter().map(|a| a));
+          let raw_id = entity::encode_entity(functor.name(), args.iter());
 
           // Create a constant ID of the hash value
           let entity = EntityLiteral::new_with_loc(raw_id, obj.location().clone());

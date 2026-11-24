@@ -93,18 +93,21 @@ impl DesugarDestruct {
   }
 }
 
+impl Default for DesugarDestruct {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<Formula> for DesugarDestruct {
   fn visit_mut(&mut self, formula: &mut Formula) {
-    match formula {
-      Formula::Atom(a) => {
-        if self.has_destruct_in_atom(a) {
-          let (atom, rest) = self.transform_atom_with_destructor_to_formula(a);
-          *formula = Formula::conjunction(Conjunction::new(
-            std::iter::once(Formula::atom(atom)).chain(rest.into_iter()).collect(),
-          ));
-        }
-      }
-      _ => {}
+    if let Formula::Atom(a) = formula
+      && self.has_destruct_in_atom(a)
+    {
+      let (atom, rest) = self.transform_atom_with_destructor_to_formula(a);
+      *formula = Formula::conjunction(Conjunction::new(
+        std::iter::once(Formula::atom(atom)).chain(rest).collect(),
+      ));
     }
   }
 }
@@ -117,7 +120,7 @@ impl NodeVisitor<Rule> for DesugarDestruct {
           let (atom, rest) = self.transform_atom_with_destructor_to_formula(a);
           *a = atom;
           *rule.body_mut() = Formula::conjunction(Conjunction::new(
-            std::iter::once(rule.body().clone()).chain(rest.into_iter()).collect(),
+            std::iter::once(rule.body().clone()).chain(rest).collect(),
           ));
         }
       }

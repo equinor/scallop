@@ -24,21 +24,21 @@ impl CSVFileOptions {
   }
 }
 
-impl Into<Attribute> for CSVFileOptions {
-  fn into(self) -> Attribute {
-    let mut args = vec![AttributeArgument::string(self.path.into())];
-    if let Some(d) = self.deliminator {
+impl From<CSVFileOptions> for Attribute {
+  fn from(val: CSVFileOptions) -> Self {
+    let mut args = vec![AttributeArgument::string(val.path)];
+    if let Some(d) = val.deliminator {
       args.push(AttributeArgument::named_string("deliminator", d));
     }
-    args.push(AttributeArgument::named_bool("has_header", self.has_header));
-    args.push(AttributeArgument::named_bool("has_probability", self.has_probability));
-    if let Some(keys) = self.keys {
+    args.push(AttributeArgument::named_bool("has_header", val.has_header));
+    args.push(AttributeArgument::named_bool("has_probability", val.has_probability));
+    if let Some(keys) = val.keys {
       args.push(AttributeArgument::named_list(
         "keys",
         keys.iter().cloned().map(AttributeValue::string).collect(),
       ));
     }
-    if let Some(fields) = self.fields {
+    if let Some(fields) = val.fields {
       args.push(AttributeArgument::named_list(
         "fields",
         fields.iter().cloned().map(AttributeValue::string).collect(),

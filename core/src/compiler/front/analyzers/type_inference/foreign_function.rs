@@ -24,10 +24,7 @@ impl From<ForeignFunctionParameterType> for FunctionArgumentType {
 
 impl FunctionArgumentType {
   pub fn is_generic(&self) -> bool {
-    match self {
-      Self::Generic(_) => false,
-      _ => true,
-    }
+    !matches!(self, Self::Generic(_))
   }
 }
 
@@ -130,10 +127,8 @@ impl FunctionType {
       let optional_argument_id = i - self.num_static_arguments();
       if optional_argument_id < self.num_optional_arguments() {
         Some(self.optional_argument_types[optional_argument_id].clone())
-      } else if let Some(var_arg_type) = &self.variable_argument_type {
-        Some(var_arg_type.clone())
       } else {
-        None
+        self.variable_argument_type.clone()
       }
     }
   }

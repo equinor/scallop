@@ -18,7 +18,7 @@ pub fn from_python_input_tag(ty: &str, tag: &Bound<'_, PyAny>) -> Result<Dynamic
       Ok(DynamicInputTag::ExclusiveFloat(prob, exc_id))
     }
     "diff-prob" => Ok(DynamicInputTag::Tensor(DynamicExternalTensor::new(
-      Tensor::from_py_value(tag.into()),
+      Tensor::from_py_value(tag),
     ))),
     _ => Err(BindingError::InvalidInputTag),
   }

@@ -267,7 +267,7 @@ impl FrontContext {
 
     // Use external annotator to annotate each item
     if let Some(annotate) = &mut maybe_annotator {
-      ast.iter_mut().for_each(|item| annotate(item));
+      ast.iter_mut().for_each(annotate);
     }
 
     // Use foreign attribute registry to annotate item
@@ -354,7 +354,7 @@ impl FrontContext {
         }
       }
     }
-    return Ok(());
+    Ok(())
   }
 
   fn add_import<S: Source>(&mut self, s: &S) {
@@ -448,5 +448,11 @@ impl FrontContext {
 
   pub fn relation_tuple_type(&self, relation: &str) -> Option<TupleType> {
     self.type_inference().relation_tuple_type(relation)
+  }
+}
+
+impl Default for FrontContext {
+  fn default() -> Self {
+    Self::new()
   }
 }

@@ -101,7 +101,7 @@ impl NodeLocation {
     let mut result = if let Some(name) = s.name() {
       format!(" {} {}:\n", arrow, name)
     } else {
-      format!("")
+      String::new()
     };
 
     // Gather the lines to print
@@ -211,11 +211,11 @@ impl<T: Clone> AstNodeWrapper<T> {
   }
 
   pub fn location_id(&self) -> Option<usize> {
-    self._loc.id.clone()
+    self._loc.id
   }
 
   pub fn location_source_id(&self) -> usize {
-    self._loc.source_id.clone()
+    self._loc.source_id
   }
 }
 
@@ -270,7 +270,7 @@ impl<T, V> NodeVisitor<V> for Box<T> {
   }
 
   fn visit_mut(&mut self, node: &mut V) {
-    (&mut **self).visit_mut(node)
+    (**self).visit_mut(node)
   }
 }
 
@@ -376,11 +376,11 @@ where
   T: AstWalker,
 {
   fn walk<V>(&self, v: &mut V) {
-    (&**self).walk(v)
+    (**self).walk(v)
   }
 
   fn walk_mut<V>(&mut self, v: &mut V) {
-    (&mut **self).walk_mut(v)
+    (**self).walk_mut(v)
   }
 }
 

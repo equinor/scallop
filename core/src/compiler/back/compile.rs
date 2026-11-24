@@ -93,12 +93,7 @@ impl Program {
     let relation_to_stratum = ram_strata
       .iter()
       .enumerate()
-      .flat_map(|(i, stratum)| {
-        stratum
-          .relations
-          .iter()
-          .map(move |(relation, _)| (relation.clone(), i.clone()))
-      })
+      .flat_map(|(i, stratum)| stratum.relations.keys().map(move |relation| (relation.clone(), i)))
       .collect::<HashMap<_, _>>();
 
     // Create

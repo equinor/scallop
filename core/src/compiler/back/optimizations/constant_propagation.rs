@@ -47,7 +47,7 @@ pub fn constant_prop(rule: &mut Rule) {
   // Collect all substitutions
   for (i, literal) in rule.body_literals().enumerate() {
     match literal {
-      Literal::Constraint(Constraint::Binary(b)) if &b.op == &BinaryConstraintOp::Eq => {
+      Literal::Constraint(Constraint::Binary(b)) if b.op == BinaryConstraintOp::Eq => {
         match (&b.op1, &b.op2) {
           (Term::Variable(v), Term::Constant(c)) | (Term::Constant(c), Term::Variable(v)) => {
             // Make sure v is not among the `cannot_substitute`

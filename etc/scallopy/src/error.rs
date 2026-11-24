@@ -64,7 +64,7 @@ impl std::convert::From<BindingError> for PyErr {
     match err {
       BindingError::PyErr(e) => e,
       err => {
-        let err_str = format!("{}", err.to_string());
+        let err_str = format!("{}", err);
         let py_err_str: Py<PyAny> = Python::attach(|py| err_str.into_py_any(py).unwrap());
         PyException::new_err(py_err_str)
       }

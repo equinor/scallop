@@ -34,7 +34,7 @@ impl BoundnessAnalysis {
     let demand_attrs = &demand_attr_analysis.demand_attrs;
 
     // For each rule context, do boundness check
-    for (_, (rule, ctx, inferred)) in &mut self.rule_contexts {
+    for (rule, ctx, inferred) in self.rule_contexts.values_mut() {
       if !*inferred {
         // Make sure the demand attribute is affecting boundness analysis,
         // through some of the head expressions being bounded

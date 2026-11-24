@@ -115,6 +115,12 @@ impl DemandAttributeAnalysis {
   }
 }
 
+impl Default for DemandAttributeAnalysis {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<RelationTypeDecl> for DemandAttributeAnalysis {
   fn visit(&mut self, rela_type_decl: &RelationTypeDecl) {
     for rela_type in rela_type_decl.rel_types() {
@@ -128,8 +134,8 @@ impl NodeVisitor<RuleDecl> for DemandAttributeAnalysis {
     if rule_decl.rule().head().is_disjunction() {
       for predicate in rule_decl.rule().head().iter_predicates() {
         self.set_disjunctive(&predicate, rule_decl.rule().head().location());
-        return; // early stopping because this is an error
       }
+      return;
     }
 
     // Otherwise, we add the demand attribute
@@ -139,8 +145,8 @@ impl NodeVisitor<RuleDecl> for DemandAttributeAnalysis {
   }
 }
 
-fn is_valid_demand_pattern(pattern: &String) -> bool {
-  pattern.chars().all(|c| c == 'b' || c == 'f')
+fn is_valid_demand_pattern(pattern: &str) -> bool {
+  pattern.chars().all(|c| matches!(c, 'b' | 'f'))
 }
 
 #[derive(Clone, Debug)]

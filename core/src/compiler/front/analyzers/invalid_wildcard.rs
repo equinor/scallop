@@ -20,6 +20,12 @@ impl InvalidWildcardAnalyzer {
   }
 }
 
+impl Default for InvalidWildcardAnalyzer {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<Rule> for InvalidWildcardAnalyzer {
   fn visit(&mut self, rule: &Rule) {
     for arg in rule.head().iter_args() {

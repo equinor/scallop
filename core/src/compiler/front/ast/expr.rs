@@ -17,10 +17,7 @@ pub enum Expr {
 
 impl Expr {
   pub fn is_complex_expr(&self) -> bool {
-    match self {
-      Self::Binary(_) | Self::Unary(_) => true,
-      _ => false,
-    }
+    matches!(self, Self::Binary(_) | Self::Unary(_))
   }
 
   /// Checks if the expression has variables (or wildcards) inside of it

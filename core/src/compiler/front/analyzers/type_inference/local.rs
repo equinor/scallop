@@ -118,26 +118,12 @@ impl LocalTypeInferenceContext {
 
   pub fn unify_expr_types(
     &self,
-    custom_types: &HashMap<String, (ValueType, Loc)>,
-    constant_types: &HashMap<Loc, Type>,
-    inferred_relation_types: &HashMap<String, (Vec<TypeSet>, Loc)>,
-    function_type_registry: &FunctionTypeRegistry,
-    predicate_type_registry: &PredicateTypeRegistry,
-    aggregate_type_registry: &AggregateTypeRegistry,
+    inference: &TypeInference,
     inferred_expr_types: &mut HashMap<Loc, TypeSet>,
     strict: bool,
   ) -> Result<(), Error> {
     for unif in &self.unifications {
-      unif.unify(
-        custom_types,
-        constant_types,
-        inferred_relation_types,
-        function_type_registry,
-        predicate_type_registry,
-        aggregate_type_registry,
-        inferred_expr_types,
-        strict,
-      )?;
+      unif.unify(inference, inferred_expr_types, strict)?;
     }
     Ok(())
   }
@@ -191,7 +177,7 @@ impl LocalTypeInferenceContext {
     // Check variable type constraints
     for (var, (ty, _)) in &self.var_types {
       let curr_ty = &var_tys[var];
-      let new_ty = ty.unify(curr_ty).map_err(|e| e.into())?;
+      let new_ty = ty.unify(curr_ty)?;
       var_tys.insert(var.clone(), new_ty);
     }
 
@@ -219,7 +205,7 @@ impl LocalTypeInferenceContext {
         .filter_map(|e| inferred_expr_types.get(e))
         .collect::<Vec<_>>();
       if !tys.is_empty() {
-        let ty = TypeSet::unify_type_sets(tys).map_err(|e| e.into())?;
+        let ty = TypeSet::unify_type_sets(tys)?;
         if let Some((arg_types, _)) = inferred_relation_types.get_mut(predicate) {
           arg_types[*i] = ty;
         }
@@ -236,15 +222,12 @@ impl LocalTypeInferenceContext {
   ) -> Result<(), Error> {
     // Check if type cast can happen
     for unif in &self.unifications {
-      match unif {
-        Unification::TypeCast(op1, e, ty) => {
-          let target_base_ty = find_value_type(custom_types, ty).unwrap();
-          let op1_ty = &inferred_expr_types[op1];
-          if !op1_ty.can_type_cast(&target_base_ty) {
-            return Err(Error::cannot_type_cast(op1_ty.clone(), target_base_ty, e.clone()));
-          }
+      if let Unification::TypeCast(op1, e, ty) = unif {
+        let target_base_ty = find_value_type(custom_types, ty).unwrap();
+        let op1_ty = &inferred_expr_types[op1];
+        if !op1_ty.can_type_cast(&target_base_ty) {
+          return Err(Error::cannot_type_cast(op1_ty.clone(), target_base_ty, e.clone()));
         }
-        _ => {}
       }
     }
     Ok(())
@@ -300,7 +283,7 @@ impl NodeVisitor<Reduce> for LocalTypeInferenceContext {
     // First get the aggregate type
     let agg_op = r.operator();
     let agg_name = agg_op.name().name();
-    let has_exclamation_mark = agg_op.has_exclaimation_mark().clone();
+    let has_exclamation_mark = *agg_op.has_exclaimation_mark();
 
     // Add the aggregation unification
     self.unifications.push(Unification::Aggregate {

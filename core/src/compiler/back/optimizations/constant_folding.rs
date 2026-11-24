@@ -13,10 +13,10 @@ pub fn constant_fold(rule: &mut Rule, function_registry: &ForeignFunctionRegistr
   for lit in rule.body_literals_mut() {
     match lit {
       Literal::Assign(a) => match &a.right {
-        AssignExpr::Binary(b) => match (&b.op1, &b.op2) {
-          (Term::Constant(c1), Term::Constant(c2)) => {
+        AssignExpr::Binary(b) => {
+          if let (Term::Constant(c1), Term::Constant(c2)) = (&b.op1, &b.op2) {
             let expr = BinaryExpr {
-              op: b.op.clone().into(),
+              op: b.op.clone(),
               op1: Box::new(Expr::Constant(c1.clone())),
               op2: Box::new(Expr::Constant(c2.clone())),
             };
@@ -31,12 +31,11 @@ pub fn constant_fold(rule: &mut Rule, function_registry: &ForeignFunctionRegistr
               *lit = Literal::False
             }
           }
-          _ => {}
-        },
-        AssignExpr::Unary(u) => match &u.op1 {
-          Term::Constant(c1) => {
+        }
+        AssignExpr::Unary(u) => {
+          if let Term::Constant(c1) = &u.op1 {
             let expr = UnaryExpr {
-              op: u.op.clone().into(),
+              op: u.op.clone(),
               op1: Box::new(Expr::Constant(c1.clone())),
             };
             let maybe_result = runtime.eval_unary(&expr, &().into());
@@ -50,8 +49,7 @@ pub fn constant_fold(rule: &mut Rule, function_registry: &ForeignFunctionRegistr
               *lit = Literal::False
             }
           }
-          _ => {}
-        },
+        }
         AssignExpr::IfThenElse(i) => match &i.cond {
           Term::Constant(Value::Bool(true)) => {
             *lit = Literal::Constraint(Constraint::Binary(BinaryConstraint {
@@ -128,8 +126,8 @@ pub fn constant_fold(rule: &mut Rule, function_registry: &ForeignFunctionRegistr
           }
           _ => {}
         },
-        Constraint::Unary(u) => match &u.op1 {
-          Term::Constant(c1) => {
+        Constraint::Unary(u) => {
+          if let Term::Constant(c1) = &u.op1 {
             let expr = UnaryExpr {
               op: UnaryOp::from(&u.op),
               op1: Box::new(Expr::Constant(c1.clone())),
@@ -145,8 +143,7 @@ pub fn constant_fold(rule: &mut Rule, function_registry: &ForeignFunctionRegistr
               *lit = Literal::False;
             }
           }
-          _ => {}
-        },
+        }
       },
       _ => {}
     }

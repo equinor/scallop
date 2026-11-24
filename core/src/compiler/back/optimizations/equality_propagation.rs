@@ -11,11 +11,8 @@ pub fn propagate_equality(rule: &mut Rule, foreign_predicate_registry: &ForeignP
 
   // Collect cannot substitute variables
   for literal in rule.body_literals() {
-    match literal {
-      Literal::Reduce(r) => {
-        cannot_substitute.extend(r.variable_args().cloned());
-      }
-      _ => {}
+    if let Literal::Reduce(r) = literal {
+      cannot_substitute.extend(r.variable_args().cloned());
     }
   }
 
@@ -25,30 +22,27 @@ pub fn propagate_equality(rule: &mut Rule, foreign_predicate_registry: &ForeignP
   // Collect all substitutions
   for (i, literal) in rule.body_literals().enumerate() {
     match literal {
-      Literal::Constraint(Constraint::Binary(b)) if &b.op == &BinaryConstraintOp::Eq => {
-        match (&b.op1, &b.op2) {
-          (Term::Variable(v1), Term::Variable(v2)) => {
-            // Make sure non of these are among the "cannot substitute" variables
-            if cannot_substitute.contains(v1) || cannot_substitute.contains(v2) {
-              continue;
-            } else if bounded.contains(v1) && bounded.contains(v2) {
-              // If both sides are derivable from atom/assign
-              continue;
-            }
-
-            // Add this literal into the ignore literals
-            ignore_literals.insert(i);
-
-            // Get a substitution
-            if substitutions.contains_key(v1) {
-              substitutions.insert(v2.clone(), substitutions[v1].clone());
-            } else if substitutions.contains_key(v2) {
-              substitutions.insert(v1.clone(), substitutions[v2].clone());
-            } else {
-              substitutions.insert(v1.clone(), v2.clone());
-            }
+      Literal::Constraint(Constraint::Binary(b)) if b.op == BinaryConstraintOp::Eq => {
+        if let (Term::Variable(v1), Term::Variable(v2)) = (&b.op1, &b.op2) {
+          // Make sure non of these are among the "cannot substitute" variables
+          if cannot_substitute.contains(v1) || cannot_substitute.contains(v2) {
+            continue;
+          } else if bounded.contains(v1) && bounded.contains(v2) {
+            // If both sides are derivable from atom/assign
+            continue;
           }
-          _ => {}
+
+          // Add this literal into the ignore literals
+          ignore_literals.insert(i);
+
+          // Get a substitution
+          if substitutions.contains_key(v1) {
+            substitutions.insert(v2.clone(), substitutions[v1].clone());
+          } else if substitutions.contains_key(v2) {
+            substitutions.insert(v1.clone(), substitutions[v2].clone());
+          } else {
+            substitutions.insert(v1.clone(), v2.clone());
+          }
         }
       }
       _ => {}
@@ -164,15 +158,11 @@ fn bounded_by_atom_and_assign(rule: &Rule, foreign_predicate_registry: &ForeignP
   loop {
     let old_bounded = bounded.clone();
     for lit in rule.body_literals() {
-      match lit {
-        Literal::Assign(a) => {
-          if !bounded.contains(&a.left) {
-            if a.variable_args().iter().all(|arg| bounded.contains(arg)) {
-              bounded.insert(a.left.clone());
-            }
-          }
-        }
-        _ => {}
+      if let Literal::Assign(a) = lit
+        && !bounded.contains(&a.left)
+        && a.variable_args().iter().all(|arg| bounded.contains(arg))
+      {
+        bounded.insert(a.left.clone());
       }
     }
     if old_bounded == bounded {

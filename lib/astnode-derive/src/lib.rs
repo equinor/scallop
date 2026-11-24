@@ -28,6 +28,8 @@
 //! ```
 //!
 //! Please notice that for `field2` you don't need to wrap the type inside of `Box`.
+//! Use `#[ast_node_no_span_constructor]` to omit `new_with_span` on a struct. The
+//! inner node's `with_span` and the wrapper's `with_node_and_span` remain available.
 //!
 //! You can access each field using functions like `field1() -> &T1` or `field1_mut() -> &mut T1`.
 //! For `Box` fields, the accessors will skip the `Box`: `field2() -> &T2`, `field2_mut() -> &mut T2`.
@@ -89,56 +91,55 @@ use proc_macro::*;
 /// An AstNode can be one of two things: a struct or an enum
 ///
 /// A struct AST node must have a name started with underscore (`_`).
-#[proc_macro_derive(AstNode)]
+#[proc_macro_derive(AstNode, attributes(ast_node_no_span_constructor))]
 pub fn derive_ast_node(tokens: TokenStream) -> TokenStream {
   let token_list: Vec<_> = tokens.into_iter().collect();
-  let token_list = skip_decorators(token_list);
+  let (token_list, omit_span_constructor) = split_decorators(&token_list);
 
   // Get pub and check if the decorated item is a struct
-  let has_pub = get_has_pub(&token_list);
-  let is_struct = get_is_struct(has_pub, &token_list);
+  let has_pub = get_has_pub(token_list);
+  let is_struct = get_is_struct(has_pub, token_list);
 
   // Get information
   let pub_kw = if has_pub { "pub" } else { "" };
-  let name = get_type_name(has_pub, is_struct, &token_list);
+  let name = get_type_name(has_pub, is_struct, token_list);
 
   // Derive!
   let derive = if is_struct {
-    derive_struct(pub_kw, name.clone(), has_pub, &token_list)
+    derive_struct(pub_kw, name, has_pub, token_list, omit_span_constructor)
   } else {
-    derive_enum(pub_kw, name.clone(), has_pub, &token_list)
+    assert!(
+      !omit_span_constructor,
+      "ast_node_no_span_constructor is only valid on structs"
+    );
+    derive_enum(pub_kw, name, has_pub, token_list)
   };
 
   // Parse
   derive.parse().expect("Failed to parse derived AstNode")
 }
 
-fn skip_decorators(token_list: Vec<TokenTree>) -> Vec<TokenTree> {
+fn split_decorators(token_list: &[TokenTree]) -> (&[TokenTree], bool) {
   let mut i = 0;
-  loop {
-    match &token_list[i] {
-      TokenTree::Punct(p) if p.as_char() == '#' => {
-        i += 2;
-      }
-      _ => break token_list[i..].to_vec(),
+  let mut omit_span_constructor = false;
+  while let [TokenTree::Punct(p), TokenTree::Group(g), ..] = &token_list[i..] {
+    if p.as_char() != '#' || g.delimiter() != Delimiter::Bracket {
+      break;
     }
+    omit_span_constructor |= g.stream().to_string() == "ast_node_no_span_constructor";
+    i += 2;
   }
+  (&token_list[i..], omit_span_constructor)
 }
 
-fn get_has_pub(token_list: &Vec<TokenTree>) -> bool {
+fn get_has_pub(token_list: &[TokenTree]) -> bool {
   match &token_list[0] {
-    TokenTree::Ident(i) => {
-      if i.to_string() == "pub" {
-        true
-      } else {
-        false
-      }
-    }
+    TokenTree::Ident(i) => i.to_string() == "pub",
     _ => false,
   }
 }
 
-fn get_is_struct(has_pub: bool, token_list: &Vec<TokenTree>) -> bool {
+fn get_is_struct(has_pub: bool, token_list: &[TokenTree]) -> bool {
   let offset = if has_pub { 1 } else { 0 };
   match &token_list[offset] {
     TokenTree::Ident(i) => {
@@ -161,17 +162,16 @@ fn get_is_struct(has_pub: bool, token_list: &Vec<TokenTree>) -> bool {
   }
 }
 
-fn get_type_name(has_pub: bool, is_struct: bool, token_list: &Vec<TokenTree>) -> String {
+fn get_type_name(has_pub: bool, is_struct: bool, token_list: &[TokenTree]) -> String {
   let offset = if has_pub { 1 } else { 0 };
   match &token_list[offset + 1] {
     TokenTree::Ident(i) => {
       let full_name = i.to_string();
       if is_struct {
-        if full_name.chars().nth(0) == Some('_') {
-          full_name[1..].to_string()
-        } else {
-          panic!("Expected struct name to begin with underscore")
-        }
+        full_name
+          .strip_prefix('_')
+          .expect("Expected struct name to begin with underscore")
+          .to_owned()
       } else {
         full_name
       }
@@ -180,7 +180,7 @@ fn get_type_name(has_pub: bool, is_struct: bool, token_list: &Vec<TokenTree>) ->
   }
 }
 
-fn get_struct_fields(has_pub: bool, token_list: &Vec<TokenTree>) -> Vec<(bool, String, String)> {
+fn get_struct_fields(has_pub: bool, token_list: &[TokenTree]) -> Vec<(bool, String, String)> {
   let offset = if has_pub { 1 } else { 0 };
   match &token_list[offset + 2] {
     TokenTree::Group(g) => {
@@ -256,11 +256,8 @@ fn get_struct_fields(has_pub: bool, token_list: &Vec<TokenTree>) -> Vec<(bool, S
         }
       }
 
-      match (curr_is_pub, curr_field_name, curr_field_type) {
-        (Some(is_pub), Some(field_name), Some(field_type)) => {
-          fields.push((is_pub, field_name, field_type));
-        }
-        _ => {}
+      if let (Some(is_pub), Some(field_name), Some(field_type)) = (curr_is_pub, curr_field_name, curr_field_type) {
+        fields.push((is_pub, field_name, field_type));
       };
 
       fields
@@ -270,7 +267,7 @@ fn get_struct_fields(has_pub: bool, token_list: &Vec<TokenTree>) -> Vec<(bool, S
   }
 }
 
-fn get_enum_variants(has_pub: bool, token_list: &Vec<TokenTree>) -> Vec<(String, Option<String>)> {
+fn get_enum_variants(has_pub: bool, token_list: &[TokenTree]) -> Vec<(String, Option<String>)> {
   let offset = if has_pub { 1 } else { 0 };
   match &token_list[offset + 2] {
     TokenTree::Group(g) => {
@@ -324,11 +321,8 @@ fn get_enum_variants(has_pub: bool, token_list: &Vec<TokenTree>) -> Vec<(String,
           }
         }
 
-        match (curr_variant_name, curr_variant_type) {
-          (Some(name), Some(ty)) => {
-            variants.push((name, ty));
-          }
-          _ => {}
+        if let (Some(name), Some(ty)) = (curr_variant_name, curr_variant_type) {
+          variants.push((name, ty));
         };
 
         variants
@@ -340,10 +334,16 @@ fn get_enum_variants(has_pub: bool, token_list: &Vec<TokenTree>) -> Vec<(String,
   }
 }
 
-fn derive_struct(pub_kw: &str, name: String, has_pub: bool, token_list: &Vec<TokenTree>) -> String {
+fn derive_struct(
+  pub_kw: &str,
+  name: String,
+  has_pub: bool,
+  token_list: &[TokenTree],
+  omit_span_constructor: bool,
+) -> String {
   let struct_def = format!(r#"{pub_kw} type {name} = AstNodeWrapper<_{name}>;"#);
 
-  let fields = get_struct_fields(has_pub, &token_list);
+  let fields = get_struct_fields(has_pub, token_list);
 
   // New and default functions
   let fn_args = fields
@@ -368,7 +368,13 @@ fn derive_struct(pub_kw: &str, name: String, has_pub: bool, token_list: &Vec<Tok
     })
     .collect::<String>();
 
-  // Constructor
+  let span_constructor = if omit_span_constructor {
+    String::new()
+  } else {
+    format!(
+      "pub fn new_with_span({fn_args} start: usize, end: usize) -> Self {{ Self {{ _loc: NodeLocation::from_span(start, end), _node: _{name} {{ {constructor_args} }} }} }}"
+    )
+  };
   let new_impl = format!(
     r#"
     impl _{name} {{
@@ -379,7 +385,7 @@ fn derive_struct(pub_kw: &str, name: String, has_pub: bool, token_list: &Vec<Tok
     impl {name} {{
       pub fn new({fn_args}) -> Self {{ Self {{ _loc: NodeLocation::default(), _node: _{name} {{ {constructor_args} }} }} }}
       pub fn new_with_loc({fn_args} _loc: NodeLocation) -> Self {{ Self {{ _loc: _loc, _node: _{name} {{ {constructor_args} }} }} }}
-      pub fn new_with_span({fn_args} start: usize, end: usize) -> Self {{ Self {{ _loc: NodeLocation::from_span(start, end), _node: _{name} {{ {constructor_args} }} }} }}
+      {span_constructor}
       pub fn new_with_node_and_loc(node: _{name}, loc: NodeLocation) -> Self {{ Self {{ _loc: loc, _node: node }} }}
       pub fn with_node_and_span(node: _{name}, start: usize, end: usize) -> Self {{ Self {{ _loc: NodeLocation::from_span(start, end), _node: node }} }}
       pub fn internal(&self) -> &_{name} {{ &self._node }}
@@ -445,11 +451,11 @@ fn derive_struct(pub_kw: &str, name: String, has_pub: bool, token_list: &Vec<Tok
     .join("\n");
   let fields_impl = format!(r#"impl {name} {{ {fields_accessor} }}"#);
 
-  vec![struct_def, new_impl, impl_walker, fields_impl].join("\n")
+  [struct_def, new_impl, impl_walker, fields_impl].join("\n")
 }
 
-fn derive_enum(pub_kw: &str, name: String, has_pub: bool, token_list: &Vec<TokenTree>) -> String {
-  let variants = get_enum_variants(has_pub, &token_list);
+fn derive_enum(pub_kw: &str, name: String, has_pub: bool, token_list: &[TokenTree]) -> String {
+  let variants = get_enum_variants(has_pub, token_list);
   if variants.iter().any(|(_, ty)| ty.is_none()) {
     derive_const_enum(pub_kw, name, variants)
   } else {
@@ -520,12 +526,12 @@ fn derive_variant_enum(name: String, variants: Vec<(String, Option<String>)>) ->
   "#
   );
 
-  vec![ast_node_impl, match_helper_impl, impl_walker].join("\n")
+  [ast_node_impl, match_helper_impl, impl_walker].join("\n")
 }
 
 fn derive_const_enum(pub_kw: &str, name: String, variants: Vec<(String, Option<String>)>) -> String {
   assert!(
-    name.chars().nth(0) == Some('_'),
+    name.starts_with('_'),
     "The first character of the name needs to be an underscore `_`"
   );
   let name = name[1..].to_string();
@@ -578,5 +584,5 @@ fn derive_const_enum(pub_kw: &str, name: String, variants: Vec<(String, Option<S
   "#
   );
 
-  vec![type_def, universal_helper, match_helper_impl, impl_walker].join("\n")
+  [type_def, universal_helper, match_helper_impl, impl_walker].join("\n")
 }

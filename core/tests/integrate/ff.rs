@@ -1,8 +1,7 @@
-use std::convert::*;
-
 use scallop_core::common::foreign_function::*;
 use scallop_core::common::type_family::*;
 use scallop_core::common::value::*;
+use scallop_core::common::value_type::ValueType;
 use scallop_core::integrate;
 use scallop_core::runtime::provenance;
 use scallop_core::testing::*;
@@ -58,17 +57,16 @@ impl ForeignFunction for Fib {
 }
 
 fn fib<T: Integer>(t: T) -> Option<T> {
-  if t == T::zero() {
-    Some(T::one())
-  } else if t == T::one() {
+  if t == T::zero() || t == T::one() {
     Some(T::one())
   } else {
     if t > T::one() {
-      let length: usize = TryInto::try_into(t).ok()?;
+      let length: usize = t.try_into().ok()?;
       let mut storage = vec![T::one(); length];
       for i in 2..length {
         storage[i] = storage[i - 2] + storage[i - 1];
       }
+
       Some(storage[storage.len() - 1])
     } else {
       None
@@ -77,8 +75,13 @@ fn fib<T: Integer>(t: T) -> Option<T> {
 }
 
 #[test]
+fn foreign_function_infers_return_type_from_a_slice() {
+  assert_eq!(Fib.infer_return_type(&[Value::U16(3)]), ValueType::U16);
+}
+
+#[test]
 fn test_fib_ff() {
-  let prov_ctx = provenance::unit::UnitProvenance::default();
+  let prov_ctx = provenance::unit::UnitProvenance;
   let mut ctx = integrate::IntegrateContext::<_, RcFamily>::new(prov_ctx);
 
   // Source

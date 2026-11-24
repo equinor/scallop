@@ -13,13 +13,36 @@ pub struct State {
 
 impl std::cmp::PartialOrd for State {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    self.aggregated_weight().partial_cmp(&other.aggregated_weight())
+    Some(self.cmp(other))
   }
 }
 
 impl std::cmp::Ord for State {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    self.aggregated_weight().cmp(&other.aggregated_weight())
+    self
+      .aggregated_weight()
+      .cmp(&other.aggregated_weight())
+      .then_with(|| self.visited_atoms.cmp(&other.visited_atoms))
+      .then_with(|| {
+        self
+          .arcs
+          .iter()
+          .zip(&other.arcs)
+          .map(|(a, b)| {
+            (&a.left, a.right, &a.left_relations, a.is_edb)
+              .cmp(&(&b.left, b.right, &b.left_relations, b.is_edb))
+              .then_with(|| a.bounded_vars.iter().sorted().cmp(b.bounded_vars.iter().sorted()))
+          })
+          .find(|ordering| ordering.is_ne())
+          .unwrap_or_else(|| self.arcs.len().cmp(&other.arcs.len()))
+      })
+      .then_with(|| {
+        self
+          .atom_relations
+          .iter()
+          .sorted()
+          .cmp(other.atom_relations.iter().sorted())
+      })
   }
 }
 
@@ -64,8 +87,8 @@ impl State {
           };
           next_states.push(State {
             atom_relations: self.atom_relations.clone(),
-            visited_atoms: vec![self.visited_atoms.clone(), vec![id]].concat(),
-            arcs: vec![self.arcs.clone(), vec![arc]].concat(),
+            visited_atoms: [self.visited_atoms.clone(), vec![id]].concat(),
+            arcs: [self.arcs.clone(), vec![arc]].concat(),
           });
         }
       }
@@ -76,5 +99,31 @@ impl State {
 
   pub fn bounded_all(&self, ctx: &QueryPlanContext) -> bool {
     self.visited_atoms.len() == ctx.pos_atoms.len()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn equal_weight_states_with_different_arcs_remain_distinct() {
+    let arc = |right| Arc {
+      left: vec![],
+      right,
+      left_relations: vec![],
+      bounded_vars: HashSet::new(),
+      is_edb: true,
+    };
+    let a = State {
+      arcs: vec![arc(0)],
+      ..State::default()
+    };
+    let b = State {
+      arcs: vec![arc(1)],
+      ..State::default()
+    };
+    assert_eq!(a.aggregated_weight(), b.aggregated_weight());
+    assert_eq!(BTreeSet::from([a, b]).len(), 2);
   }
 }

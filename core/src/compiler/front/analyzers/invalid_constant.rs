@@ -11,6 +11,12 @@ impl InvalidConstantAnalyzer {
   }
 }
 
+impl Default for InvalidConstantAnalyzer {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl NodeVisitor<DateTimeLiteral> for InvalidConstantAnalyzer {
   fn visit(&mut self, datetime: &DateTimeLiteral) {
     match crate::utils::parse_date_time_string(datetime.datetime()) {

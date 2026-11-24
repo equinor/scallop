@@ -20,17 +20,11 @@ impl FrontCompileErrorType {
   }
 
   pub fn is_warning(&self) -> bool {
-    match self {
-      Self::Warning => true,
-      _ => false,
-    }
+    matches!(self, Self::Warning)
   }
 
   pub fn is_error(&self) -> bool {
-    match self {
-      Self::Error => true,
-      _ => false,
-    }
+    matches!(self, Self::Error)
   }
 }
 
@@ -124,6 +118,12 @@ impl FrontCompileError {
 
   pub fn clear_errors(&mut self) {
     self.errors.clear();
+  }
+}
+
+impl Default for FrontCompileError {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

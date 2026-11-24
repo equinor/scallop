@@ -21,7 +21,7 @@ impl Permutation {
   pub fn permute(&self, types: &TupleType) -> TupleType {
     if let TupleType::Tuple(ts) = types {
       match self {
-        Self::Value(i) => ts[i.clone()].clone(),
+        Self::Value(i) => ts[*i].clone(),
         Self::Tuple(t) => TupleType::Tuple(t.iter().map(|e| e.permute(types)).collect()),
       }
     } else {
@@ -36,13 +36,13 @@ impl Permutation {
           .filter_map(|t| if t.is_empty() { None } else { Some(t.normalize()) })
           .collect(),
       ),
-      Self::Value(v) => Self::Value(v.clone()),
+      Self::Value(v) => Self::Value(*v),
     }
   }
 
   pub fn expr(&self) -> Expr {
     match self {
-      Self::Value(i) => Expr::Access(TupleAccessor::from(i.clone())),
+      Self::Value(i) => Expr::Access(TupleAccessor::from(*i)),
       Self::Tuple(t) => Expr::Tuple(t.iter().map(|e| e.expr()).collect()),
     }
   }

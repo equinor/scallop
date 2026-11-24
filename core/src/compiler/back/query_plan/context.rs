@@ -255,8 +255,8 @@ impl<'a> QueryPlanContext<'a> {
     atom: &'c Atom,
   ) -> (
     &'b DynamicForeignPredicate,
-    Vec<(usize, &'c Term)>,
-    Vec<(usize, &'c Term)>,
+    IndexedArguments<'c, Term>,
+    IndexedArguments<'c, Term>,
   ) {
     let pred = self.foreign_predicate_registry.get(&atom.predicate).unwrap();
     let (to_bound_arguments, free_arguments): (Vec<_>, Vec<_>) =
@@ -264,12 +264,12 @@ impl<'a> QueryPlanContext<'a> {
     (pred, to_bound_arguments, free_arguments)
   }
 
-  fn foreign_predicate_constant_constraints(&self, atom: &Atom, arguments: &Vec<(usize, &Term)>) -> Vec<Constraint> {
+  fn foreign_predicate_constant_constraints(&self, atom: &Atom, arguments: &[(usize, &Term)]) -> Vec<Constraint> {
     arguments
       .iter()
       .filter_map(|(i, a)| match a {
         Term::Constant(c) => {
-          let op1 = Term::variable(format!("c#{}#{}", &atom.predicate, i), ValueType::type_of(c));
+          let op1 = Term::variable(format!("c#{}#{}", atom.predicate, i), ValueType::type_of(c));
           let op2 = Term::Constant(c.clone());
           Some(Constraint::eq(op1, op2))
         }
@@ -278,7 +278,7 @@ impl<'a> QueryPlanContext<'a> {
       .collect()
   }
 
-  fn foreign_predicate_equality_constraints(&self, var_eq: &Vec<(Variable, Variable)>) -> Vec<Constraint> {
+  fn foreign_predicate_equality_constraints(&self, var_eq: &[(Variable, Variable)]) -> Vec<Constraint> {
     var_eq
       .iter()
       .map(|(v1, v2)| Constraint::eq(Term::Variable(v1.clone()), Term::Variable(v2.clone())))
@@ -336,7 +336,6 @@ impl<'a> QueryPlanContext<'a> {
     (vars, var_equivalences)
   }
 
-  ///
   fn compute_foreign_predicate_ground_atom(
     &self,
     atom: &Atom,
@@ -361,9 +360,9 @@ impl<'a> QueryPlanContext<'a> {
     };
 
     // Get all the constraints
-    let const_constraints = self.foreign_predicate_constant_constraints(atom, &free_arguments);
+    let const_constraints = self.foreign_predicate_constant_constraints(atom, free_arguments);
     let eq_constraints = self.foreign_predicate_equality_constraints(&var_eq);
-    let constraints = vec![const_constraints, eq_constraints].concat();
+    let constraints = [const_constraints, eq_constraints].concat();
 
     // Create a plan;
     // if there are constraints, we need to create a filter plan on top of the ground plan
@@ -380,12 +379,11 @@ impl<'a> QueryPlanContext<'a> {
         .collect();
 
       // Create a plan with filters on the constants
-      let filter_plan = Plan {
+
+      Plan {
         bounded_vars: new_bounded_vars,
         ram_node: HighRamNode::filter(ground_plan, constraints),
-      };
-
-      filter_plan
+      }
     } else {
       ground_plan
     }
@@ -424,9 +422,9 @@ impl<'a> QueryPlanContext<'a> {
     };
 
     // Get all the constraints
-    let const_constraints = self.foreign_predicate_constant_constraints(atom, &free_arguments);
+    let const_constraints = self.foreign_predicate_constant_constraints(atom, free_arguments);
     let eq_constraints = self.foreign_predicate_equality_constraints(&var_eq);
-    let constraints = vec![const_constraints, eq_constraints].concat();
+    let constraints = [const_constraints, eq_constraints].concat();
 
     // Create a plan;
     // if there are constraints, we need to create a filter plan on top of the ground plan
@@ -443,7 +441,8 @@ impl<'a> QueryPlanContext<'a> {
         .collect();
 
       // Create a plan with filters on the constants
-      let filter_plan = Plan {
+
+      Plan {
         bounded_vars: left
           .bounded_vars
           .iter()
@@ -451,9 +450,7 @@ impl<'a> QueryPlanContext<'a> {
           .cloned()
           .collect(),
         ram_node: HighRamNode::filter(join_plan, constraints),
-      };
-
-      filter_plan
+      }
     } else {
       join_plan
     }
@@ -563,7 +560,7 @@ impl<'a> QueryPlanContext<'a> {
   }
 
   /// The main entry function that computes a query plan from a sequence of arcs
-  fn get_query_plan(&self, arcs: &Vec<Arc>) -> Plan {
+  fn get_query_plan(&self, arcs: &[Arc]) -> Plan {
     // ==== Stage 1: Helper Functions (Closures) ====
 
     // Store the applied constraints
@@ -632,7 +629,7 @@ impl<'a> QueryPlanContext<'a> {
       let first_reduce = &self.reduces[0];
       let mut node = Plan {
         bounded_vars: first_reduce.variable_args().cloned().collect(),
-        ram_node: HighRamNode::Reduce(first_reduce.clone()),
+        ram_node: HighRamNode::reduce(first_reduce.clone()),
       };
 
       // Get more reduces
@@ -641,7 +638,7 @@ impl<'a> QueryPlanContext<'a> {
         let right_bounded_vars = reduce.variable_args().cloned().collect::<HashSet<_>>();
         let right = Plan {
           bounded_vars: right_bounded_vars.clone(),
-          ram_node: HighRamNode::Reduce(reduce.clone()),
+          ram_node: HighRamNode::reduce(reduce.clone()),
         };
         node = Plan {
           bounded_vars: left.bounded_vars.union(&right_bounded_vars).cloned().collect(),
@@ -723,7 +720,7 @@ impl<'a> QueryPlanContext<'a> {
       .filter(|a| a.right.is_new_expr())
       .cloned()
       .collect::<Vec<_>>();
-    if new_entity_assigns.len() > 0 {
+    if !new_entity_assigns.is_empty() {
       let all_bounded_variables = new_entity_assigns
         .iter()
         .map(|a| &a.left)

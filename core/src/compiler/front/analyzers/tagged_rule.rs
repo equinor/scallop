@@ -48,24 +48,30 @@ impl TaggedRuleAnalysis {
     foreign_predicate_registry: &mut ForeignPredicateRegistry,
   ) {
     for (rule_id, tag_predicate) in self.to_add_tag_predicates.drain() {
-      if let Some(rule_variable_type) = type_inference.rule_variable_type.get(&rule_id) {
-        if let Some(var_ty) = rule_variable_type.get(&tag_predicate.arg_name) {
-          match get_target_tag_type(var_ty, &tag_predicate.tag_loc) {
-            Ok(target_tag_ty) => {
-              // This means that we have an okay tag that is type checked
-              // Create a foreign predicate and register it
-              let fp = TagPredicate::new(tag_predicate.name.clone(), target_tag_ty);
-              if let Err(err) = foreign_predicate_registry.register(fp) {
-                self.errors.push(FrontCompileErrorMessage::error().msg(err.to_string()));
-              }
+      if let Some(rule_variable_type) = type_inference.rule_variable_type.get(&rule_id)
+        && let Some(var_ty) = rule_variable_type.get(&tag_predicate.arg_name)
+      {
+        match get_target_tag_type(var_ty, &tag_predicate.tag_loc) {
+          Ok(target_tag_ty) => {
+            // This means that we have an okay tag that is type checked
+            // Create a foreign predicate and register it
+            let fp = TagPredicate::new(tag_predicate.name.clone(), target_tag_ty);
+            if let Err(err) = foreign_predicate_registry.register(fp) {
+              self.errors.push(FrontCompileErrorMessage::error().msg(err.to_string()));
             }
-            Err(err) => {
-              self.errors.push(err);
-            }
+          }
+          Err(err) => {
+            self.errors.push(err);
           }
         }
       }
     }
+  }
+}
+
+impl Default for TaggedRuleAnalysis {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
@@ -74,10 +80,10 @@ fn get_target_tag_type(
   loc: &ast::NodeLocation,
 ) -> Result<ValueType, FrontCompileErrorMessage> {
   // Top priority: if var_ty is a base type, directly check if it is among some expected type
-  if let Some(base_ty) = var_ty.get_base_type() {
-    if TAG_TYPE.contains(&base_ty) {
-      return Ok(base_ty);
-    }
+  if let Some(base_ty) = var_ty.get_base_type()
+    && TAG_TYPE.contains(&base_ty)
+  {
+    return Ok(base_ty);
   }
 
   // Then we check if the value can be casted into certain types
@@ -88,13 +94,13 @@ fn get_target_tag_type(
   }
 
   // If not, then
-  return Err(
+  Err(
     FrontCompileErrorMessage::error()
       .msg(format!(
         "A value of type `{var_ty}` cannot be casted into a dynamic tag"
       ))
       .src(loc.clone()),
-  );
+  )
 }
 
 /// The information of a helper tag predicate

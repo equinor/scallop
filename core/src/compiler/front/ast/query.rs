@@ -30,9 +30,9 @@ impl Query {
   }
 }
 
-impl Into<Vec<Item>> for Query {
-  fn into(self) -> Vec<Item> {
-    vec![Item::QueryDecl(QueryDecl::new(Attributes::new(), self))]
+impl From<Query> for Vec<Item> {
+  fn from(val: Query) -> Self {
+    vec![Item::QueryDecl(QueryDecl::new(Attributes::new(), val))]
   }
 }
 

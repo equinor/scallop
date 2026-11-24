@@ -79,8 +79,7 @@ fn token_stream_to_src_lines(tokens: TokenStream) -> (usize, Vec<String>) {
   for (token, start_loc, offset) in str_tokens {
     // Move on to the next line where span lies in
     while start_loc.line > curr_line_num {
-      src_lines.push(curr_line);
-      curr_line = String::new();
+      src_lines.push(std::mem::take(&mut curr_line));
       curr_line_num += 1;
     }
 
@@ -105,50 +104,46 @@ fn token_stream_to_src_lines(tokens: TokenStream) -> (usize, Vec<String>) {
 
 fn populate_str_tokens(str_tokens: &mut Vec<(String, LineColumn, i32)>, tokens: TokenStream) {
   let mut tokens_iter = tokens.into_iter();
-  loop {
-    if let Some(token) = tokens_iter.next() {
-      match token {
-        proc_macro2::TokenTree::Group(g) => {
-          let span = g.span();
-          let (open, offset, close) = match g.delimiter() {
-            proc_macro2::Delimiter::Parenthesis => ("(".to_string(), -1, ")".to_string()),
-            proc_macro2::Delimiter::Brace => ("{".to_string(), -1, "}".to_string()),
-            proc_macro2::Delimiter::Bracket => ("[".to_string(), -1, "]".to_string()),
-            proc_macro2::Delimiter::None => ("".to_string(), 0, "".to_string()),
-          };
-          str_tokens.push((open, span_start_line_column(&span), 0));
+  while let Some(token) = tokens_iter.next() {
+    match token {
+      proc_macro2::TokenTree::Group(g) => {
+        let span = g.span();
+        let (open, offset, close) = match g.delimiter() {
+          proc_macro2::Delimiter::Parenthesis => ("(".to_string(), -1, ")".to_string()),
+          proc_macro2::Delimiter::Brace => ("{".to_string(), -1, "}".to_string()),
+          proc_macro2::Delimiter::Bracket => ("[".to_string(), -1, "]".to_string()),
+          proc_macro2::Delimiter::None => ("".to_string(), 0, "".to_string()),
+        };
+        str_tokens.push((open, span_start_line_column(&span), 0));
 
-          populate_str_tokens(str_tokens, g.stream());
+        populate_str_tokens(str_tokens, g.stream());
 
-          str_tokens.push((close, span_end_line_column(&span), offset));
-        }
-        proc_macro2::TokenTree::Ident(i) => {
-          let span = i.span();
-          str_tokens.push((format!("{}", i), span_start_line_column(&span), 0));
-        }
-        proc_macro2::TokenTree::Punct(p) => {
-          let mut curr_p = p.clone();
-          let mut span = curr_p.span();
-          let mut op = format!("{}", curr_p.as_char());
-          while curr_p.spacing() == proc_macro2::Spacing::Joint {
-            let next_token = tokens_iter.next().unwrap();
-            if let proc_macro2::TokenTree::Punct(next_p) = next_token {
-              span = span.join(next_p.span()).unwrap();
-              op += &next_p.as_char().to_string();
-              curr_p = next_p;
-            } else {
-              panic!("Should not happen");
-            }
-          }
-          str_tokens.push((op, span_start_line_column(&span), 0));
-        }
-        proc_macro2::TokenTree::Literal(l) => {
-          let span = l.span();
-          str_tokens.push((format!("{}", l), span_start_line_column(&span), 0));
-        }
+        str_tokens.push((close, span_end_line_column(&span), offset));
       }
-    } else {
-      break;
+      proc_macro2::TokenTree::Ident(i) => {
+        let span = i.span();
+        str_tokens.push((format!("{}", i), span_start_line_column(&span), 0));
+      }
+      proc_macro2::TokenTree::Punct(p) => {
+        let mut curr_p = p.clone();
+        let mut span = curr_p.span();
+        let mut op = format!("{}", curr_p.as_char());
+        while curr_p.spacing() == proc_macro2::Spacing::Joint {
+          let next_token = tokens_iter.next().unwrap();
+          if let proc_macro2::TokenTree::Punct(next_p) = next_token {
+            span = span.join(next_p.span()).unwrap();
+            op += &next_p.as_char().to_string();
+            curr_p = next_p;
+          } else {
+            panic!("Should not happen");
+          }
+        }
+        str_tokens.push((op, span_start_line_column(&span), 0));
+      }
+      proc_macro2::TokenTree::Literal(l) => {
+        let span = l.span();
+        str_tokens.push((format!("{}", l), span_start_line_column(&span), 0));
+      }
     }
   }
 }
