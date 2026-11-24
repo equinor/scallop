@@ -3,6 +3,7 @@ from google.genai import types
 import scallopy
 
 from . import ScallopGeminiPlugin
+from ._response import response_text
 
 def get_gemini(plugin: ScallopGeminiPlugin):
   # For memoization
@@ -29,7 +30,7 @@ def get_gemini(plugin: ScallopGeminiPlugin):
           ),
         )
 
-      result = response.candidates[0].content.parts[0].text
+      result = response_text(response)
       # print("result :", result, "\n\n\n")
       # Store in the storage
       STORAGE[prompt] = result

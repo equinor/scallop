@@ -1,16 +1,26 @@
 from argparse import ArgumentParser
-from typing import Dict, List
+from typing import Dict, List, NoReturn, Optional
 import os
 import sys
 
+from openai import OpenAI
+from openai.types.chat import ChatCompletionMessage
+
 import scallopy
+from scallopy.torch_importer import has_pytorch
+
+
+def message_text(message: ChatCompletionMessage) -> str:
+  if message.content is None:
+    raise ValueError("OpenAI returned a message without text content")
+  return message.content
+
 
 class ScallopGPTPlugin(scallopy.Plugin):
   def __init__(self):
     super().__init__()
 
-    # Whether the openai plugin has been configured
-    self._configured = False
+    self._client: Optional[OpenAI] = None
 
     # Number of allowed requests
     self._num_allowed_requests = 100
@@ -34,19 +44,12 @@ class ScallopGPTPlugin(scallopy.Plugin):
     parser.add_argument("--openai-gpt-temperature", type=float, default=0, help="The temperature for the GPT model")
 
   def configure(self, args: Dict = {}, unknown_args: List = []):
-    import openai
-
-    # Open API
     api_key = os.getenv("OPENAI_API_KEY")
     if api_key is None:
       print("[scallop_openai] `OPENAI_API_KEY` not found, consider setting it in the environment variable", file=sys.stderr)
       return
 
-    # Is configured
-    self._configured = True
-
-    # Set the API Key
-    openai.api_key = api_key
+    self._client = OpenAI(api_key=api_key)
 
     # Set request limit
     if "num_allowed_openai_request" in args:
@@ -67,15 +70,20 @@ class ScallopGPTPlugin(scallopy.Plugin):
   def temperature(self) -> float:
     return self._temperature
 
-  def raise_unconfigured(self):
+  def raise_unconfigured(self) -> NoReturn:
     if not self._warning_printed:
       print("Open AI Plugin not configured; consider setting `OPENAI_API_KEY`", file=sys.stderr)
       self._warning_printed = True
     raise Exception("Open AI Plugin not configured")
 
+  def client(self) -> OpenAI:
+    if self._client is None:
+      self.raise_unconfigured()
+    return self._client
+
   def assert_can_request(self):
     # Check if openai API is configured
-    if not self._configured:
+    if self._client is None:
       self.raise_unconfigured()
 
     # Check openai request
@@ -89,7 +97,6 @@ class ScallopGPTPlugin(scallopy.Plugin):
     self._num_performed_requests += 1
 
   def load_into_ctx(self, ctx: scallopy.ScallopContext):
-    from . import fa_encoder
     from . import fa_extract_info
     from . import fa_gpt
     from . import ff_gpt
@@ -100,5 +107,7 @@ class ScallopGPTPlugin(scallopy.Plugin):
     ctx.register_foreign_function(ff_gpt.get_gpt(self))
     ctx.register_foreign_predicate(fp_gpt.get_gpt(self))
 
-    if scallopy.torch_tensor_enabled():
+    if scallopy.torch_tensor_enabled() and has_pytorch():
+      from . import fa_encoder
+
       ctx.register_foreign_attribute(fa_encoder.get_gpt_encoder(self))

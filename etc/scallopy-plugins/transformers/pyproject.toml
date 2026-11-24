@@ -1,10 +1,15 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "scallop-transformers"
 version = "0.0.2"
 dependencies = [
-  "transformers",
   "opencv-python",
+  "pillow",
   "torch",
+  "transformers",
 ]
 
 [tool.setuptools.packages.find]

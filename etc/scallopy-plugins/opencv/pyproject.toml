@@ -1,10 +1,16 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "scallop-opencv"
 version = "0.0.2"
 dependencies = [
+  "numpy",
   "opencv-python",
+  "pillow",
+  "requests",
   "torch",
-  "requests"
 ]
 
 [tool.setuptools.packages.find]

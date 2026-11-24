@@ -14,6 +14,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python-quality:
+    name: Python package lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          version: "0.13.9"
+          cache-dependency-glob: uv.lock
+      - run: make lint-python typecheck-python
+
   build-and-test:
     name: Scallopy tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest

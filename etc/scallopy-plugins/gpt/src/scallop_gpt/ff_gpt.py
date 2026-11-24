@@ -1,7 +1,6 @@
-import openai
 import scallopy
 
-from . import ScallopGPTPlugin
+from .plugin import ScallopGPTPlugin, message_text
 
 def get_gpt(plugin: ScallopGPTPlugin):
   # For memoization
@@ -17,13 +16,12 @@ def get_gpt(plugin: ScallopGPTPlugin):
 
       # Add performed requests
       plugin.increment_num_performed_request()
-      response = openai.ChatCompletion.create(
+      response = plugin.client().chat.completions.create(
         model=plugin.model(),
         messages=[{"role": "user", "content": prompt}],
         temperature=plugin.temperature(),
       )
-      choice = response["choices"][0]
-      result = choice["message"]["content"].strip()
+      result = message_text(response.choices[0].message).strip()
 
       # Store in the storage
       STORAGE[prompt] = result

@@ -1,1 +1,1 @@
-from .plugin import ScallopFaceDetectionPlugin
+from .plugin import ScallopFaceDetectionPlugin as ScallopFaceDetectionPlugin

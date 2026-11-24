@@ -1,10 +1,15 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "scallop-gemini"
 version = "0.0.2"
-dependencies = [
-  "google-genai",
-  "torch",
-]
+requires-python = ">=3.11"
+dependencies = ["google-genai>=3.6.1,<4"]
+
+[project.optional-dependencies]
+embeddings = ["torch"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 from typing import Dict, List
 import scallopy
+from torch import Tensor
 
 from .bg_blur import bg_blur
 from .color_pop import color_pop
@@ -37,13 +38,13 @@ class ScallopOpenCVPlugin(scallopy.Plugin):
 
   def load_save_image_into_ctx(self, ctx: scallopy.ScallopContext):
     @scallopy.foreign_function
-    def save_image(img_tensor: scallopy.Tensor, img_name: str = None) -> str:
+    def save_image(img_tensor: Tensor, img_name: str | None = None) -> str:
       return _save_image(img_tensor, img_name, self._save_image_path)
     ctx.register_foreign_function(save_image)
 
   def load_upload_imgur_into_ctx(self, ctx: scallopy.ScallopContext):
     @scallopy.foreign_function
-    def upload_imgur(img_tensor: scallopy.Tensor) -> str:
+    def upload_imgur(img_tensor: Tensor) -> str:
       return _upload_imgur(img_tensor, self._save_image_path)
     ctx.register_foreign_function(upload_imgur)
 

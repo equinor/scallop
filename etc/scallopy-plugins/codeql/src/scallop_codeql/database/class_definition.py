@@ -4,8 +4,9 @@ import csv
 import scallopy
 
 from ..plugin import ScallopCodeQLPlugin
+from ._fields import CsvField
 
-FIELDS = {
+FIELDS: dict[str, CsvField] = {
   "id": {
     "name": "id",
     "type": "usize",

@@ -1,10 +1,11 @@
 from argparse import ArgumentParser
-from typing import Dict, List
+from typing import Dict, List, NoReturn
 import os
 import sys
 
 from google import genai
 import scallopy
+from scallopy.torch_importer import has_pytorch
 
 class ScallopGeminiPlugin(scallopy.Plugin):
   def __init__(self):
@@ -67,7 +68,7 @@ class ScallopGeminiPlugin(scallopy.Plugin):
   def temperature(self) -> float:
     return self._temperature
 
-  def raise_unconfigured(self):
+  def raise_unconfigured(self) -> NoReturn:
     if not self._warning_printed:
       print("Gemini Plugin not configured; consider setting `GEMINI_API_KEY`", file=sys.stderr)
       self._warning_printed = True
@@ -97,7 +98,7 @@ class ScallopGeminiPlugin(scallopy.Plugin):
     ctx.register_foreign_function(ff_gemini.get_gemini(self))
     ctx.register_foreign_predicate(fp_gemini.get_gemini(self))
 
-    if scallopy.torch_tensor_enabled():
+    if scallopy.torch_tensor_enabled() and has_pytorch():
       from . import fa_encoder
 
       ctx.register_foreign_attribute(fa_encoder.get_gemini_encoder(self))

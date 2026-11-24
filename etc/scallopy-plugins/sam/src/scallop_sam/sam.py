@@ -6,11 +6,11 @@ from PIL import Image
 import numpy
 import torch
 import scallopy
+from scallopy.utils.image import box_slices
 
 from scallop_gpu import get_device
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 
-import scallopy
 
 FA_NAME = "segment_anything"
 ERR_HEAD = f"[@{FA_NAME}]"
@@ -20,47 +20,47 @@ DUMP_IMAGE_PATH = ".tmp/scallop-sam/"
 FIELDS = {
   "area": {
     "description": "The area under the generated mask",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-x": {
     "description": "The x-coordinate of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-y": {
     "description": "The y-coordinate of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-x-center": {
     "description": "The x-coordinate of the bounding box center",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-y-center": {
     "description": "The y-coordinate of the bounding box center",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-w": {
     "description": "The width of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-h": {
     "description": "The height of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "cropped-image": {
     "description": "The cropped image (bounded by bounding box)",
-    "type": scallopy.Tensor,
+    "type": "Tensor",
   },
   "cropped-mask": {
     "description": "The cropped mask (bounded by bounding box)",
-    "type": scallopy.Tensor,
+    "type": "Tensor",
   },
   "masked-cropped-image": {
     "description": "The cropped image which is also masked (bounded by bounding box)",
-    "type": scallopy.Tensor,
+    "type": "Tensor",
   },
   "mask": {
     "description": "The black and white mask",
-    "type": scallopy.Tensor,
+    "type": "Tensor",
   },
 }
 
@@ -75,16 +75,9 @@ class ScallopSamPlugin(scallopy.Plugin):
   def setup_argparse(self, parser: ArgumentParser):
     parser.add_argument("--sam-checkpoint", type=str, default=None)
 
-  def configure(self, args: Dict = ..., unknown_args: List = ...):
-    try:
-      if args["sam_checkpoint"] is not None:
-        self._checkpoint = args["sam_checkpoint"]
-      else:
-        self._checkpoint = os.getenv("SAM_CHECKPOINT")
-      if self._checkpoint is None:
-        return
-    except:
-      pass
+  def configure(self, args: Dict = {}, unknown_args: List = []):
+    checkpoint = args.get("sam_checkpoint")
+    self._checkpoint = os.getenv("SAM_CHECKPOINT") if checkpoint is None else checkpoint
 
   def get_sam_model(self):
     if self._sam is None:
@@ -93,7 +86,7 @@ class ScallopSamPlugin(scallopy.Plugin):
     else:
       return self._sam
 
-  def load_into_context(self, ctx: scallopy.Context):
+  def load_into_ctx(self, ctx: scallopy.Context):
     # First declare a local segment anything
     @scallopy.foreign_attribute
     def segment_anything(
@@ -119,14 +112,14 @@ class ScallopSamPlugin(scallopy.Plugin):
       arg_types = [ab.ty for ab in relation_decl.arg_bindings]
 
       # Expected number of input arguments
-      expected_args = [(scallopy.Tensor, "image: Tensor")]
+      expected_args = [("Tensor", "image: Tensor")]
 
       # Bounding box prompt
       if prompt_bb:
-        expected_args += [(scallopy.u32, "prompt_bb_x: u32"), (scallopy.u32, "prompt_bb_y: u32"), (scallopy.u32, "prompt_bb_w: u32"), (scallopy.u32, "prompt_bb_h: u32")]
+        expected_args += [("u32", f"prompt_bb_{axis}: u32") for axis in ("x", "y", "w", "h")]
 
       # Expected output arguments
-      expected_args += [(scallopy.u32, "id: u32")]
+      expected_args += [("u32", "id: u32")]
 
       # Fields: make sure that all output fields are supported
       assert type(output_fields) == list, f"{ERR_HEAD} The parameter `output_fields` need to be a list"
@@ -152,7 +145,7 @@ class ScallopSamPlugin(scallopy.Plugin):
         output_arg_types=arg_types[1:],
         tag_type=float,
       )
-      def do_segment(img: scallopy.Tensor):
+      def do_segment(img: torch.Tensor):
         sam = self.get_sam_model()
         if sam is not None:
           predictor = SamAutomaticMaskGenerator(
@@ -160,7 +153,7 @@ class ScallopSamPlugin(scallopy.Plugin):
             pred_iou_thresh=iou_threshold,
             min_mask_region_area=area_threshold,
           )
-          img_w, img_h, _ = img.shape
+          img_h, img_w, _ = img.shape
           masks = predictor.generate(img.numpy())
 
           # Count
@@ -173,7 +166,7 @@ class ScallopSamPlugin(scallopy.Plugin):
             # Basic information
             prob = mask["predicted_iou"] if not flatten_prob else 0.0
             (bbox_x, bbox_y, bbox_w, bbox_h) = mask["bbox"]
-            (x_crop_slice, y_crop_slice) = get_xy_cropping_slices(img_w, img_h, bbox_y, bbox_x, bbox_h, bbox_w, expand_crop_region)
+            rows, columns = box_slices(img_h, img_w, bbox_x, bbox_y, bbox_w, bbox_h, expand_crop_region)
             segmentation = torch.from_numpy(mask["segmentation"])
 
             # Check yielded count; stop if reaching limit
@@ -189,17 +182,17 @@ class ScallopSamPlugin(scallopy.Plugin):
                   save_temporary_image(id(img), i, field, segmentation)
               elif field == "masked-cropped-image":
                 masked_img = torch.mul(img, segmentation.unsqueeze(-1))
-                masked_cropped_img = masked_img[x_crop_slice, y_crop_slice, :]
+                masked_cropped_img = masked_img[rows, columns, :]
                 result_tuple.append(masked_cropped_img)
                 if dump_image:
                   save_temporary_image(id(img), i, field, masked_cropped_img)
               elif field == "cropped-image":
-                cropped_img = img[x_crop_slice, y_crop_slice, :]
+                cropped_img = img[rows, columns, :]
                 result_tuple.append(cropped_img)
                 if dump_image:
                   save_temporary_image(id(img), i, field, cropped_img)
               elif field == "cropped-mask":
-                cropped_mask = segmentation[x_crop_slice, y_crop_slice]
+                cropped_mask = segmentation[rows, columns]
                 result_tuple.append(cropped_mask)
                 if dump_image:
                   save_temporary_image(id(img), i, field, cropped_mask)
@@ -233,11 +226,11 @@ class ScallopSamPlugin(scallopy.Plugin):
           tag_type=float
       )
       def do_segment_with_bb(
-        img: scallopy.Tensor,
-        x: scallopy.u32,
-        y: scallopy.u32,
-        w: scallopy.u32,
-        h: scallopy.u32,
+        img: torch.Tensor,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
       ):
         sam = self.get_sam_model()
         if sam is not None:
@@ -252,7 +245,7 @@ class ScallopSamPlugin(scallopy.Plugin):
             point_coords=None,
             point_labels=None,
             box=input_box[None, :],
-            multimask_output=None,
+            multimask_output=False,
           )
 
           mask = torch.from_numpy(masks[0])
@@ -299,6 +292,8 @@ class ScallopSamPlugin(scallopy.Plugin):
     # Register
     ctx.register_foreign_attribute(segment_anything)
 
+  load_into_context = load_into_ctx
+
 def save_temporary_image(img_id, i, kind, img_tensor):
   # First get the directory
   directory = os.path.join(DUMP_IMAGE_PATH, f"{img_id}")
@@ -308,19 +303,7 @@ def save_temporary_image(img_id, i, kind, img_tensor):
   # Dump the image
   file_name = os.path.join(directory, f"{kind}-{i}.jpg")
   img = Image.fromarray(img_tensor.numpy())
-  img.save(open(file_name, "w"))
-
-
-def get_xy_cropping_slices(img_w, img_h, bb_x, bb_y, bb_w, bb_h, expand_crop_region):
-  x_slice = get_cropping_slice(img_w, bb_x, bb_w, expand_crop_region)
-  y_slice = get_cropping_slice(img_h, bb_y, bb_h, expand_crop_region)
-  return (x_slice, y_slice)
-
-
-def get_cropping_slice(size, x, w, expand_crop_region):
-  start = max(0, x - expand_crop_region)
-  end = min(size, x + w + expand_crop_region)
-  return slice(start, end)
+  img.save(file_name)
 
 
 def area_from_mask(mask) -> int:

@@ -32,6 +32,10 @@ The Scallop GPT plugin provides the following constructs:
 
 ### Foreign Attribute `@gpt_encoder`
 
+Text-only features do not require PyTorch. For embeddings, use a Scallopy
+build with tensor support and install `uv pip install './etc/scallopy-plugins/gpt[embeddings]'`.
+The encoder uses the CPU unless the optional `scallop-gpu` plugin selects a GPU.
+
 ### Foreign Predicate `gpt`
 
 ### Foreign Function `$gpt`

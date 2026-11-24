@@ -3,9 +3,9 @@ import os
 
 import numpy as np
 from PIL import Image
+from torch import Tensor
 
 import scallopy
-from scallop_gpu import get_device
 
 from . import ScallopFaceDetectionPlugin
 
@@ -15,23 +15,23 @@ ERR_HEAD = f"[@{FA_NAME}]"
 FIELDS = {
   "bbox-x": {
     "description": "The x-coordinate of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-y": {
     "description": "The y-coordinate of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-w": {
     "description": "The width of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "bbox-h": {
     "description": "The height of the bounding box",
-    "type": scallopy.u32,
+    "type": "u32",
   },
   "cropped-image": {
     "description": "The cropped image (bounded by bounding box)",
-    "type": scallopy.Tensor,
+    "type": "Tensor",
   },
 }
 
@@ -56,10 +56,10 @@ def get_face_detection(plugin: ScallopFaceDetectionPlugin):
     arg_types = [ab.ty for ab in relation_decl.arg_bindings]
 
     # Expected input arguments
-    expected_args = [(scallopy.Tensor, "image: Tensor")]
+    expected_args = [("Tensor", "image: Tensor")]
 
     # Expected output arguments
-    expected_args += [(scallopy.u32, "id: u32")]
+    expected_args += [("u32", "id: u32")]
 
     # Fields: make sure that all output fields are supported
     assert type(output_fields) == list, f"{ERR_HEAD} The parameter `output_fields` need to be a list"
@@ -90,7 +90,7 @@ def get_face_detection(plugin: ScallopFaceDetectionPlugin):
       output_arg_types=arg_types[1:],
       tag_type=float,
     )
-    def do_face_detect(img: scallopy.Tensor):
+    def do_face_detect(img: Tensor):
       img_h, img_w, _ = img.shape
 
       # Deal with STORAGE; check if the response is memoized
@@ -153,13 +153,13 @@ def get_face_detection(plugin: ScallopFaceDetectionPlugin):
 
   def save_temporary_image(img_id, i, kind, img_tensor):
       # First get the directory
-      directory = os.path.join(plugin, f"{img_id}")
+      directory = os.path.join(plugin.dump_image_path(), str(img_id))
       if not os.path.exists(directory):
           os.makedirs(directory)
 
       # Dump the image
       file_name = os.path.join(directory, f"{kind}-{i}.jpg")
       img = Image.fromarray(img_tensor.numpy())
-      img.save(open(file_name, "w"))
+      img.save(file_name)
 
   return face_detection

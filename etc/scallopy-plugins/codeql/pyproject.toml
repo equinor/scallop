@@ -1,9 +1,11 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "scallop-codeql"
 version = "0.0.1"
-dependencies = [
-
-]
+dependencies = ["pyyaml>=6,<7"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

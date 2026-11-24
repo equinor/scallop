@@ -1,1 +1,1 @@
-from .plugin import ScallopCodeQLPlugin
+from .plugin import ScallopCodeQLPlugin as ScallopCodeQLPlugin
