@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::sync::LazyLock;
 
 use jiff::civil::{DateTime as CivilDateTime, Time};
@@ -134,20 +133,6 @@ fn parse_local_time(input: &str) -> Option<Time> {
   ["%H:%M:%S%.f", "%H:%M", "%I:%M:%S%.f %p", "%I:%M %p", "%H时%M分%S秒"]
     .iter()
     .find_map(|format| Time::strptime(format, input).ok())
-}
-
-/// Format an instant using Scallop's UTC display syntax.
-pub fn display_date_time(value: Timestamp) -> impl Display {
-  let nanos = value.subsec_nanosecond();
-  value.strftime(if nanos == 0 {
-    "%F %T UTC"
-  } else if nanos % 1_000_000 == 0 {
-    "%F %T%.3f UTC"
-  } else if nanos % 1_000 == 0 {
-    "%F %T%.6f UTC"
-  } else {
-    "%F %T%.9f UTC"
-  })
 }
 
 const NANOS_PER_SECOND: i64 = 1_000_000_000;

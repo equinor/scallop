@@ -3,8 +3,6 @@ use std::cmp::Ordering;
 pub use jiff::Timestamp as DateTime;
 use ordered_float::OrderedFloat;
 
-use crate::utils::display_date_time;
-
 use super::duration::*;
 use super::foreign_tensor::*;
 use super::value_type::*;
@@ -214,7 +212,7 @@ impl std::fmt::Display for Value {
       Self::String(i) => f.write_fmt(format_args!("{:?}", i)),
       Self::Symbol(_) => panic!("[Internal Error] Cannot display symbol"),
       Self::SymbolString(s) => f.write_fmt(format_args!("s\"{}\"", s)),
-      Self::DateTime(i) => f.write_fmt(format_args!("t\"{}\"", display_date_time(*i))),
+      Self::DateTime(i) => write!(f, "t\"{i}\""),
       Self::Duration(i) => f.write_fmt(format_args!("d\"{}\"", i)),
       Self::Entity(e) => f.write_fmt(format_args!("entity({e:#x})")),
       Self::EntityString(s) => f.write_fmt(format_args!("entity_string({s})")),

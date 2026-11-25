@@ -1,6 +1,8 @@
 # Unreleased
 
 - Weighted model counting now uses RSDD. Probabilities and gradients can differ in their last floating-point digits because the diagram changes the order of arithmetic.
+- `DateTime` text uses UTC ISO 8601, e.g. `2021-01-01T00:00:01.1Z`, including in `$format` and Scallopy results. The old `2021-01-01 00:00:01.100 UTC` spelling still parses.
+- `Duration` text uses hours and minutes where appropriate (`PT90S` becomes `PT1M30S`, and `P0D` becomes `PT0S`). The calendar prefix for durations containing months is unchanged, and the previous spelling still parses.
 
 Rust API migration:
 - The standalone `sdd` crate has been removed. Custom provenance implementations can use `scallop_core::runtime::provenance::{AsBooleanFormula, BooleanFormula, Semiring}` for weighted model counting, or RSDD directly for diagram construction.
@@ -9,6 +11,7 @@ Rust API migration:
 - Use a struct literal in place of `compiler::back::Reduce::new`. For a front-end `Reduce` with a source span, use `_Reduce::new(...).with_span(start, end)` instead of `Reduce::new_with_span`.
 - Construct reduce query-plan nodes with `HighRamNode::reduce`. The `HighRamNode::Reduce` variant now contains a `Box<Reduce>`; front-end AST constructors and accessors are unchanged except for the `Reduce` constructor noted above.
 - The unimplemented dense-matrix Rust storage variant has been removed. Scallop still supports `sorted` and `indexed_vec`.
+- Use `Timestamp`'s `Display` implementation in place of `utils::display_date_time`.
 
 # v0.2.5, Sep 14, 2024
 

@@ -37,23 +37,7 @@ impl std::fmt::Display for Duration {
     if self.months != 0 {
       write!(f, "R{}MO ", self.months)?;
     }
-    if self.elapsed.is_zero() {
-      return f.write_str("P0D");
-    }
-    if self.elapsed.is_negative() {
-      f.write_str("-")?;
-    }
-    write!(f, "PT{}", self.elapsed.as_secs().unsigned_abs())?;
-    let mut nanos = self.elapsed.subsec_nanos().unsigned_abs();
-    if nanos != 0 {
-      let mut width = 9;
-      while nanos % 10 == 0 {
-        nanos /= 10;
-        width -= 1;
-      }
-      write!(f, ".{nanos:0width$}")?;
-    }
-    f.write_str("S")
+    std::fmt::Display::fmt(&self.elapsed, f)
   }
 }
 

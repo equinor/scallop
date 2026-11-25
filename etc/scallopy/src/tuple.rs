@@ -25,7 +25,7 @@ fn to_python_extra(py: Python<'_>, val: &Value, env: &PythonRuntimeEnvironment) 
   match val {
     Symbol(s) => env.symbol_registry.get_symbol(*s).into_py_any(py),
     SymbolString(s) => s.into_py_any(py),
-    DateTime(d) => utils::display_date_time(*d).to_string().into_py_any(py),
+    DateTime(d) => d.to_string().into_py_any(py),
     Duration(d) => d.to_string().into_py_any(py),
     Entity(e) => e.into_py_any(py),
     EntityString(_) => panic!("[Internal Error] Entity string could not be turned to python value"),

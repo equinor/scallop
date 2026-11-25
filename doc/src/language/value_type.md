@@ -161,6 +161,7 @@ rel event_dates = {("enroll", t"2020-01-01"), ("finish", t"2020-03-01")}
 ```
 
 Scallop normalizes dates and times to UTC. Input without an explicit offset is interpreted as UTC.
+`DateTime` values are displayed as UTC ISO 8601, for example `2020-01-01T00:00:00Z`.
 A date without a time defaults to midnight, and a time without a date uses the current date.
 Scallop accepts ISO 8601, RFC 2822, and common written date and time formats, including:
 
@@ -179,6 +180,8 @@ rel event_durations = {("e1", d"12 days"), ("e2", d"15 days 20 seconds")}
 
 The string can contain numbers followed by their units, or use ISO 8601, such as `d"P1M3DT4H"`.
 In the number-and-unit form, individual terms can be negative, as in `d"1 day -15 minutes"`.
+Displayed durations use ISO 8601 for the elapsed part (for example `d"PT1M30S"` for 90 seconds).
+If a duration also has calendar months, they are displayed separately, for example `d"R1MO -PT0.5S"`.
 When specifying durations, the following units are accepted:
 
 - nanoseconds (`n`)
