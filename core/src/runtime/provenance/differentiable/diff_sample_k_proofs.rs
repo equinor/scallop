@@ -5,20 +5,22 @@ use crate::utils::PointerFamily;
 
 use super::*;
 
-pub struct DiffSampleKProofsProvenance<T: FromTensor, P: PointerFamily> {
+pub struct DiffSampleKProofsProvenance<T: FromTensor, P: PointerFamily, W: WmcBackend = DefaultWmcBackend> {
   pub k: usize,
   pub sampler: P::Cell<SmallRng>,
   pub storage: DiffProbStorage<T, P>,
   pub disjunctions: P::Cell<Disjunctions>,
+  wmc_backend: W,
 }
 
-impl<T: FromTensor, P: PointerFamily> Clone for DiffSampleKProofsProvenance<T, P> {
+impl<T: FromTensor, P: PointerFamily, W: WmcBackend> Clone for DiffSampleKProofsProvenance<T, P, W> {
   fn clone(&self) -> Self {
     Self {
       k: self.k,
       sampler: P::clone_cell(&self.sampler),
       storage: self.storage.clone_internal(),
       disjunctions: P::clone_cell(&self.disjunctions),
+      wmc_backend: self.wmc_backend.clone(),
     }
   }
 }
@@ -29,11 +31,18 @@ impl<T: FromTensor, P: PointerFamily> DiffSampleKProofsProvenance<T, P> {
   }
 
   pub fn new_with_seed(k: usize, seed: u64) -> Self {
+    Self::new_with_wmc_backend(k, seed, DefaultWmcBackend)
+  }
+}
+
+impl<T: FromTensor, P: PointerFamily, W: WmcBackend> DiffSampleKProofsProvenance<T, P, W> {
+  pub fn new_with_wmc_backend(k: usize, seed: u64, wmc_backend: W) -> Self {
     Self {
       k,
       sampler: P::new_cell(SmallRng::seed_from_u64(seed)),
       storage: DiffProbStorage::new(),
       disjunctions: P::new_cell(Disjunctions::new()),
+      wmc_backend,
     }
   }
 
@@ -46,7 +55,7 @@ impl<T: FromTensor, P: PointerFamily> DiffSampleKProofsProvenance<T, P> {
   }
 }
 
-impl<T: FromTensor, P: PointerFamily> DNFContextTrait for DiffSampleKProofsProvenance<T, P> {
+impl<T: FromTensor, P: PointerFamily, W: WmcBackend> DNFContextTrait for DiffSampleKProofsProvenance<T, P, W> {
   fn fact_probability(&self, id: &usize) -> f64 {
     self.storage.fact_probability(id)
   }
@@ -56,7 +65,7 @@ impl<T: FromTensor, P: PointerFamily> DNFContextTrait for DiffSampleKProofsProve
   }
 }
 
-impl<T: FromTensor, P: PointerFamily> Provenance for DiffSampleKProofsProvenance<T, P> {
+impl<T: FromTensor, P: PointerFamily, W: WmcBackend> Provenance for DiffSampleKProofsProvenance<T, P, W> {
   type Tag = DNFFormula;
 
   type InputTag = InputExclusiveDiffProb<T>;
@@ -100,7 +109,7 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffSampleKProofsProvenance
         s.constant(real)
       }
     };
-    let wmc_result = t.wmc(&s, &v);
+    let wmc_result = t.wmc_using(&self.wmc_backend, &s, &v);
     let prob = wmc_result.real;
     let deriv = wmc_result
       .deriv
@@ -138,7 +147,7 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffSampleKProofsProvenance
 
   fn weight(&self, t: &Self::Tag) -> f64 {
     let v = |i: &usize| self.storage.get_prob(i);
-    t.wmc(&RealSemiring::new(), &v)
+    t.wmc_using(&self.wmc_backend, &RealSemiring::new(), &v)
   }
 
   fn mult(&self, t1: &Self::Tag, t2: &Self::Tag) -> Self::Tag {

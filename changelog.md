@@ -3,12 +3,12 @@
 - Scallop now executes programs only through the RAM interpreter. The `sclc` executable, `scallop!` Rust macro, and Scallopy's optional native JIT have been removed. Python callers should omit `jit=True`, `jit_name`, and `recompile` (`jit_recompile` on `ScallopForwardFunction`). The Rust extension, `ctx.compile()`, and parallel batch execution remain available.
 - Compiler diagnostics now show source spans in Rust-style snippets, including syntax errors from REPL and in-memory input. REPL snippets use a `REPL:<id>` header.
 
-- Weighted model counting now uses RSDD. Probabilities and gradients can differ in their last floating-point digits because the diagram changes the order of arithmetic.
+- Weighted model counting always compiles a decision diagram. It uses OxiDD on native targets and RSDD on WebAssembly, where OxiDD cannot start its manager threads. Probabilities and gradients can differ in their last floating-point digits because the diagram changes the order of arithmetic.
 - `DateTime` text uses UTC ISO 8601, e.g. `2021-01-01T00:00:01.1Z`, including in `$format` and Scallopy results. The old `2021-01-01 00:00:01.100 UTC` spelling still parses.
 - `Duration` text uses hours and minutes where appropriate (`PT90S` becomes `PT1M30S`, and `P0D` becomes `PT0S`). The calendar prefix for durations containing months is unchanged, and the previous spelling still parses.
 
 Rust API migration:
-- The standalone `sdd` crate has been removed. Custom provenance implementations can use `scallop_core::runtime::provenance::{AsBooleanFormula, BooleanFormula, Semiring}` for weighted model counting, or RSDD directly for diagram construction.
+- The standalone `sdd` crate has been removed. To use your own decision diagram implementation, implement `scallop_core::runtime::provenance::WmcBackend` and pass it to the provenance's `new_with_wmc_backend` constructor. Custom provenance implementations can also use `AsBooleanFormula::wmc_using`. Existing provenance constructors select the default backend.
 - Use `NodeLocation::report` or `report_warning` instead of supplying a caret color. Custom `Source` implementations can supply `diagnostic_name` and `first_line_number` instead of `line` and `line_name`.
 - `ForeignFunction::infer_return_type` overrides now take `&[Value]` instead of `&Vec<Value>`.
 - `FrontContext::analysis` is now an `Rc<Analysis>`. Read it through dereferencing and use `Rc::make_mut` to update it.

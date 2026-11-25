@@ -29,4 +29,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = { version = "0.10.1", features = ["std_rng", "alloc"] }
 astnode-derive = { path = "../lib/astnode-derive" }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+oxidd = { version = "0.13.0", default-features = false, features = ["bcdd", "manager-index", "apply-cache-direct-mapped"] }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
 rsdd = { git = "https://github.com/neuppl/rsdd", rev = "168a6b4bf8c60176a2575fb1158342c4f6da9077" }

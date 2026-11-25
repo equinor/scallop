@@ -1,4 +1,6 @@
+use std::cell::Cell;
 use std::collections::BTreeSet;
+use std::rc::Rc;
 
 use scallop_core::common::expr::*;
 use scallop_core::common::foreign_aggregate::*;
@@ -47,7 +49,7 @@ fn test_weighted_model_count_of_single_clauses() {
 }
 
 #[test]
-fn test_weighted_model_count_through_rsdd_for_overlapping_proofs() {
+fn test_weighted_model_count_for_overlapping_proofs() {
   let formula = DNFFormula::new(
     (1..9)
       .map(|id| Clause::new(vec![Literal::Pos(0), Literal::Pos(id)]))
@@ -71,6 +73,86 @@ fn test_weighted_model_count_through_rsdd_for_overlapping_proofs() {
       1.0 / 256.0
     ]
   );
+}
+
+#[derive(Clone)]
+struct OneVariableDdBackend(Rc<Cell<usize>>);
+
+struct OneVariableDd {
+  fact: usize,
+  low: bool,
+  high: bool,
+}
+
+impl WmcBackend for OneVariableDdBackend {
+  fn wmc<S: Semiring>(
+    &self,
+    formula: &BooleanFormula,
+    semiring: &S,
+    weight: &impl Fn(&usize) -> S::Element,
+  ) -> S::Element {
+    self.0.set(self.0.get() + 1);
+    fn evaluate(formula: &BooleanFormula, value: bool) -> bool {
+      match formula {
+        BooleanFormula::Constant(b) => *b,
+        BooleanFormula::Literal(lit) => lit.sign() == value,
+        BooleanFormula::Not(term) => !evaluate(term, value),
+        BooleanFormula::And(terms) => terms.iter().all(|term| evaluate(term, value)),
+        BooleanFormula::Or(terms) => terms.iter().any(|term| evaluate(term, value)),
+      }
+    }
+
+    let &[fact] = formula.fact_ids().as_slice() else {
+      panic!("test adapter supports one variable");
+    };
+    let diagram = OneVariableDd {
+      fact,
+      low: evaluate(formula, false),
+      high: evaluate(formula, true),
+    };
+    match (diagram.low, diagram.high) {
+      (false, false) => semiring.zero(),
+      (true, true) => semiring.one(),
+      (true, false) => semiring.negate(weight(&diagram.fact)),
+      (false, true) => weight(&diagram.fact),
+    }
+  }
+}
+
+#[test]
+fn test_custom_decision_diagram_backend_for_differentiable_provenance() {
+  let calls = Rc::new(Cell::new(0));
+  let ctx = diff_top_k_proofs::DiffTopKProofsProvenance::<(), RcFamily, _>::new_with_wmc_backend(
+    3,
+    true,
+    OneVariableDdBackend(calls.clone()),
+  );
+  let tag = ctx.tagging_fn((0.25, (), Some(4)).into());
+  assert_eq!(ctx.weight(&tag), 0.25);
+  let OutputDiffProb(probability, gradient) = ctx.clone().recover_fn(&tag);
+  // With a singleton exclusion, the query or the exactly-one violation is a tautology.
+  assert_eq!(probability, 1.0);
+  assert!(gradient.is_empty());
+  assert_eq!(calls.get(), 2);
+
+  let tag = Literal::Neg(usize::MAX);
+  assert_eq!(
+    tag.wmc_using(&OneVariableDdBackend(calls.clone()), &RealSemiring, &|id| {
+      assert_eq!(*id, usize::MAX);
+      0.25
+    }),
+    0.75
+  );
+  assert_eq!(calls.get(), 3);
+}
+
+#[test]
+fn test_weighted_model_count_does_not_reuse_weights_between_queries() {
+  let first = DNFFormula::new(vec![Clause::new(vec![Literal::Pos(7), Literal::Neg(20)])]);
+  let second = DNFFormula::new(vec![Clause::new(vec![Literal::Pos(100), Literal::Neg(usize::MAX)])]);
+  assert_eq!(first.wmc(&RealSemiring, &|_| 0.5), 0.25);
+  assert_eq!(second.wmc(&RealSemiring, &|_| 0.25), 0.1875);
+  assert_eq!(first.wmc(&RealSemiring, &|_| 0.125), 0.109375);
 }
 
 #[test]

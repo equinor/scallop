@@ -6,20 +6,22 @@ use crate::utils::*;
 
 use super::*;
 
-pub struct SampleKProofsProvenance<P: PointerFamily = RcFamily> {
+pub struct SampleKProofsProvenance<P: PointerFamily = RcFamily, W: WmcBackend = DefaultWmcBackend> {
   pub k: usize,
   pub sampler: P::Cell<SmallRng>,
   pub probs: P::Cell<Vec<f64>>,
   pub disjunctions: P::Cell<Disjunctions>,
+  wmc_backend: W,
 }
 
-impl<P: PointerFamily> Clone for SampleKProofsProvenance<P> {
+impl<P: PointerFamily, W: WmcBackend> Clone for SampleKProofsProvenance<P, W> {
   fn clone(&self) -> Self {
     Self {
       k: self.k,
       sampler: P::clone_cell(&self.sampler),
       probs: P::clone_cell(&self.probs),
       disjunctions: P::clone_cell(&self.disjunctions),
+      wmc_backend: self.wmc_backend.clone(),
     }
   }
 }
@@ -30,11 +32,18 @@ impl<P: PointerFamily> SampleKProofsProvenance<P> {
   }
 
   pub fn new_with_seed(k: usize, seed: u64) -> Self {
+    Self::new_with_wmc_backend(k, seed, DefaultWmcBackend)
+  }
+}
+
+impl<P: PointerFamily, W: WmcBackend> SampleKProofsProvenance<P, W> {
+  pub fn new_with_wmc_backend(k: usize, seed: u64, wmc_backend: W) -> Self {
     Self {
       k,
       sampler: P::new_cell(SmallRng::seed_from_u64(seed)),
       probs: P::new_cell(Vec::new()),
       disjunctions: P::new_cell(Disjunctions::new()),
+      wmc_backend,
     }
   }
 
@@ -43,7 +52,7 @@ impl<P: PointerFamily> SampleKProofsProvenance<P> {
   }
 }
 
-impl<P: PointerFamily> DNFContextTrait for SampleKProofsProvenance<P> {
+impl<P: PointerFamily, W: WmcBackend> DNFContextTrait for SampleKProofsProvenance<P, W> {
   fn fact_probability(&self, id: &usize) -> f64 {
     P::get_cell(&self.probs, |p| p[*id])
   }
@@ -53,7 +62,7 @@ impl<P: PointerFamily> DNFContextTrait for SampleKProofsProvenance<P> {
   }
 }
 
-impl<P: PointerFamily> Provenance for SampleKProofsProvenance<P> {
+impl<P: PointerFamily, W: WmcBackend> Provenance for SampleKProofsProvenance<P, W> {
   type Tag = DNFFormula;
 
   type InputTag = InputExclusiveProb;
@@ -81,7 +90,7 @@ impl<P: PointerFamily> Provenance for SampleKProofsProvenance<P> {
   fn recover_fn(&self, t: &Self::Tag) -> Self::OutputTag {
     let s = RealSemiring;
     let v = |i: &usize| -> f64 { self.fact_probability(i) };
-    t.wmc(&s, &v)
+    t.wmc_using(&self.wmc_backend, &s, &v)
   }
 
   fn discard(&self, t: &Self::Tag) -> bool {
@@ -128,6 +137,6 @@ impl<P: PointerFamily> Provenance for SampleKProofsProvenance<P> {
   fn weight(&self, t: &Self::Tag) -> f64 {
     let s = RealSemiring;
     let v = |i: &usize| -> f64 { self.fact_probability(i) };
-    t.wmc(&s, &v)
+    t.wmc_using(&self.wmc_backend, &s, &v)
   }
 }
