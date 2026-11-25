@@ -1129,8 +1129,17 @@ dependencies = [
  "pythonize",
  "rayon",
  "scallop-core",
+ "scallopy-interop",
  "sclc-core",
  "serde",
+]
+
+[[package]]
+name = "scallopy-interop"
+version = "0.2.5"
+dependencies = [
+ "pyo3",
+ "scallop-core",
 ]
 
 [[package]]

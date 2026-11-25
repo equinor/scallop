@@ -65,6 +65,18 @@ class BasicTests(unittest.TestCase):
     self.assertIs(iter(iterator), iterator)
     self.assertEqual(list(iterator), [(2,)])
 
+  def test_typed_tuple_round_trip_and_invalid_arity(self):
+    ctx = scallopy.Context()
+    ctx.add_program("type row(number: i128, label: String)")
+    fact = (2**127 - 1, "example")
+
+    with self.assertRaisesRegex(IndexError, "Invalid tuple size"):
+      ctx.add_facts("row", [(fact[0],)])
+
+    ctx.add_facts("row", [fact])
+    ctx.run()
+    self.assertEqual(list(ctx.relation("row")), [fact])
+
   def test_edge_path(self):
     ctx = scallopy.ScallopContext()
     ctx.add_relation("edge", (int, int))

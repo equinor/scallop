@@ -1,5 +1,4 @@
 use pyo3::exceptions::*;
-use pyo3::types::*;
 use pyo3::{prelude::*, IntoPyObjectExt};
 
 use scallop_core::common::foreign_tensor::*;
@@ -14,92 +13,45 @@ use super::runtime::*;
 use super::tensor::*;
 
 pub fn to_python_tuple(tup: &Tuple, env: &PythonRuntimeEnvironment) -> Option<Py<PyAny>> {
-  match tup {
-    Tuple::Tuple(t) => Python::attach(|py| {
-      let values = t.iter().map(|t| to_python_tuple(t, env)).collect::<Option<Vec<_>>>()?;
-      PyTuple::new(py, values).ok().map(|tuple| tuple.into_any().unbind())
-    }),
-    Tuple::Value(v) => to_python_value(v, env),
-  }
+  Python::attach(|py| scallopy_interop::to_python_tuple(py, tup, &|py, val| to_python_extra(py, val, env)).ok())
 }
 
 pub fn to_python_value(val: &Value, env: &PythonRuntimeEnvironment) -> Option<Py<PyAny>> {
+  Python::attach(|py| scallopy_interop::to_python_value(py, val, &|py, val| to_python_extra(py, val, env)).ok())
+}
+
+fn to_python_extra(py: Python<'_>, val: &Value, env: &PythonRuntimeEnvironment) -> PyResult<Py<PyAny>> {
   use Value::*;
-  Python::attach(|py| match val {
-    I8(i) => i.into_py_any(py).ok(),
-    I16(i) => i.into_py_any(py).ok(),
-    I32(i) => i.into_py_any(py).ok(),
-    I64(i) => i.into_py_any(py).ok(),
-    I128(i) => i.into_py_any(py).ok(),
-    ISize(i) => i.into_py_any(py).ok(),
-    U8(i) => i.into_py_any(py).ok(),
-    U16(i) => i.into_py_any(py).ok(),
-    U32(i) => i.into_py_any(py).ok(),
-    U64(i) => i.into_py_any(py).ok(),
-    U128(i) => i.into_py_any(py).ok(),
-    USize(i) => i.into_py_any(py).ok(),
-    F32(f) => f.into_py_any(py).ok(),
-    F64(f) => f.into_py_any(py).ok(),
-    Char(c) => c.into_py_any(py).ok(),
-    Bool(b) => b.into_py_any(py).ok(),
-    Str(s) => s.into_py_any(py).ok(),
-    String(s) => s.into_py_any(py).ok(),
-    Symbol(s) => env.symbol_registry.get_symbol(*s).into_py_any(py).ok(),
-    SymbolString(s) => s.into_py_any(py).ok(),
-    DateTime(d) => utils::display_date_time(*d).to_string().into_py_any(py).ok(),
-    Duration(d) => d.to_string().into_py_any(py).ok(),
-    Entity(e) => e.into_py_any(py).ok(),
+  match val {
+    Symbol(s) => env.symbol_registry.get_symbol(*s).into_py_any(py),
+    SymbolString(s) => s.into_py_any(py),
+    DateTime(d) => utils::display_date_time(*d).to_string().into_py_any(py),
+    Duration(d) => d.to_string().into_py_any(py),
+    Entity(e) => e.into_py_any(py),
     EntityString(_) => panic!("[Internal Error] Entity string could not be turned to python value"),
     Tensor(t) => tensor_to_py_object(t.clone()),
     TensorValue(v) => {
       // The registry can call into Python while holding its lock.
-      tensor_to_py_object(py.detach(|| env.tensor_registry.eval(v))?)
+      let tensor = py
+        .detach(|| env.tensor_registry.eval(v))
+        .ok_or_else(|| PyTypeError::new_err("Cannot evaluate tensor"))?;
+      tensor_to_py_object(tensor)
     }
-  })
-}
-
-pub fn from_python_tuple(v: &Bound<'_, PyAny>, ty: &TupleType, env: &PythonRuntimeEnvironment) -> PyResult<Tuple> {
-  match ty {
-    TupleType::Tuple(ts) => {
-      let tup = v.cast::<PyTuple>()?;
-      if tup.len() == ts.len() {
-        let elems = ts
-          .iter()
-          .enumerate()
-          .map(|(i, t)| {
-            let e = tup.get_item(i)?;
-            from_python_tuple(&e, t, env)
-          })
-          .collect::<PyResult<Box<_>>>()?;
-        Ok(Tuple::Tuple(elems))
-      } else {
-        Err(PyIndexError::new_err("Invalid tuple size"))
-      }
-    }
-    TupleType::Value(t) => from_python_value(v, t, env).map(Tuple::Value),
+    _ => unreachable!("scalar values are converted by scallopy-interop"),
   }
 }
 
+pub fn from_python_tuple(v: &Bound<'_, PyAny>, ty: &TupleType, env: &PythonRuntimeEnvironment) -> PyResult<Tuple> {
+  scallopy_interop::from_python_tuple(v, ty, &|v, ty| from_python_extra(v, ty, env))
+}
+
 pub fn from_python_value(v: &Bound<'_, PyAny>, ty: &ValueType, env: &PythonRuntimeEnvironment) -> PyResult<Value> {
+  scallopy_interop::from_python_value(v, ty, &|v, ty| from_python_extra(v, ty, env))
+}
+
+fn from_python_extra(v: &Bound<'_, PyAny>, ty: &ValueType, env: &PythonRuntimeEnvironment) -> PyResult<Value> {
   match ty {
-    ValueType::I8 => Ok(Value::I8(v.extract()?)),
-    ValueType::I16 => Ok(Value::I16(v.extract()?)),
-    ValueType::I32 => Ok(Value::I32(v.extract()?)),
-    ValueType::I64 => Ok(Value::I64(v.extract()?)),
-    ValueType::I128 => Ok(Value::I128(v.extract()?)),
-    ValueType::ISize => Ok(Value::ISize(v.extract()?)),
-    ValueType::U8 => Ok(Value::U8(v.extract()?)),
-    ValueType::U16 => Ok(Value::U16(v.extract()?)),
-    ValueType::U32 => Ok(Value::U32(v.extract()?)),
-    ValueType::U64 => Ok(Value::U64(v.extract()?)),
-    ValueType::U128 => Ok(Value::U128(v.extract()?)),
-    ValueType::USize => Ok(Value::USize(v.extract()?)),
-    ValueType::F32 => Ok(Value::F32(v.extract()?)),
-    ValueType::F64 => Ok(Value::F64(v.extract()?)),
-    ValueType::Char => Ok(Value::Char(v.extract()?)),
-    ValueType::Bool => Ok(Value::Bool(v.extract()?)),
     ValueType::Str => panic!("[Internal Error] Cannot convert python value into static string"),
-    ValueType::String => Ok(Value::String(v.extract()?)),
     ValueType::Symbol => {
       let symbol_str: String = v.extract()?;
       let id = env.symbol_registry.register(symbol_str);
@@ -122,6 +74,7 @@ pub fn from_python_value(v: &Bound<'_, PyAny>, ty: &ValueType, env: &PythonRunti
       Ok(Value::EntityString(entity_string))
     }
     ValueType::Tensor => tensor_from_py_object(v, env),
+    _ => unreachable!("scalar types are converted by scallopy-interop"),
   }
 }
 
@@ -134,6 +87,9 @@ fn tensor_from_py_object(pyobj: &Bound<'_, PyAny>, env: &PythonRuntimeEnvironmen
   Ok(Value::TensorValue(symbol.into()))
 }
 
-fn tensor_to_py_object(tensor: DynamicExternalTensor) -> Option<Py<PyAny>> {
-  tensor.cast::<Tensor>().map(|t| t.to_py_value())
+fn tensor_to_py_object(tensor: DynamicExternalTensor) -> PyResult<Py<PyAny>> {
+  tensor
+    .cast::<Tensor>()
+    .map(|t| t.to_py_value())
+    .ok_or_else(|| PyTypeError::new_err("Cannot convert external tensor to Python"))
 }

@@ -102,13 +102,14 @@ name = "{}"
 crate-type = ["cdylib"]
 [dependencies]
 scallop-core = {{ path = "{}/core" }}
+scallopy-interop = {{ path = "{}/etc/scallopy-interop" }}
 rayon = "1.12"
 [dependencies.pyo3]
 version = "0.30.1"
 features = ["extension-module"]
 [workspace]
 "#,
-        program_name, program_name, scallop_source_dir,
+        program_name, program_name, scallop_source_dir, scallop_source_dir,
       )
       .as_bytes(),
     )
@@ -153,6 +154,7 @@ fn generate_pylib_code(
     use scallop_core::runtime::provenance::*;
     use scallop_core::runtime::database::extensional::*;
     use scallop_core::utils::*;
+    use scallopy_interop::{diff_exclusive_probability_tag, diff_probability_tag, to_py};
     use std::collections::*;
     use std::sync::Arc;
     mod scallop_module { #module #create_edb_code }
@@ -479,94 +481,22 @@ fn generate_helper_functions() -> TokenStream {
         .collect()
     }
 
-    fn to_py<T: for<'py> IntoPyObject<'py>>(value: T) -> PyResult<Py<PyAny>> {
-      Python::attach(|py| value.into_py_any(py))
-    }
-
     fn to_python_tuple(tup: &Tuple) -> PyResult<Py<PyAny>> {
-      match tup {
-        Tuple::Tuple(t) => {
-          let elems = t.iter().map(to_python_tuple).collect::<PyResult<Vec<_>>>()?;
-          Python::attach(|py| Ok(PyTuple::new(py, elems)?.into_any().unbind()))
+      Python::attach(|py| scallopy_interop::to_python_tuple(py, tup, &|py, value| {
+        match value {
+          Value::Entity(id) => id.into_py_any(py),
+          _ => Err(PyTypeError::new_err(format!("Unsupported compiled output value `{value}`"))),
         }
-        Tuple::Value(v) => {
-          use Value::*;
-          match v {
-            I8(i) => to_py(*i),
-            I16(i) => to_py(*i),
-            I32(i) => to_py(*i),
-            I64(i) => to_py(*i),
-            I128(i) => to_py(*i),
-            ISize(i) => to_py(*i),
-            U8(i) => to_py(*i),
-            U16(i) => to_py(*i),
-            U32(i) => to_py(*i),
-            U64(i) => to_py(*i),
-            U128(i) => to_py(*i),
-            USize(i) => to_py(*i),
-            F32(f) => to_py(*f),
-            F64(f) => to_py(*f),
-            Char(c) => to_py(*c),
-            Bool(b) => to_py(*b),
-            Str(s) => to_py(*s),
-            String(s) => to_py(s.as_str()),
-            Symbol(_) => unimplemented!(),
-            SymbolString(_) => unimplemented!(),
-            DateTime(_) => unimplemented!(),
-            Duration(_) => unimplemented!(),
-            Entity(i) => to_py(*i),
-            EntityString(_) => unimplemented!(),
-            Tensor(_) => unimplemented!(),
-            TensorValue(_) => unimplemented!(),
-          }
-        }
-      }
+      }))
     }
 
     fn from_python_tuple(v: &Bound<'_, PyAny>, ty: &TupleType) -> PyResult<Tuple> {
-      match ty {
-        TupleType::Tuple(ts) => {
-          let tup = v.cast::<PyTuple>()?;
-          if tup.len() == ts.len() {
-            let elems = ts
-              .iter()
-              .enumerate()
-              .map(|(i, t)| {
-                let e = tup.get_item(i)?;
-                from_python_tuple(&e, t)
-              })
-              .collect::<PyResult<Box<_>>>()?;
-            Ok(Tuple::Tuple(elems))
-          } else {
-            Err(PyIndexError::new_err("Invalid tuple size"))
-          }
+      scallopy_interop::from_python_tuple(v, ty, &|v, ty| {
+        match ty {
+          ValueType::Entity => v.extract().map(Value::Entity),
+          _ => Err(PyTypeError::new_err(format!("Unsupported compiled input type `{ty}`"))),
         }
-        TupleType::Value(t) => match t {
-          ValueType::I8 => Ok(Tuple::Value(Value::I8(v.extract()?))),
-          ValueType::I16 => Ok(Tuple::Value(Value::I16(v.extract()?))),
-          ValueType::I32 => Ok(Tuple::Value(Value::I32(v.extract()?))),
-          ValueType::I64 => Ok(Tuple::Value(Value::I64(v.extract()?))),
-          ValueType::I128 => Ok(Tuple::Value(Value::I128(v.extract()?))),
-          ValueType::ISize => Ok(Tuple::Value(Value::ISize(v.extract()?))),
-          ValueType::U8 => Ok(Tuple::Value(Value::U8(v.extract()?))),
-          ValueType::U16 => Ok(Tuple::Value(Value::U16(v.extract()?))),
-          ValueType::U32 => Ok(Tuple::Value(Value::U32(v.extract()?))),
-          ValueType::U64 => Ok(Tuple::Value(Value::U64(v.extract()?))),
-          ValueType::U128 => Ok(Tuple::Value(Value::U128(v.extract()?))),
-          ValueType::USize => Ok(Tuple::Value(Value::USize(v.extract()?))),
-          ValueType::F32 => Ok(Tuple::Value(Value::F32(v.extract()?))),
-          ValueType::F64 => Ok(Tuple::Value(Value::F64(v.extract()?))),
-          ValueType::Char => Ok(Tuple::Value(Value::Char(v.extract()?))),
-          ValueType::Bool => Ok(Tuple::Value(Value::Bool(v.extract()?))),
-          ValueType::Str => panic!("Static reference string cannot be used for Python binding"),
-          ValueType::String => Ok(Tuple::Value(Value::String(v.extract()?))),
-          ValueType::Symbol => unimplemented!(),
-          ValueType::DateTime => unimplemented!(),
-          ValueType::Duration => unimplemented!(),
-          ValueType::Entity => Ok(Tuple::Value(Value::Entity(v.extract()?))),
-          ValueType::Tensor => unimplemented!(),
-        },
-      }
+      })
     }
 
     #[derive(Clone)]
@@ -666,23 +596,6 @@ fn generate_helper_functions() -> TokenStream {
       }
     }
 
-    impl PythonProvenance for proofs::ProofsProvenance<ArcFamily> {
-      fn process_py_tag(disj_id: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let disj_id: usize = disj_id.extract()?;
-        Ok(Some(Exclusion::Exclusive(disj_id)))
-      }
-
-      fn to_output_py_tag(proofs: &Self::OutputTag) -> PyResult<Py<PyAny>> {
-        to_py(
-          proofs
-            .proofs
-            .iter()
-            .map(|proof| proof.facts.iter().collect::<Vec<_>>())
-            .collect::<Vec<_>>(),
-        )
-      }
-    }
-
     impl PythonProvenance for min_max_prob::MinMaxProbProvenance {
       fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
         tag.extract().map(Some).map_err(BindingError::from)
@@ -703,41 +616,9 @@ fn generate_helper_functions() -> TokenStream {
       }
     }
 
-    impl PythonProvenance for top_k_proofs::TopKProofsProvenance<ArcFamily> {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let (prob, disj_id): (Option<f64>, Option<usize>) = tag.extract().map_err(BindingError::from)?;
-        if let Some(prob) = prob {
-          Ok(Some((prob, disj_id).into()))
-        } else {
-          Ok(None)
-        }
-      }
-
-      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
-        to_py(tag)
-      }
-    }
-
-    impl PythonProvenance for top_bottom_k_clauses::TopBottomKClausesProvenance<ArcFamily> {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let (prob, disj_id): (Option<f64>, Option<usize>) = tag.extract().map_err(BindingError::from)?;
-        if let Some(prob) = prob {
-          Ok(Some((prob, disj_id).into()))
-        } else {
-          Ok(None)
-        }
-      }
-
-      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
-        to_py(tag)
-      }
-    }
-
     impl PythonProvenance for diff_min_max_prob::DiffMinMaxProbProvenance<ExtTag, ArcFamily> {
       fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let prob: f64 = tag.extract().map_err(BindingError::from)?;
-        let tag: ExtTag = tag.into();
-        Ok(Some((prob, Some(tag)).into()))
+        Ok(diff_probability_tag(tag, |tag| tag.extract())?)
       }
 
       fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
@@ -751,99 +632,9 @@ fn generate_helper_functions() -> TokenStream {
       }
     }
 
-    impl PythonProvenance for diff_add_mult_prob::DiffAddMultProbProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let prob: f64 = tag.extract().map_err(BindingError::from)?;
-        let tag: ExtTag = tag.into();
-        Ok(Some((prob, Some(tag)).into()))
-      }
-
-      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
-        to_py((tag.0, tag.1.clone()))
-      }
-
-      fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
-        Some(self.input_tags().into_vec())
-      }
-    }
-
-    impl PythonProvenance for diff_nand_mult_prob::DiffNandMultProbProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let prob: f64 = tag.extract().map_err(BindingError::from)?;
-        let tag: ExtTag = tag.into();
-        Ok(Some((prob, Some(tag)).into()))
-      }
-
-      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
-        to_py((tag.0, tag.1.clone()))
-      }
-
-      fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
-        Some(self.input_tags().into_vec())
-      }
-    }
-
-    impl PythonProvenance for diff_max_mult_prob::DiffMaxMultProbProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let prob: f64 = tag.extract().map_err(BindingError::from)?;
-        let tag: ExtTag = tag.into();
-        Ok(Some((prob, Some(tag)).into()))
-      }
-
-      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
-        to_py((tag.0, tag.1.clone()))
-      }
-
-      fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
-        Some(self.input_tags().into_vec())
-      }
-    }
-
-    impl PythonProvenance for diff_nand_min_prob::DiffNandMinProbProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let prob: f64 = tag.extract()?;
-        let tag: ExtTag = tag.into();
-        Ok(Some((prob, Some(tag)).into()))
-      }
-
-      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
-        to_py((tag.0, tag.1.clone()))
-      }
-
-      fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
-        Some(self.input_tags().into_vec())
-      }
-    }
-
-    impl PythonProvenance for diff_sample_k_proofs::DiffSampleKProofsProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
-        if let Some(prob) = tag_disj_id.0.extract()? {
-          let tag = ExtTag::from(&tag_disj_id.0);
-          Ok(Some((prob, tag, tag_disj_id.1).into()))
-        } else {
-          Ok(None)
-        }
-      }
-
-      fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
-        to_py((tag.0, tag.1.clone()))
-      }
-
-      fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
-        Some(self.input_tags().into_vec())
-      }
-    }
-
     impl PythonProvenance for diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, ArcFamily> {
       fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
-        if let Some(prob) = tag_disj_id.0.extract()? {
-          let tag = ExtTag::from(&tag_disj_id.0);
-          Ok(Some((prob, tag, tag_disj_id.1).into()))
-        } else {
-          Ok(None)
-        }
+        Ok(diff_exclusive_probability_tag(tag, |tag| tag.extract())?)
       }
 
       fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
@@ -857,13 +648,7 @@ fn generate_helper_functions() -> TokenStream {
 
     impl PythonProvenance for diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance<ExtTag, ArcFamily> {
       fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        let tag_disj_id: (Bound<'_, PyAny>, Option<usize>) = tag.extract()?;
-        if let Some(prob) = tag_disj_id.0.extract()? {
-          let tag = ExtTag::from(&tag_disj_id.0);
-          Ok(Some((prob, tag, tag_disj_id.1).into()))
-        } else {
-          Ok(None)
-        }
+        Ok(diff_exclusive_probability_tag(tag, |tag| tag.extract())?)
       }
 
       fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
