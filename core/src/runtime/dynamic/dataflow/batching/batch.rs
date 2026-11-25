@@ -12,8 +12,20 @@ pub trait Batch<'a, Prov: Provenance>: 'a + dyn_clone::DynClone {
     None
   }
 
+  /// Transfer an owned buffer of unread rows, leaving the batch exhausted.
+  /// Return `None` without advancing if there is no buffer to transfer.
+  fn take_materialized(&mut self) -> Option<DynamicElements<Prov>> {
+    None
+  }
+
   /// Whether this batch yields tuples in nondecreasing order.
   fn is_tuple_sorted(&self) -> bool {
+    false
+  }
+
+  /// Whether this batch already holds sorted rows and supports both seek methods
+  /// and `remaining_slice` without materializing another buffer.
+  fn is_materialized_and_seekable(&self) -> bool {
     false
   }
 
@@ -50,8 +62,16 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicBatch<'a, Prov> {
     self.0.remaining_slice()
   }
 
+  fn take_materialized(&mut self) -> Option<DynamicElements<Prov>> {
+    self.0.take_materialized()
+  }
+
   fn is_tuple_sorted(&self) -> bool {
     self.0.is_tuple_sorted()
+  }
+
+  fn is_materialized_and_seekable(&self) -> bool {
+    self.0.is_materialized_and_seekable()
   }
 
   fn step(&mut self, u: usize) {
@@ -140,6 +160,10 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for RefElementsBatch<'a, Prov> {
     self.sorted
   }
 
+  fn is_materialized_and_seekable(&self) -> bool {
+    self.sorted
+  }
+
   fn search_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
     self.seek(|tuple| tuple < until)
   }
@@ -184,6 +208,10 @@ impl<Prov: Provenance> ElementsBatch<Prov> {
 impl<'a, Prov: Provenance> Batch<'a, Prov> for ElementsBatch<Prov> {
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
     self.iter.next()
+  }
+
+  fn take_materialized(&mut self) -> Option<DynamicElements<Prov>> {
+    Some(std::mem::take(&mut self.iter).collect())
   }
 }
 

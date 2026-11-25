@@ -144,7 +144,7 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
     let mut result = HashMap::new();
     for (name, metadata) in &self.output_relations {
       let col = self.dynamic_relations.remove(name).unwrap().complete(ctx);
-      result.insert(name.clone(), metadata.from_vec(col.elements, ctx));
+      result.insert(name.clone(), metadata.store_sorted(col, ctx));
     }
     result
   }

@@ -65,4 +65,15 @@ impl StorageMetadata {
       Self::IndexedVec => DynamicCollection::IndexedVec(DynamicIndexedVecCollection::from_vec(vec, ctx)),
     }
   }
+
+  pub(crate) fn store_sorted<Prov: Provenance>(
+    &self,
+    collection: DynamicSortedCollection<Prov>,
+    ctx: &Prov,
+  ) -> DynamicCollection<Prov> {
+    match self {
+      Self::Sorted => collection.into(),
+      Self::IndexedVec => DynamicIndexedVecCollection::from_vec(collection.elements, ctx).into(),
+    }
+  }
 }
