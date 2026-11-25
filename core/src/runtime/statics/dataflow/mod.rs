@@ -14,7 +14,6 @@ mod relation;
 mod sorted;
 mod union;
 mod unit;
-mod utils;
 mod vec;
 
 pub use aggregation::*;

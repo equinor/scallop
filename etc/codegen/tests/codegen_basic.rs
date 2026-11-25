@@ -25,6 +25,29 @@ fn check_parity<T, P>(
 }
 
 #[test]
+fn codegen_joins_advance_past_duplicate_key_groups() {
+  mod program {
+    compiled_fixture! {r#"
+      rel left = {(0, 7), (2, 1), (2, 2), (4, 8), (6, 3)}
+      rel right = {(1, 0), (2, 10), (2, 11), (5, 0), (6, 12)}
+      rel excluded = {2, 5}
+      rel joined(k, l, r) = left(k, l), right(k, r)
+      rel kept(k, l) = left(k, l), not excluded(k)
+    "#}
+  }
+  let mut prov = boolean::BooleanProvenance;
+  let expected = scallop_core::integrate::interpret_string_with_ctx(program::SOURCE.into(), prov.clone()).unwrap();
+  let actual = program::run(&mut prov);
+  check_parity(&expected, "joined", &actual.joined);
+  check_parity(&expected, "kept", &actual.kept);
+  expect_static_output_collection(
+    &actual.joined,
+    vec![(2, 1, 10), (2, 1, 11), (2, 2, 10), (2, 2, 11), (6, 3, 12)],
+  );
+  expect_static_output_collection(&actual.kept, vec![(0, 7), (4, 8), (6, 3)]);
+}
+
+#[test]
 fn codegen_builtin_expressions_and_grouped_aggregates_match_interpreter() {
   mod program {
     compiled_fixture! {r#"
