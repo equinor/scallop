@@ -1,5 +1,6 @@
 use scallop_core::common::expr::*;
 use scallop_core::common::foreign_aggregate::*;
+use scallop_core::common::tuple::Tuple;
 use scallop_core::common::value_type::*;
 use scallop_core::runtime::dynamic::dataflow::*;
 use scallop_core::runtime::dynamic::*;
@@ -161,4 +162,33 @@ fn test_dynamic_group_count_max_1() {
   }
 
   expect_collection(&max_count_color.complete(&ctx).into(), vec![("green", 3usize)]);
+}
+
+#[test]
+fn test_implicit_group_keeps_consecutive_groups_and_their_tags() {
+  let ctx = natural::NaturalProvenance;
+  let rt = RuntimeEnvironment::new_std();
+  let rows = vec![
+    DynamicElement::new((1i32, "first"), 2),
+    DynamicElement::new((1i32, "second"), 3),
+    DynamicElement::new((2i32, "third"), 5),
+    DynamicElement::new((1i32, "fourth"), 7),
+  ];
+  let empty = Vec::new();
+  let group = |rows| {
+    let agg = rt
+      .aggregate_registry
+      .instantiate_aggregator("count", AggregateInfo::default())
+      .unwrap();
+    DynamicAggregationImplicitGroupDataflow::new(agg, DynamicDataflow::vec(rows), &ctx, &rt)
+  };
+  let expected = [((1i32, 2usize), 6), ((2, 1), 5), ((1, 1), 7)];
+  let mut batches = group(&rows).iter_recent();
+  assert!(batches
+    .next()
+    .unwrap()
+    .map(|row| (row.tuple, row.tag))
+    .eq(expected.map(|(tuple, tag)| (Tuple::from(tuple), tag))));
+  assert!(batches.next().is_none());
+  assert!(group(&empty).iter_recent().next().is_none());
 }

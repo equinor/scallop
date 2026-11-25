@@ -1,8 +1,11 @@
+use std::cell::Cell;
+
 use scallop_core::common::expr::*;
 use scallop_core::common::foreign_aggregate::*;
 use scallop_core::common::tuple::Tuple;
 use scallop_core::common::value_type::*;
 use scallop_core::compiler::ram::*;
+use scallop_core::runtime::dynamic::dataflow::batching::{Batch, DynamicBatch, DynamicBatches};
 use scallop_core::runtime::dynamic::dataflow::{Dataflow as _, DynamicAggregationJoinGroupDataflow, DynamicDataflow};
 use scallop_core::runtime::dynamic::*;
 use scallop_core::runtime::env::*;
@@ -112,4 +115,71 @@ fn test_join_group_aggregate_preserves_matching_and_empty_groups() {
     .map(|row| (row.tuple, row.tag))
     .eq(expected.map(|(tuple, tag)| (Tuple::from(tuple), tag))));
   assert!(batches.next().is_none());
+}
+
+#[test]
+fn test_join_group_seeks_across_large_gaps_without_pulling_skipped_rows() {
+  type Prov = natural::NaturalProvenance;
+
+  #[derive(Clone)]
+  struct CountedSeeks<'a>(DynamicBatch<'a, Prov>, &'a Cell<usize>);
+
+  impl<'a> Batch<'a, Prov> for CountedSeeks<'a> {
+    fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
+      self.1.set(self.1.get() + 1);
+      self.0.next_elem()
+    }
+
+    fn is_materialized_and_seekable(&self) -> bool {
+      self.0.is_materialized_and_seekable()
+    }
+
+    fn remaining_slice(&self) -> Option<&[DynamicElement<Prov>]> {
+      self.0.remaining_slice()
+    }
+
+    fn search_until(&mut self, bound: &Tuple) -> Option<DynamicElement<Prov>> {
+      self.0.search_until(bound)
+    }
+
+    fn search_elem_0_until(&mut self, bound: &Tuple) -> Option<DynamicElement<Prov>> {
+      self.0.search_elem_0_until(bound)
+    }
+  }
+
+  impl<'a> scallop_core::runtime::dynamic::dataflow::Dataflow<'a, Prov> for CountedSeeks<'a> {
+    fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
+      DynamicBatches::single(self.clone())
+    }
+  }
+
+  let ctx = natural::NaturalProvenance;
+  let rt = RuntimeEnvironment::default();
+  let agg = rt
+    .aggregate_registry
+    .instantiate_aggregator("count", AggregateInfo::default())
+    .unwrap();
+  let input =
+    DynamicSortedCollection::from_vec_unchecked((0..1024i32).map(|key| DynamicElement::new((key, 0i32), 3)).collect());
+  let keys = vec![
+    DynamicElement::new((511i32, "a"), 2),
+    DynamicElement::new((1023i32, "b"), 5),
+  ];
+  let pulls = Cell::new(0);
+  let batch = DynamicDataflow::dynamic_recent_sorted_collection(&input)
+    .iter_recent()
+    .next()
+    .unwrap();
+  let group = DynamicAggregationJoinGroupDataflow::new(
+    agg,
+    DynamicDataflow::vec(&keys),
+    DynamicDataflow::new(CountedSeeks(batch, &pulls)),
+    &ctx,
+    &rt,
+  );
+  assert!(group.iter_recent().flatten().map(|row| (row.tuple, row.tag)).eq([
+    (Tuple::from((511i32, "a", 1usize)), 6),
+    (Tuple::from((1023i32, "b", 1usize)), 15),
+  ]));
+  assert_eq!(pulls.get(), 2);
 }

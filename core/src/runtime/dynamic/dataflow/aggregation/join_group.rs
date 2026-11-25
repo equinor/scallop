@@ -44,20 +44,35 @@ impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicAggregationJoinGroupDat
       return DynamicBatches::empty();
     };
 
-    let Some(main) = self.d2.iter_recent().next_batch() else {
+    let Some(mut main) = self.d2.iter_recent().next_batch() else {
       return DynamicBatches::empty();
     };
 
     let mut group_by = group_by.peekable();
-    let mut main = main.peekable();
+    let seekable = main.is_materialized_and_seekable();
+    let mut current: Option<DynamicElement<Prov>> = None;
     let mut result = Vec::new();
     while let Some(first) = group_by.next() {
       let key = &first.tuple[0];
-      while main.next_if(|row| &row.tuple[0] < key).is_some() {}
+      if current.as_ref().is_none_or(|row| &row.tuple[0] < key) {
+        current = if seekable {
+          main.search_elem_0_until(key)
+        } else {
+          main.find(|row| &row.tuple[0] >= key)
+        };
+      }
 
-      let inputs: DynamicElements<Prov> = std::iter::from_fn(|| main.next_if(|row| &row.tuple[0] == key))
-        .map(|row| DynamicElement::new(row.tuple.drain(1).expect("missing aggregate input payload"), row.tag))
-        .collect();
+      let inputs: DynamicElements<Prov> = std::iter::from_fn(|| {
+        let row = current.take().or_else(|| main.next_elem())?;
+        if &row.tuple[0] == key {
+          Some(row)
+        } else {
+          current = Some(row);
+          None
+        }
+      })
+      .map(|row| DynamicElement::new(row.tuple.drain(1).expect("missing aggregate input payload"), row.tag))
+      .collect();
       let matched = !inputs.is_empty();
       let aggregates = self.agg.aggregate(self.ctx, self.runtime, inputs);
       let mut append = |row: &DynamicElement<Prov>| {
