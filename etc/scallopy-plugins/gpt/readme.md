@@ -18,6 +18,8 @@ As such, you can edit in-source and have the changes reflected in your execution
 
 ## Usage
 
+The default chat model is `gpt-5.4-mini`. Override it with `--openai-gpt-model`.
+
 The Scallop GPT plugin provides the following constructs:
 
 - (Foreign Attribute) `@gpt`
@@ -29,6 +31,9 @@ The Scallop GPT plugin provides the following constructs:
 ### Foreign Attribute `@gpt`
 
 ### Foreign Attribute `@gpt_extract_info`
+
+The default model and its snapshots use strict JSON schemas based on the
+relation's output fields. Other explicitly selected models keep JSON mode.
 
 ### Foreign Attribute `@gpt_encoder`
 

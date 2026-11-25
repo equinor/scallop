@@ -6,6 +6,13 @@ import scallopy
 import scallop_gemini
 from scallop_gemini._response import response_text
 
+
+def completion(text):
+  return types.GenerateContentResponse(
+    candidates=[types.Candidate(content=types.Content(parts=[types.Part(text=text)]))],
+  )
+
+
 class TestBasics(unittest.TestCase):
   def test_empty_responses_report_what_is_missing(self):
     for response, error in (
@@ -25,24 +32,52 @@ class TestBasics(unittest.TestCase):
          patch("google.genai.Client") as create_client:
       plugin_registry.configure({"gemini_model": "gemini-test", "gemini_temperature": 0.25})
     client = create_client.return_value
-    client.models.generate_content.return_value = types.GenerateContentResponse(
-      candidates=[types.Candidate(content=types.Content(parts=[types.Part(text="test answer")]))],
-    )
+    client.models.generate_content.return_value = completion("test answer")
     plugin_registry.load_into_ctx(ctx)
 
     ctx.add_program("""
-      rel questions = {(1, "test question")}
+      rel questions = {(1, "test question"), (2, "test question")}
       rel answer(id, $gemini(x)) = questions(id, x)
       query answer
     """)
     ctx.run()
 
-    self.assertEqual(list(ctx.relation("answer")), [(1, "test answer")])
+    self.assertCountEqual(ctx.relation("answer"), [(1, "test answer"), (2, "test answer")])
     create_client.assert_called_once_with(api_key="test-key")
     client.models.generate_content.assert_called_once()
     request = client.models.generate_content.call_args.kwargs
     self.assertEqual(request["model"], "gemini-test")
     self.assertEqual(request["config"].temperature, 0.25)
+
+  def test_extract_info_only_structures_the_final_response(self):
+    ctx = scallopy.Context()
+    plugin = scallop_gemini.ScallopGeminiPlugin()
+    with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}), \
+         patch("google.genai.Client") as create_client:
+      plugin.configure()
+    generate = create_client.return_value.models.generate_content
+    generate.side_effect = [
+      completion("test reasoning"),
+      completion('{"rows": [{"answer": "test answer", "count": 2}]}'),
+    ]
+    plugin.load_into_ctx(ctx)
+
+    ctx.add_program("""
+      @gemini_extract_info(prompts=["Extract the answer and count"], cot=[true])
+      type extract(bound question: String, answer: String, count: i32)
+      rel questions = {(1, "test question"), (2, "test question")}
+      rel answers(id, a, n) = questions(id, q), extract(q, a, n)
+      query answers
+    """)
+    ctx.run()
+
+    self.assertCountEqual(ctx.relation("answers"), [(1, "test answer", 2), (2, "test answer", 2)])
+    reasoning, final = [request.kwargs["config"] for request in generate.call_args_list]
+    self.assertIsNone(reasoning.response_json_schema)
+    self.assertEqual(final.response_mime_type, "application/json")
+    fields = final.response_json_schema["properties"]["rows"]["items"]
+    self.assertEqual(fields["properties"], {"answer": {"type": "string"}, "count": {"type": "integer"}})
+    self.assertEqual(fields["required"], ["answer", "count"])
 
   @unittest.skipUnless(scallopy.torch_tensor_enabled() and scallopy.torch_importer.has_pytorch(), "requires Scallopy tensor support and PyTorch")
   def test_encoder_uses_configured_client_and_attribute_model(self):

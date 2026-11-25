@@ -1,17 +1,19 @@
+from functools import cache
 from typing import Callable, List, Optional, Tuple
 import re
 import json
 
 from openai.types.chat import ChatCompletionAssistantMessageParam, ChatCompletionMessageParam, ChatCompletionUserMessageParam
+from openai.types.shared_params import ResponseFormatJSONObject, ResponseFormatJSONSchema
 import scallopy
+from scallopy.utils.relation_schema import relation_rows_schema
 
-from .plugin import ScallopGPTPlugin, message_text
+from .plugin import DEFAULT_GPT_MODEL, ScallopGPTPlugin, message_text
 
 FA_NAME = "gpt_extract_info"
 ERR_HEAD = f"[@{FA_NAME}]"
 
 def get_gpt_extract_info(plugin: ScallopGPTPlugin):
-  _RESPONSE_STORAGE = {}
   SYS_PROMPT = "You are a helpful assistant and diligent programmer. Please answer everything in the JSON format. "
   COT_PROMPT = "Please give your reasoning step by step before giving the JSON output."
 
@@ -109,19 +111,15 @@ def get_gpt_extract_info(plugin: ScallopGPTPlugin):
     def format_input(args):
       return ''.join([f"{arg_name}: {arg_value}\n" for (arg_name, arg_value) in zip(input_arg_names, args)])
 
+    @cache
     def invoke_gpt(*args):
       # Get the model to use
-      if model is None: local_model = plugin.model()
-      else: local_model = model
+      local_model = plugin.model() if model is None else model
+      structured = local_model == DEFAULT_GPT_MODEL or local_model.startswith(f"{DEFAULT_GPT_MODEL}-")
 
       # Turn cot on or off
       if cot is None: cot_arr = [False] * len(relation_type_infos)
       else: cot_arr = cot
-
-      # Check memoization
-      memoization_key = tuple(args)
-      if memoization_key in _RESPONSE_STORAGE:
-        return _RESPONSE_STORAGE[memoization_key]
 
       # Check whether we can call GPT
       plugin.assert_can_request()
@@ -132,7 +130,7 @@ def get_gpt_extract_info(plugin: ScallopGPTPlugin):
       result = {}
 
       # Debug
-      if debug: print(f"Processing question: {memoization_key}")
+      if debug: print(f"Processing question: {args}")
 
       # Current messages
       current_messages: list[ChatCompletionMessageParam] = [
@@ -141,20 +139,19 @@ def get_gpt_extract_info(plugin: ScallopGPTPlugin):
 
       # Add examples
       for (bound, output) in examples:
-        for (idx, ((_, arg_names, _, _, _), prompt, output_arg_values)) in enumerate(zip(relation_type_infos, prompts, output)):
+        for (idx, ((_, arg_names, arg_types, _, num_bounded), prompt, output_arg_values)) in enumerate(zip(relation_type_infos, prompts, output)):
           call_header = format_input(bound) if idx == 0 else ""
           current_messages.append({"role": "user", "content": f"{call_header}{prompt}"})
-          relation = []
-          for arg_values in output_arg_values:
-            output_json = {}
-            for (arg_name, arg_value) in zip(arg_names[len(args):], arg_values):
-              output_json[arg_name] = arg_value
-            relation.append(output_json)
-          current_messages.append({"role": "assistant", "content": json.dumps(relation)})
+          relation = [
+            {name: ty.parse_value(value) if structured else value
+             for name, ty, value in zip(arg_names[num_bounded:], arg_types[num_bounded:], values)}
+            for values in output_arg_values
+          ]
+          current_messages.append({"role": "assistant", "content": json.dumps({"rows": relation} if structured else relation)})
 
       # Make the subsequent calls to GPT
       for (idx, (relation_type_info, prompt)) in enumerate(zip(relation_type_infos, prompts)):
-        (name, arg_names, _, _, num_bounded) = relation_type_info
+        (name, arg_names, arg_types, _, num_bounded) = relation_type_info
         call_header = format_input(args) if idx == 0 else ""
         cot_response_content = ""
         if cot_arr[idx]:
@@ -167,20 +164,31 @@ def get_gpt_extract_info(plugin: ScallopGPTPlugin):
         current_message: ChatCompletionUserMessageParam = {"role": "user", "content": f"{call_header}{cot_response_content} {prompt}"}
         if debug: print(f"> Sending request: {current_message}")
         current_messages.append(current_message)
+        response_format: ResponseFormatJSONObject | ResponseFormatJSONSchema = {"type": "json_object"}
+        if structured:
+          response_format = {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "scallop_rows",
+              "strict": True,
+              "schema": relation_rows_schema(arg_names[num_bounded:], arg_types[num_bounded:]),
+            },
+          }
         curr_response = client.chat.completions.create(
           model=local_model,
           messages=current_messages,
           temperature=plugin.temperature(),
-          response_format={"type": "json_object"})
+          response_format=response_format)
         message = curr_response.choices[0].message
+        if structured and message.refusal:
+          raise ValueError(f"{ERR_HEAD} OpenAI refused the request: {message.refusal}")
         curr_response_message: ChatCompletionAssistantMessageParam = {"role": message.role, "content": message_text(message)}
         if debug: print(f"> Obtained response: {curr_response_message}")
         current_messages.append(curr_response_message)
-        curr_response_json = parse_response_json(curr_response_message, arg_names[num_bounded:])
-        result[name] = curr_response_json
-
-      # Do the memoization and return
-      _RESPONSE_STORAGE[memoization_key] = result
+        result[name] = (
+          json.loads(curr_response_message["content"])["rows"] if structured
+          else parse_response_json(curr_response_message, arg_names[num_bounded:])
+        )
       return result
 
     return invoke_gpt
