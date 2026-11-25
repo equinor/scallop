@@ -28,7 +28,7 @@ impl FrontCompileErrorType {
   }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FrontCompileError {
   pub sources: Sources,
   pub errors: Vec<Box<dyn FrontCompileErrorTrait>>,
@@ -46,15 +46,6 @@ impl std::fmt::Display for FrontCompileError {
       ))?;
     }
     Ok(())
-  }
-}
-
-impl Clone for FrontCompileError {
-  fn clone(&self) -> Self {
-    Self {
-      sources: self.sources.clone(),
-      errors: self.errors.iter().map(|e| dyn_clone::clone_box(&**e)).collect(),
-    }
   }
 }
 
@@ -198,6 +189,8 @@ pub trait FrontCompileErrorTrait: DynClone + std::fmt::Debug {
   /// Report the error showing source into string
   fn report(&self, src: &Sources) -> String;
 }
+
+dyn_clone::clone_trait_object!(FrontCompileErrorTrait);
 
 impl FrontCompileErrorTrait for ValueParseError {
   fn error_type(&self) -> FrontCompileErrorType {
