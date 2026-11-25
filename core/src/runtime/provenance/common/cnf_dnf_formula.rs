@@ -140,19 +140,19 @@ impl CNFDNFFormula {
 }
 
 impl AsBooleanFormula for CNFDNFFormula {
-  fn as_boolean_formula(&self) -> sdd::BooleanFormula {
+  fn as_boolean_formula(&self) -> BooleanFormula {
     match &self.kind {
-      FormulaKind::CNF => sdd::bf_conjunction(
+      FormulaKind::CNF => BooleanFormula::conjunction(
         self
           .clauses
           .iter()
-          .map(|c| sdd::bf_disjunction(c.literals.iter().map(|l| l.as_boolean_formula()))),
+          .map(|c| BooleanFormula::disjunction(c.literals.iter().map(|l| l.as_boolean_formula()))),
       ),
-      FormulaKind::DNF => sdd::bf_disjunction(
+      FormulaKind::DNF => BooleanFormula::disjunction(
         self
           .clauses
           .iter()
-          .map(|c| sdd::bf_conjunction(c.literals.iter().map(|l| l.as_boolean_formula()))),
+          .map(|c| BooleanFormula::conjunction(c.literals.iter().map(|l| l.as_boolean_formula()))),
       ),
     }
   }

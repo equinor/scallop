@@ -1,3 +1,5 @@
+use super::Semiring;
+
 #[derive(Clone)]
 pub struct RealSemiring;
 
@@ -13,7 +15,7 @@ impl Default for RealSemiring {
   }
 }
 
-impl sdd::Semiring for RealSemiring {
+impl Semiring for RealSemiring {
   type Element = f64;
 
   fn zero(&self) -> Self::Element {

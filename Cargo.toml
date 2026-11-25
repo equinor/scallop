@@ -15,7 +15,6 @@ members = [
 
   # Additional dependencies
   "lib/astnode-derive",
-  "lib/sdd",
 
   # Laboratory
   # "lab/rsat",

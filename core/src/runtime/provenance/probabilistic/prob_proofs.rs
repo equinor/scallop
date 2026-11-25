@@ -20,8 +20,8 @@ impl ProbProof {
 }
 
 impl AsBooleanFormula for ProbProof {
-  fn as_boolean_formula(&self) -> sdd::BooleanFormula {
-    sdd::bf_conjunction(self.facts.iter().map(|f| sdd::bf_pos(*f)))
+  fn as_boolean_formula(&self) -> BooleanFormula {
+    BooleanFormula::conjunction(self.facts.iter().map(|f| BooleanFormula::Literal(Literal::Pos(*f))))
   }
 }
 
@@ -79,8 +79,8 @@ impl ProbProofs {
 }
 
 impl AsBooleanFormula for ProbProofs {
-  fn as_boolean_formula(&self) -> sdd::BooleanFormula {
-    sdd::bf_disjunction(self.proofs.iter().map(|p| p.as_boolean_formula()))
+  fn as_boolean_formula(&self) -> BooleanFormula {
+    BooleanFormula::disjunction(self.proofs.iter().map(|p| p.as_boolean_formula()))
   }
 }
 

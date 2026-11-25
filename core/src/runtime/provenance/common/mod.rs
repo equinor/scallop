@@ -1,4 +1,5 @@
 mod as_boolean_formula;
+mod boolean_formula;
 mod chosen_elements;
 mod clause;
 mod cnf_dnf_context;
@@ -18,6 +19,7 @@ mod real;
 mod top_k_aggregation;
 
 pub use as_boolean_formula::*;
+pub use boolean_formula::{BooleanFormula, Semiring};
 pub use chosen_elements::*;
 pub use clause::*;
 pub use cnf_dnf_context::*;
