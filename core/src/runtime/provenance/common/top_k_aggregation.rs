@@ -1,10 +1,10 @@
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 
-use crate::utils::FloatKey;
+use ordered_float::OrderedFloat;
 
 pub(super) struct ByPriority<T> {
-  priority: Reverse<FloatKey<f64>>,
+  priority: Reverse<OrderedFloat<f64>>,
   pub(super) value: T,
 }
 
@@ -12,7 +12,7 @@ impl<T> ByPriority<T> {
   pub(super) fn max(weight: f64, value: T) -> Self {
     // Negate before reversing the key so NaN has the lowest priority, not the highest.
     Self {
-      priority: Reverse(FloatKey(-weight)),
+      priority: Reverse(OrderedFloat(-weight)),
       value,
     }
   }

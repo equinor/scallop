@@ -1,7 +1,7 @@
-use itertools::Itertools;
 use std::collections::*;
 
-use crate::utils::FloatKey;
+use itertools::Itertools;
+use ordered_float::OrderedFloat;
 
 use super::top_k_aggregation::ByPriority;
 use super::{CNFDNFFormula, Clause, FormulaKind, Literal};
@@ -59,7 +59,7 @@ pub trait CNFDNFContextTrait {
           result_clauses.push(clause_i.clone());
           incr_and_update(&mut i, &mut prob_i, f1);
           incr_and_update(&mut j, &mut prob_j, f2);
-        } else if FloatKey(-prob_i) < FloatKey(-prob_j) {
+        } else if OrderedFloat(-prob_i) < OrderedFloat(-prob_j) {
           result_clauses.push(clause_i.clone());
           incr_and_update(&mut i, &mut prob_i, f1);
         } else {
@@ -111,7 +111,7 @@ pub trait CNFDNFContextTrait {
           result_clauses.push(clause_i.clone());
           incr_and_update(&mut i, &mut prob_i, f1);
           incr_and_update(&mut j, &mut prob_j, f2);
-        } else if FloatKey(prob_i) < FloatKey(prob_j) {
+        } else if OrderedFloat(prob_i) < OrderedFloat(prob_j) {
           result_clauses.push(clause_i.clone());
           incr_and_update(&mut i, &mut prob_i, f1);
         } else {
@@ -272,7 +272,7 @@ pub trait CNFDNFContextTrait {
         clause
           .literals
           .iter()
-          .sorted_by_cached_key(|x| FloatKey(-self.literal_probability(x)))
+          .sorted_by_cached_key(|x| OrderedFloat(-self.literal_probability(x)))
           .collect::<Vec<_>>()
       })
       .collect::<Vec<_>>();
@@ -373,7 +373,7 @@ pub trait CNFDNFContextTrait {
         clause
           .literals
           .iter()
-          .sorted_by_cached_key(|x| FloatKey(self.literal_probability(x)))
+          .sorted_by_cached_key(|x| OrderedFloat(self.literal_probability(x)))
           .collect::<Vec<_>>()
       })
       .collect::<Vec<_>>();
