@@ -11,4 +11,3 @@ test:
 
 clean:
 	rm -f scallopy/scallopy.cpython*
-	rm -rf tests/*.sclcmpl

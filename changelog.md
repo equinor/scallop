@@ -1,6 +1,7 @@
 # Unreleased
 
-- Compiler diagnostics now show source spans in Rust-style snippets, including syntax errors from REPL and in-memory input. REPL snippets use a `REPL:<id>` header, and Rust macro snippets retain their original line numbers.
+- Scallop now executes programs only through the RAM interpreter. The `sclc` executable, `scallop!` Rust macro, and Scallopy's optional native JIT have been removed. Python callers should omit `jit=True`, `jit_name`, and `recompile` (`jit_recompile` on `ScallopForwardFunction`). The Rust extension, `ctx.compile()`, and parallel batch execution remain available.
+- Compiler diagnostics now show source spans in Rust-style snippets, including syntax errors from REPL and in-memory input. REPL snippets use a `REPL:<id>` header.
 
 - Weighted model counting now uses RSDD. Probabilities and gradients can differ in their last floating-point digits because the diagram changes the order of arithmetic.
 - `DateTime` text uses UTC ISO 8601, e.g. `2021-01-01T00:00:01.1Z`, including in `$format` and Scallopy results. The old `2021-01-01 00:00:01.100 UTC` spelling still parses.
@@ -19,7 +20,7 @@ Rust API migration:
 - Construct reduce query-plan nodes with `HighRamNode::reduce`. The `HighRamNode::Reduce` variant now contains a `Box<Reduce>`; front-end AST constructors and accessors are unchanged except for the `Reduce` constructor noted above.
 - The unimplemented dense-matrix Rust storage variant has been removed. Scallop still supports `sorted` and `indexed_vec`.
 - Use `Timestamp`'s `Display` implementation in place of `utils::display_date_time`.
-- The legacy typed aggregation Rust API has been removed: `StaticIteration::{aggregate, aggregate_implicit_group, aggregate_join_group}`, the typed aggregator and aggregation dataflow types, and their helper exports (`SumType`, `ProdType`, `BaseType`, `TupleLength`, `FlattenTuple`, `static_argmin`, and `static_argmax`). For hand-written typed dataflows, use the operators in `runtime::dynamic::dataflow::aggregation` with `runtime::statics::dataflow::{to_dynamic, from_dynamic}`, as the Rust emitter does. Scallop programs and the dynamic foreign aggregate API are unchanged.
+- The typed dataflow runtime (`runtime::statics`) has been removed along with code generation. Use `runtime::dynamic` for runtime operators, including aggregation. Scallop programs and the dynamic foreign aggregate API are unchanged.
 
 # v0.2.5, Sep 14, 2024
 

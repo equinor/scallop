@@ -68,7 +68,6 @@
 - [Scallop CLI](toolchain/cli.md)
 - [Scallop Interpreter](toolchain/scli.md)
 - [Scallop REPL](toolchain/sclrepl.md)
-- [Scallop Compiler](toolchain/sclc.md)
 
 # For Developers
 

@@ -1,7 +1,7 @@
 use scallop_core::compiler::front::ast::*;
 use scallop_core::compiler::front::parser::*;
 use scallop_core::compiler::front::{
-  FileSource, FrontContext, LocationSpanAnnotator, ReplSource, RustMacroSource, Sources, StringSource,
+  FileSource, FrontContext, LocationSpanAnnotator, ReplSource, Sources, StringSource,
 };
 
 #[test]
@@ -14,11 +14,6 @@ fn diagnostic_snippets_preserve_source_origins_and_utf8_columns() {
     line_offset_len: vec![(0, 4), (5, text.len() - 5)],
   });
   let repl = sources.add(ReplSource::new(42, text.into()));
-  let rust_macro = sources.add(RustMacroSource {
-    first_line_num: 40,
-    source_lines: text.lines().map(str::to_owned).collect(),
-    source: text.into(),
-  });
   let mut location = NodeLocation::from_span("skip\n\u{03bb}".len(), "skip\n\u{03bb}\u{754c}".len());
   location.source_id = file;
   let report = location.report(&sources);
@@ -28,10 +23,6 @@ fn diagnostic_snippets_preserve_source_origins_and_utf8_columns() {
   location.source_id = repl;
   let report = location.report_warning(&sources);
   assert!(report.contains("REPL:42:2:2"), "{report}");
-
-  location.source_id = rust_macro;
-  let report = location.report(&sources);
-  assert!(report.contains("41 |"), "{report}");
 }
 
 #[test]
@@ -53,10 +44,10 @@ fn source_offset_lookup_preserves_byte_columns_and_duplicate_starts() {
   assert_eq!(annotator.row_col_of_offset(&2), CharLocation { row: 0, col: 2 });
   assert_eq!(annotator.row_col_of_offset(&4), CharLocation { row: 1, col: 0 });
 
-  let macro_offsets = LocationSpanAnnotator {
+  let duplicate_offsets = LocationSpanAnnotator {
     row_offset_length: vec![(0, 0), (0, 0), (0, 3), (4, 6)],
   };
-  assert_eq!(macro_offsets.row_col_of_offset(&0), CharLocation { row: 2, col: 0 });
+  assert_eq!(duplicate_offsets.row_col_of_offset(&0), CharLocation { row: 2, col: 0 });
   let empty = LocationSpanAnnotator {
     row_offset_length: vec![],
   };

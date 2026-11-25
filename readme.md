@@ -62,12 +62,11 @@ $ git clone https://github.com/scallop-lang/scallop.git
 $ cd scallop
 ```
 
-The following three binaries are available. Scroll down for more ways
+The following two binaries are available. Scroll down for more ways
 to use Scallop!
 
 ``` bash
 $ make install-scli # Scallop Interpreter
-$ make install-sclc # Scallop Compiler
 $ make install-sclrepl # Scallop REPL
 ```
 

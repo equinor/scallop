@@ -359,6 +359,12 @@ class ScallopContext:
     :param output_mapping: the output mapping for vectorization
     If not specified (i.e. None), will run until fixpoint
     """
+    if jit or jit_name or recompile:
+      raise ValueError(
+        "Native JIT was removed. Remove jit, jit_name, and recompile (jit_recompile on "
+        "ScallopForwardFunction) to use the RAM interpreter."
+      )
+
     # Check PyTorch support
     if not torch_importer.has_pytorch():
       raise Exception("`forward_function` cannot be called when there is no PyTorch")
@@ -377,10 +383,8 @@ class ScallopContext:
       output_mappings,
       dispatch,
       debug_provenance,
-      jit,
-      jit_name,
-      recompile,
-      sparse_jacobian,)
+      sparse_jacobian=sparse_jacobian,
+    )
 
   def _refresh_training_eval_state(self, training):
     if self._train_k is not None or self._test_k is not None:

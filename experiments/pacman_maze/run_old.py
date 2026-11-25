@@ -86,7 +86,7 @@ class PolicyNet(nn.Module):
     self.ctx.set_input_mapping("curr_position", self.cells, retain_k=3)
     self.ctx.set_input_mapping("goal_position", self.cells, retain_k=3)
     self.ctx.set_input_mapping("is_enemy", self.cells, retain_k=7)
-    self.predict_action = self.ctx.forward_function("action_score", list(range(4)), jit=args.jit, recompile=args.recompile)
+    self.predict_action = self.ctx.forward_function("action_score", list(range(4)))
 
   def forward(self, x):
     curr_position, goal_position, is_enemy = self.extract_entity(x)
@@ -296,8 +296,6 @@ if __name__ == "__main__":
   parser.add_argument("--seed", type=int, default=1357)
   parser.add_argument("--cuda", action="store_true")
   parser.add_argument("--gpu", type=int, default=0)
-  parser.add_argument("--jit", action="store_true")
-  parser.add_argument("--recompile", action="store_true")
   parser.add_argument("--attenuation", type=float, default=0.95)
   parser.add_argument("--show-run", action="store_true")
   parser.add_argument("--show-train-run", action="store_true")

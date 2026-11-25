@@ -111,3 +111,20 @@ fn storage_attribute_keeps_supported_modes() {
     error.contains("Choose from \"sorted\", \"indexed_vec\"")
   });
 }
+
+#[test]
+fn indexed_join_uses_the_last_value_when_projecting_a_wide_relation() {
+  expect_interpret_result(
+    r#"
+      @storage("indexed_vec")
+      type indexed(i: usize, n: i32)
+      rel indexed = {(0, 7), (0, 8), (2, 9)}
+      type key(usize)
+      rel key = {0, 1, 2}
+      rel wide(i, n, i, n, i, n, i, n, i, n, i, n, i) = key(i), indexed(i, n)
+      rel projected(i, n) = wide(_, _, _, _, _, _, _, _, _, _, _, n, i)
+      query projected
+    "#,
+    ("projected", vec![(0usize, 8), (2, 9)]),
+  );
+}

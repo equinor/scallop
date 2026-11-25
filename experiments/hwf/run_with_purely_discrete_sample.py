@@ -106,7 +106,7 @@ class HWFNet(nn.Module):
     if self.debug:
       self.eval_formula = self.ctx.forward_function("result", dispatch="single", debug_provenance=True)
     else:
-      self.eval_formula = self.ctx.forward_function("result", jit=args.jit, recompile=args.recompile)
+      self.eval_formula = self.ctx.forward_function("result")
 
   def forward(self, img_seq, img_seq_len):
     batch_size, formula_length, _, _, _ = img_seq.shape
@@ -262,8 +262,6 @@ if __name__ == "__main__":
   parser.add_argument("--top-k", type=int, default=3)
   parser.add_argument("--cuda", action="store_true")
   parser.add_argument("--gpu", type=int, default=0)
-  parser.add_argument("--jit", action="store_true")
-  parser.add_argument("--recompile", action="store_true")
   args = parser.parse_args()
 
   # Parameters
