@@ -1,8 +1,7 @@
 use std::cmp::Ordering;
 
 pub use jiff::Timestamp as DateTime;
-
-use crate::utils::{display_date_time, FloatKey};
+use ordered_float::OrderedFloat;
 
 use super::duration::*;
 use super::foreign_tensor::*;
@@ -132,8 +131,8 @@ impl Ord for Value {
       (U64(a), U64(b)) => a.cmp(b),
       (U128(a), U128(b)) => a.cmp(b),
       (USize(a), USize(b)) => a.cmp(b),
-      (F32(a), F32(b)) => FloatKey(*a).cmp(&FloatKey(*b)),
-      (F64(a), F64(b)) => FloatKey(*a).cmp(&FloatKey(*b)),
+      (F32(a), F32(b)) => OrderedFloat(*a).cmp(&OrderedFloat(*b)),
+      (F64(a), F64(b)) => OrderedFloat(*a).cmp(&OrderedFloat(*b)),
       (Char(a), Char(b)) => a.cmp(b),
       (Bool(a), Bool(b)) => a.cmp(b),
       (Str(a), Str(b)) => a.cmp(b),
@@ -169,8 +168,8 @@ impl std::hash::Hash for Value {
       Self::U64(u) => u.hash(state),
       Self::U128(u) => u.hash(state),
       Self::USize(u) => u.hash(state),
-      Self::F32(f) => FloatKey(*f).hash(state),
-      Self::F64(f) => FloatKey(*f).hash(state),
+      Self::F32(f) => OrderedFloat(*f).hash(state),
+      Self::F64(f) => OrderedFloat(*f).hash(state),
       Self::Char(c) => c.hash(state),
       Self::Bool(b) => b.hash(state),
       Self::Str(s) => s.hash(state),
@@ -213,7 +212,7 @@ impl std::fmt::Display for Value {
       Self::String(i) => f.write_fmt(format_args!("{:?}", i)),
       Self::Symbol(_) => panic!("[Internal Error] Cannot display symbol"),
       Self::SymbolString(s) => f.write_fmt(format_args!("s\"{}\"", s)),
-      Self::DateTime(i) => f.write_fmt(format_args!("t\"{}\"", display_date_time(*i))),
+      Self::DateTime(i) => write!(f, "t\"{i}\""),
       Self::Duration(i) => f.write_fmt(format_args!("d\"{}\"", i)),
       Self::Entity(e) => f.write_fmt(format_args!("entity({e:#x})")),
       Self::EntityString(s) => f.write_fmt(format_args!("entity_string({s})")),

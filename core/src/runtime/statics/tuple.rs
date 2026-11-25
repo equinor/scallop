@@ -1,9 +1,10 @@
 use std::cmp::Ordering;
 
+use ordered_float::OrderedFloat;
+
 use crate::common::duration::Duration;
 use crate::common::tuple::*;
 use crate::common::value::*;
-use crate::utils::FloatKey;
 
 pub trait StaticTupleTrait: 'static + Sized + Clone + std::fmt::Debug + std::cmp::PartialOrd {
   fn from_dyn_tuple(dyn_tuple: Tuple) -> Self;
@@ -143,7 +144,7 @@ impl StaticTupleTrait for f32 {
     Tuple::Value(Value::F32(self))
   }
   fn cmp_tuple(&self, other: &Self) -> Ordering {
-    FloatKey(*self).cmp(&FloatKey(*other))
+    OrderedFloat(*self).cmp(&OrderedFloat(*other))
   }
 }
 
@@ -155,7 +156,7 @@ impl StaticTupleTrait for f64 {
     Tuple::Value(Value::F64(self))
   }
   fn cmp_tuple(&self, other: &Self) -> Ordering {
-    FloatKey(*self).cmp(&FloatKey(*other))
+    OrderedFloat(*self).cmp(&OrderedFloat(*other))
   }
 }
 

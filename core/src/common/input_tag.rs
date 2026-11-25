@@ -1,7 +1,7 @@
-use serde::*;
 use std::cmp::Ordering;
 
-use crate::utils::FloatKey;
+use ordered_float::OrderedFloat;
+use serde::*;
 
 use super::foreign_tensor::DynamicExternalTensor;
 
@@ -73,11 +73,15 @@ impl Ord for DynamicInputTag {
     match (self, other) {
       (Self::Exclusive(a), Self::Exclusive(b)) | (Self::Natural(a), Self::Natural(b)) => a.cmp(b),
       (Self::Bool(a), Self::Bool(b)) => a.cmp(b),
-      (Self::Float(a), Self::Float(b)) => FloatKey(*a).cmp(&FloatKey(*b)),
-      (Self::ExclusiveFloat(a, id_a), Self::ExclusiveFloat(b, id_b)) => (FloatKey(*a), id_a).cmp(&(FloatKey(*b), id_b)),
-      (Self::FloatWithID(id_a, a), Self::FloatWithID(id_b, b)) => (id_a, FloatKey(*a)).cmp(&(id_b, FloatKey(*b))),
+      (Self::Float(a), Self::Float(b)) => OrderedFloat(*a).cmp(&OrderedFloat(*b)),
+      (Self::ExclusiveFloat(a, id_a), Self::ExclusiveFloat(b, id_b)) => {
+        (OrderedFloat(*a), id_a).cmp(&(OrderedFloat(*b), id_b))
+      }
+      (Self::FloatWithID(id_a, a), Self::FloatWithID(id_b, b)) => {
+        (id_a, OrderedFloat(*a)).cmp(&(id_b, OrderedFloat(*b)))
+      }
       (Self::ExclusiveFloatWithID(id_a, a, ex_a), Self::ExclusiveFloatWithID(id_b, b, ex_b)) => {
-        (id_a, FloatKey(*a), ex_a).cmp(&(id_b, FloatKey(*b), ex_b))
+        (id_a, OrderedFloat(*a), ex_a).cmp(&(id_b, OrderedFloat(*b), ex_b))
       }
       (Self::Tensor(a), Self::Tensor(b)) => a.cmp(b),
       _ => self.variant_order().cmp(&other.variant_order()),

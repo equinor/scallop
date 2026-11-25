@@ -1,3 +1,5 @@
+use ordered_float::OrderedFloat;
+
 use crate::common::element::*;
 use crate::common::foreign_aggregate::*;
 use crate::common::foreign_aggregates::*;
@@ -62,7 +64,7 @@ impl std::cmp::PartialOrd for Prob {
 
 impl std::cmp::Ord for Prob {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    FloatKey(self.0).cmp(&FloatKey(other.0))
+    OrderedFloat(self.0).cmp(&OrderedFloat(other.0))
   }
 }
 
