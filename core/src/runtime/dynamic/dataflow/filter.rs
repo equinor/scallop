@@ -195,6 +195,10 @@ struct PackedFilterBatch<'a, P: Provenance> {
 }
 
 impl<'a, P: Provenance> Batch<'a, P> for PackedFilterBatch<'a, P> {
+  fn is_tuple_sorted(&self) -> bool {
+    self.source.is_tuple_sorted()
+  }
+
   fn next_elem(&mut self) -> Option<DynamicElement<P>> {
     let rows = self
       .source

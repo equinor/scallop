@@ -37,6 +37,10 @@ impl<'a, Prov: Provenance> DynamicSortedBatch<'a, Prov> {
 }
 
 impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicSortedBatch<'a, Prov> {
+  fn is_tuple_sorted(&self) -> bool {
+    true
+  }
+
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
     if let Some(iterator) = &mut self.sorted_tgt {
       iterator.next()

@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use super::dataflow::batching::{Batch, DynamicBatches};
 use super::dataflow::*;
 use super::*;
 use crate::common::input_tag::*;
@@ -204,17 +205,7 @@ impl<Prov: Provenance> DynamicRelation<Prov> {
     d: &DynamicDataflow<'a, Prov>,
     runtime: &'a RuntimeEnvironment,
   ) {
-    for batch in d.iter_recent() {
-      let data = if runtime.early_discard {
-        batch.filter(move |e| !ctx.discard(&e.tag)).collect::<Vec<_>>()
-      } else {
-        batch.collect::<Vec<_>>()
-      };
-      self
-        .to_add
-        .borrow_mut()
-        .push(DynamicSortedCollection::from_vec(data, ctx));
-    }
+    self.insert_dataflow_batches(ctx, d.iter_recent(), runtime);
   }
 
   pub fn insert_dataflow_stable<'a>(
@@ -223,16 +214,28 @@ impl<Prov: Provenance> DynamicRelation<Prov> {
     d: &DynamicDataflow<'a, Prov>,
     runtime: &'a RuntimeEnvironment,
   ) {
-    for batch in d.iter_stable() {
+    self.insert_dataflow_batches(ctx, d.iter_stable(), runtime);
+  }
+
+  fn insert_dataflow_batches<'a>(
+    &self,
+    ctx: &'a Prov,
+    batches: DynamicBatches<'a, Prov>,
+    runtime: &RuntimeEnvironment,
+  ) {
+    for batch in batches {
+      let sorted = batch.is_tuple_sorted();
       let data = if runtime.early_discard {
         batch.filter(move |e| !ctx.discard(&e.tag)).collect::<Vec<_>>()
       } else {
         batch.collect::<Vec<_>>()
       };
-      self
-        .to_add
-        .borrow_mut()
-        .push(DynamicSortedCollection::from_vec(data, ctx));
+      let collection = if sorted {
+        DynamicSortedCollection::from_sorted_vec(data, ctx)
+      } else {
+        DynamicSortedCollection::from_vec(data, ctx)
+      };
+      self.to_add.borrow_mut().push(collection);
     }
   }
 

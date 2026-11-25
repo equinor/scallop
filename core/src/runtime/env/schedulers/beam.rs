@@ -41,37 +41,41 @@ pub fn schedule_beam<'a, Prov: Provenance>(
     to_add.retain(|i, _| !to_remove_to_add_indices.contains(&i));
   }
 
-  // Drain to_add and sort them
-  let mut sorted_delta = Vec::<DynamicElement<Prov>>::new();
-  for to_add_elem in to_add.drain() {
-    // Store the weight
-    let to_add_elem_weight = ctx.weight(&to_add_elem.tag);
+  if to_add.len() > beam_size {
+    let mut sorted_delta = rank_delta(to_add, ctx);
+    let split = sorted_delta.len() - beam_size;
+    to_add
+      .elements
+      .extend(sorted_delta.drain(split..).map(|(_, elem)| elem));
+    to_add.elements.sort_unstable();
 
-    // Check if we can insert to_add_element in the middle of waitlist
-    let to_insert_index = gallop_index(&sorted_delta, 0, |elem| ctx.weight(&elem.tag) < to_add_elem_weight);
-    sorted_delta.insert(to_insert_index, to_add_elem);
-  }
-
-  // If there exists at least beam_size element in to_add
-  if sorted_delta.len() >= beam_size {
-    // Add the last elements in the delta to to_add
-    for _ in 0..beam_size {
-      to_add.insert_unchecked(sorted_delta.pop().unwrap());
-    }
-
-    // The rest goes into waitlist; notice that this is in chronological + weight-increasing
-    // manner
-    waitlist.extend(sorted_delta);
+    // Keep older waitlist entries before this delta's overflow.
+    waitlist.extend(sorted_delta.into_iter().map(|(_, elem)| elem));
   } else {
-    // We first insert everything from the delta to the to_add
-    for elem in sorted_delta {
-      to_add.insert_unchecked(elem);
-    }
-
-    // If there is not enough elements in delta, we will need to pull from
-    // the waitlist. We need to pop somethings from the waitlist. We can just pop the last ones
+    // The delta already fits and is sorted by tuple.
     while to_add.len() < beam_size && !waitlist.is_empty() {
       to_add.insert(waitlist.pop().unwrap(), ctx);
+    }
+  }
+
+  fn rank_delta<Prov: Provenance>(
+    to_add: &mut DynamicSortedCollection<Prov>,
+    ctx: &Prov,
+  ) -> Vec<(f64, DynamicElement<Prov>)> {
+    let mut weighted: Vec<_> = to_add.drain().map(|elem| (ctx.weight(&elem.tag), elem)).collect();
+    if weighted.iter().all(|(weight, _)| !weight.is_nan()) {
+      // Equal weights were inserted before earlier arrivals, so reverse them before the stable sort.
+      weighted.reverse();
+      weighted.sort_by(|(left, _), (right, _)| left.partial_cmp(right).unwrap());
+      weighted
+    } else {
+      // Keep the existing comparison and insertion behavior for unordered priorities.
+      let mut ranked = Vec::with_capacity(weighted.len());
+      for elem in weighted {
+        let index = gallop_index(&ranked, 0, |(weight, _)| *weight < elem.0);
+        ranked.insert(index, elem);
+      }
+      ranked
     }
   }
 }

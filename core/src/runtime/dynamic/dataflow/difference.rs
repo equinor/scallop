@@ -67,6 +67,10 @@ impl<'a, Prov: Provenance> Clone for DynamicDifferenceBatch<'a, Prov> {
 }
 
 impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicDifferenceBatch<'a, Prov> {
+  fn is_tuple_sorted(&self) -> bool {
+    self.i1.is_tuple_sorted()
+  }
+
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
     use std::cmp::Ordering;
     loop {
