@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
 use std::marker::PhantomData;
 
-use super::utils::*;
 use super::*;
 use crate::runtime::provenance::*;
+use crate::runtime::utils::JoinProduct;
 
 pub fn join<'b, D1, D2, K, T1, T2, Prov>(d1: D1, d2: D2, semiring_ctx: &'b Prov) -> Join<'b, D1, D2, K, T1, T2, Prov>
 where
@@ -237,7 +237,7 @@ where
   }
 }
 
-type KeyedJoinProduct<K, T1, T2, Prov> = JoinProductIterator<(K, T1), (K, T2), Prov>;
+type KeyedJoinProduct<K, T1, T2, Prov> = JoinProduct<StaticElement<(K, T1), Prov>, StaticElement<(K, T2), Prov>>;
 
 pub struct JoinIterator<'b, I1, I2, K, T1, T2, Prov>
 where
@@ -303,9 +303,10 @@ where
           }
           None => {
             // Skip ahead
-            self.i1.step(curr_iter.v1.len() - 1);
+            let (left_len, right_len) = curr_iter.group_lengths();
+            self.i1.step(left_len - 1);
             self.i1_curr = self.i1.next();
-            self.i2.step(curr_iter.v2.len() - 1);
+            self.i2.step(right_len - 1);
             self.i2_curr = self.i2.next();
 
             // Remove current iterator
@@ -330,8 +331,7 @@ where
             let v2 = std::iter::once(i2_curr.clone())
               .chain(self.i2.clone().take_while(|x| x.tuple.0.cmp_tuple(key).is_eq()))
               .collect::<Vec<_>>();
-            let iter = JoinProductIterator::new(v1, v2);
-            self.curr_iter = Some(iter);
+            self.curr_iter = Some(JoinProduct::new(v1, v2));
           }
           Ordering::Greater => {
             self.i2_curr = self

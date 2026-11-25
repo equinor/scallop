@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
 use std::marker::PhantomData;
 
-use super::utils::*;
 use super::*;
 use crate::runtime::provenance::*;
+use crate::runtime::utils::JoinProduct;
 
 pub fn antijoin<'b, D1, D2, K, T1, Prov>(d1: D1, d2: D2, semiring_ctx: &'b Prov) -> Antijoin<'b, D1, D2, K, T1, Prov>
 where
@@ -193,6 +193,8 @@ where
   }
 }
 
+type KeyedAntijoinProduct<K, T, Prov> = JoinProduct<StaticElement<(K, T), Prov>, StaticElement<K, Prov>>;
+
 pub struct AntijoinIterator<'b, I1, I2, K, T1, Prov>
 where
   K: StaticTupleTrait,
@@ -205,7 +207,7 @@ where
   i2: I2,
   i1_curr: Option<StaticElement<(K, T1), Prov>>,
   i2_curr: Option<StaticElement<K, Prov>>,
-  curr_iter: Option<JoinProductIterator<(K, T1), K, Prov>>,
+  curr_iter: Option<KeyedAntijoinProduct<K, T1, Prov>>,
   semiring_ctx: &'b Prov,
 }
 
@@ -254,9 +256,10 @@ where
             }
           }
           None => {
-            self.i1.step(curr_iter.v1.len() - 1);
+            let (left_len, right_len) = curr_iter.group_lengths();
+            self.i1.step(left_len - 1);
             self.i1_curr = self.i1.next();
-            self.i2.step(curr_iter.v2.len() - 1);
+            self.i2.step(right_len - 1);
             self.i2_curr = self.i2.next();
             self.curr_iter = None;
           }
@@ -276,9 +279,7 @@ where
             let v1 = std::iter::once(i1_curr.clone())
               .chain(self.i1.clone().take_while(|x| x.tuple.0.cmp_tuple(key).is_eq()))
               .collect::<Vec<_>>();
-            let v2 = std::iter::once(i2_curr.clone()).collect::<Vec<_>>();
-            let iter = JoinProductIterator::new(v1, v2);
-            self.curr_iter = Some(iter);
+            self.curr_iter = Some(JoinProduct::new(v1, vec![i2_curr.clone()]));
           }
           Ordering::Greater => {
             self.i2_curr = self

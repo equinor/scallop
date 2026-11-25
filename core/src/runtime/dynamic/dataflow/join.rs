@@ -1,6 +1,6 @@
-use super::utils::*;
 use super::*;
 use crate::common::tuple::Tuple;
+use crate::runtime::utils::JoinProduct;
 
 pub struct DynamicJoinDataflow<'a, Prov: Provenance> {
   pub d1: DynamicDataflow<'a, Prov>,
@@ -64,7 +64,7 @@ pub struct DynamicJoinBatch<'a, Prov: Provenance> {
   i1_curr: Option<DynamicElement<Prov>>,
   i2: DynamicBatch<'a, Prov>,
   i2_curr: Option<DynamicElement<Prov>>,
-  curr_iter: Option<JoinProductIterator<Prov>>,
+  curr_iter: Option<JoinProduct<DynamicElement<Prov>, DynamicElement<Prov>>>,
   ctx: &'a Prov,
 }
 
@@ -94,9 +94,10 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicJoinBatch<'a, Prov> {
             return Some(result);
           }
           None => {
-            self.i1.step(curr_prod_iter.v1.len() - 1);
+            let (left_len, right_len) = curr_prod_iter.group_lengths();
+            self.i1.step(left_len - 1);
             self.i1_curr = self.i1.next_elem();
-            self.i2.step(curr_prod_iter.v2.len() - 1);
+            self.i2.step(right_len - 1);
             self.i2_curr = self.i2.next_elem();
             self.curr_iter = None;
           }
@@ -114,8 +115,7 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicJoinBatch<'a, Prov> {
             let v2 = std::iter::once(i2_curr_elem.clone())
               .chain(self.i2.clone().take_while(|x| &x.tuple[0] == key))
               .collect::<Vec<_>>();
-            let iter = JoinProductIterator::new(v1, v2);
-            self.curr_iter = Some(iter);
+            self.curr_iter = Some(JoinProduct::new(v1, v2));
           }
           Ordering::Greater => self.i2_curr = self.i2.search_elem_0_until(&i1_curr_elem.tuple[0]),
         },

@@ -1,6 +1,5 @@
 pub mod aggregation;
 pub mod batching;
-mod utils;
 
 mod antijoin;
 mod difference;
