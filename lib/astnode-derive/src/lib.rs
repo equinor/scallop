@@ -78,511 +78,310 @@
 //! TerminalNode::s1_with_loc(loc: NodeLocation) // constructor with location provided
 //! TerminalNode::s1_with_span(start: usize, end: usize) // constructor with location span provided
 //! TerminalNode::s3(t3: T3) -> Self // providing the argument to construct variant s3
-//! TerminalNode::s3_with_loc(t3: T3, loc: NodeLocation) -> Self // providing the argument to construct variant s3 with location provided
-//! TerminalNode::s3_with_span(t3: T3, start: usize, end: usize) -> Self // providing the argument to construct variant s3 with location span provided
-//! TerminalNode::is_s1(&self) -> bool // there is a `is_*` function for each variant
+//! TerminalNode::s3_with_loc(t3: T3, loc: NodeLocation) // providing the argument to construct variant s3 with location provided
+//! TerminalNode::s3_with_span(t3: T3, start: usize, end: usize) // providing the argument to construct variant s3 with location span provided
+//! TerminalNode::is_s1(&self) -> bool // there is an `is_*` function for each variant
 //! TerminalNode::as_s3(&self) -> Option<&T3> // there is an `as_*` function if that variant has an argument
 //! ```
 
-use proc_macro::*;
+use proc_macro::TokenStream;
+use proc_macro2::{Ident, TokenStream as TokenStream2};
+use quote::{format_ident, quote};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericArgument, Meta, PathArguments, Type};
 
-/// Abstract Syntax Tree (AST) Node
-///
-/// An AstNode can be one of two things: a struct or an enum
-///
-/// A struct AST node must have a name started with underscore (`_`).
+/// Derive a Scallop AST node, including its location and traversal methods.
 #[proc_macro_derive(AstNode, attributes(ast_node_no_span_constructor))]
 pub fn derive_ast_node(tokens: TokenStream) -> TokenStream {
-  let token_list: Vec<_> = tokens.into_iter().collect();
-  let (token_list, omit_span_constructor) = split_decorators(&token_list);
-
-  // Get pub and check if the decorated item is a struct
-  let has_pub = get_has_pub(token_list);
-  let is_struct = get_is_struct(has_pub, token_list);
-
-  // Get information
-  let pub_kw = if has_pub { "pub" } else { "" };
-  let name = get_type_name(has_pub, is_struct, token_list);
-
-  // Derive!
-  let derive = if is_struct {
-    derive_struct(pub_kw, name, has_pub, token_list, omit_span_constructor)
-  } else {
-    assert!(
-      !omit_span_constructor,
-      "ast_node_no_span_constructor is only valid on structs"
-    );
-    derive_enum(pub_kw, name, has_pub, token_list)
-  };
-
-  // Parse
-  derive.parse().expect("Failed to parse derived AstNode")
+  let input = parse_macro_input!(tokens as DeriveInput);
+  expand(&input).unwrap_or_else(syn::Error::into_compile_error).into()
 }
 
-fn split_decorators(token_list: &[TokenTree]) -> (&[TokenTree], bool) {
-  let mut i = 0;
-  let mut omit_span_constructor = false;
-  while let [TokenTree::Punct(p), TokenTree::Group(g), ..] = &token_list[i..] {
-    if p.as_char() != '#' || g.delimiter() != Delimiter::Bracket {
-      break;
-    }
-    omit_span_constructor |= g.stream().to_string() == "ast_node_no_span_constructor";
-    i += 2;
+fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
+  let inner = &input.ident;
+  if !input.generics.params.is_empty() || input.generics.where_clause.is_some() {
+    return Err(syn::Error::new(inner.span(), "AstNode does not support generic nodes"));
   }
-  (&token_list[i..], omit_span_constructor)
-}
-
-fn get_has_pub(token_list: &[TokenTree]) -> bool {
-  match &token_list[0] {
-    TokenTree::Ident(i) => i.to_string() == "pub",
-    _ => false,
-  }
-}
-
-fn get_is_struct(has_pub: bool, token_list: &[TokenTree]) -> bool {
-  let offset = if has_pub { 1 } else { 0 };
-  match &token_list[offset] {
-    TokenTree::Ident(i) => {
-      if i.to_string() == "struct" {
-        match &token_list[offset + 2] {
-          TokenTree::Group(g) => match g.delimiter() {
-            Delimiter::Brace => true,
-            _ => panic!("AstNode only support decorating struct with fields"),
-          },
-          TokenTree::Punct(p) if p.as_char() == ';' => true,
-          t => panic!("Unknown token tree {}", t),
-        }
-      } else if i.to_string() == "enum" {
-        false
-      } else {
-        panic!("AstNode can only be used to decorate struct or enum")
-      }
-    }
-    t => panic!("Unknown token {}", t),
-  }
-}
-
-fn get_type_name(has_pub: bool, is_struct: bool, token_list: &[TokenTree]) -> String {
-  let offset = if has_pub { 1 } else { 0 };
-  match &token_list[offset + 1] {
-    TokenTree::Ident(i) => {
-      let full_name = i.to_string();
-      if is_struct {
-        full_name
-          .strip_prefix('_')
-          .expect("Expected struct name to begin with underscore")
-          .to_owned()
-      } else {
-        full_name
-      }
-    }
-    other => panic!("Unexpected token tree {:?}", other),
-  }
-}
-
-fn get_struct_fields(has_pub: bool, token_list: &[TokenTree]) -> Vec<(bool, String, String)> {
-  let offset = if has_pub { 1 } else { 0 };
-  match &token_list[offset + 2] {
-    TokenTree::Group(g) => {
-      let fields_token_list: Vec<_> = g.stream().into_iter().collect();
-      let mut fields = Vec::new();
-      let mut ty_indent = 0;
-      let mut curr_is_pub = None;
-      let mut curr_field_name = None;
-      let mut curr_field_type = None;
-      for token in fields_token_list {
-        if curr_is_pub.is_none() {
-          match token {
-            TokenTree::Ident(i) => {
-              if i.to_string() == "pub" {
-                curr_is_pub = Some(true);
-              } else {
-                curr_is_pub = Some(false);
-                curr_field_name = Some(i.to_string());
-              }
-            }
-            _ => panic!("Cannot parse"),
-          }
-        } else if curr_is_pub.is_some() && curr_field_name.is_none() {
-          match token {
-            TokenTree::Ident(i) => {
-              curr_field_name = Some(i.to_string());
-            }
-            _ => panic!("Cannot parse"),
-          }
-        } else if curr_field_name.is_some() && curr_field_type.is_none() {
-          match token {
-            TokenTree::Punct(p) if p.as_char() == ':' => curr_field_type = Some("".to_string()),
-            _ => panic!("Cannot parse"),
-          }
-        } else if curr_field_type.is_some() {
-          match token {
-            TokenTree::Ident(i) => {
-              if let Some(field_type) = &mut curr_field_type {
-                *field_type += &i.to_string();
-              } else {
-                panic!("Cannot parse")
-              }
-            }
-            TokenTree::Group(g) => {
-              if let Some(field_type) = &mut curr_field_type {
-                *field_type += &g.to_string();
-              } else {
-                panic!("Cannot parse")
-              }
-            }
-            TokenTree::Punct(p) => {
-              if p.as_char() == ',' && ty_indent == 0 {
-                fields.push((curr_is_pub.unwrap(), curr_field_name.unwrap(), curr_field_type.unwrap()));
-                curr_is_pub = None;
-                curr_field_name = None;
-                curr_field_type = None;
-              } else {
-                if p.as_char() == '<' {
-                  ty_indent += 1;
-                } else if p.as_char() == '>' {
-                  ty_indent -= 1;
-                }
-
-                if let Some(field_type) = &mut curr_field_type {
-                  *field_type += &p.as_char().to_string();
-                } else {
-                  panic!("Cannot parse")
-                }
-              }
-            }
-            _ => panic!("Cannot parse"),
-          }
-        }
-      }
-
-      if let (Some(is_pub), Some(field_name), Some(field_type)) = (curr_is_pub, curr_field_name, curr_field_type) {
-        fields.push((is_pub, field_name, field_type));
-      };
-
-      fields
-    }
-    TokenTree::Punct(_) => vec![],
-    _ => panic!("Not a group"),
-  }
-}
-
-fn get_enum_variants(has_pub: bool, token_list: &[TokenTree]) -> Vec<(String, Option<String>)> {
-  let offset = if has_pub { 1 } else { 0 };
-  match &token_list[offset + 2] {
-    TokenTree::Group(g) => {
-      let variants_token_list: Vec<_> = g.stream().into_iter().collect();
-      if !variants_token_list.is_empty() {
-        let mut variants = vec![];
-        let mut curr_variant_name = None;
-        let mut curr_variant_type = None;
-
-        for token in variants_token_list {
-          if curr_variant_name.is_none() {
-            match token {
-              TokenTree::Ident(i) => {
-                curr_variant_name = Some(i.to_string());
-              }
-              _ => panic!("Cannot parse"),
-            }
-          } else if curr_variant_name.is_some() && curr_variant_type.is_none() {
-            match token {
-              TokenTree::Group(g) => {
-                if g.delimiter() == Delimiter::Parenthesis {
-                  curr_variant_type = Some(Some(
-                    g.stream()
-                      .into_iter()
-                      .map(|t| t.to_string())
-                      .collect::<Vec<_>>()
-                      .join(""),
-                  ));
-                } else {
-                  panic!("AstNode enum variant cannot be a struct")
-                }
-              }
-              TokenTree::Punct(p) if p.as_char() == ',' => {
-                variants.push((curr_variant_name.unwrap(), None));
-                curr_variant_name = None;
-                curr_variant_type = None;
-              }
-              _ => panic!("Cannot parse"),
-            }
-          } else if curr_variant_name.is_some() && curr_variant_type.is_some() {
-            match token {
-              TokenTree::Punct(p) if p.as_char() == ',' => {
-                variants.push((curr_variant_name.unwrap(), curr_variant_type.unwrap()));
-                curr_variant_name = None;
-                curr_variant_type = None;
-              }
-              _ => panic!("Cannot parse"),
-            }
-          } else {
-            panic!("Cannot parse")
-          }
-        }
-
-        if let (Some(name), Some(ty)) = (curr_variant_name, curr_variant_type) {
-          variants.push((name, ty));
-        };
-
-        variants
-      } else {
-        panic!("AstNode enum has to have at least one variant")
-      }
-    }
-    _ => panic!("Not a group"),
-  }
-}
-
-fn derive_struct(
-  pub_kw: &str,
-  name: String,
-  has_pub: bool,
-  token_list: &[TokenTree],
-  omit_span_constructor: bool,
-) -> String {
-  let struct_def = format!(r#"{pub_kw} type {name} = AstNodeWrapper<_{name}>;"#);
-
-  let fields = get_struct_fields(has_pub, token_list);
-
-  // New and default functions
-  let fn_args = fields
+  let omit_span_constructor = input
+    .attrs
     .iter()
-    .map(|(_, name, ty)| {
-      if ty.len() > 4 && &ty[0..4] == "Box<" {
-        let elem = &ty[4..ty.len() - 1];
-        format!("{name}: {elem},")
-      } else {
-        format!("{name}: {ty},")
-      }
-    })
-    .collect::<String>();
-  let constructor_args = fields
-    .iter()
-    .map(|(_, name, ty)| {
-      if ty.len() > 4 && &ty[0..4] == "Box<" {
-        format!("{name}: Box::new({name}),")
-      } else {
-        format!("{name},")
-      }
-    })
-    .collect::<String>();
+    .find(|attr| matches!(&attr.meta, Meta::Path(path) if path.is_ident("ast_node_no_span_constructor")));
 
-  let span_constructor = if omit_span_constructor {
-    String::new()
+  match &input.data {
+    Data::Struct(data) => {
+      if matches!(&data.fields, Fields::Unnamed(_)) {
+        return Err(syn::Error::new(inner.span(), "AstNode structs require named fields"));
+      }
+      let outer = wrapper_name(inner)?;
+      Ok(derive_struct(
+        input,
+        &outer,
+        &data.fields,
+        omit_span_constructor.is_some(),
+      ))
+    }
+    Data::Enum(data) => {
+      if let Some(attr) = omit_span_constructor {
+        return Err(syn::Error::new_spanned(
+          attr,
+          "ast_node_no_span_constructor is only valid on structs",
+        ));
+      }
+      if data.variants.is_empty() {
+        return Err(syn::Error::new(
+          inner.span(),
+          "AstNode enums require at least one variant",
+        ));
+      }
+      let variants = data
+        .variants
+        .iter()
+        .map(|variant| {
+          let ty = match &variant.fields {
+            Fields::Unit if variant.discriminant.is_none() => None,
+            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => Some(&fields.unnamed[0].ty),
+            _ => {
+              return Err(syn::Error::new(
+                variant.ident.span(),
+                "AstNode variants must be unit variants without a discriminant or have one unnamed field",
+              ))
+            }
+          };
+          Ok((&variant.ident, ty))
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+
+      if variants.iter().any(|(_, ty)| ty.is_none()) {
+        let outer = wrapper_name(inner)?;
+        let wrapper = wrapped_node(input, &outer, &[]);
+        let helpers = variants
+          .into_iter()
+          .map(|(variant, ty)| terminal_methods(inner, variant, ty));
+        Ok(quote! {
+          #wrapper
+          impl #outer { #(#helpers)* }
+        })
+      } else {
+        Ok(derive_variant_enum(
+          inner,
+          variants.into_iter().map(|(name, ty)| (name, ty.unwrap())),
+        ))
+      }
+    }
+    Data::Union(_) => Err(syn::Error::new(
+      inner.span(),
+      "AstNode can only be derived for a struct or enum",
+    )),
+  }
+}
+
+fn wrapper_name(inner: &Ident) -> syn::Result<Ident> {
+  let name = inner.to_string();
+  let outer = name
+    .strip_prefix('_')
+    .ok_or_else(|| syn::Error::new(inner.span(), "Wrapped AstNode names must begin with an underscore"))?;
+  syn::parse_str::<Ident>(outer)
+    .map(|mut ident| {
+      ident.set_span(inner.span());
+      ident
+    })
+    .map_err(|error| syn::Error::new(inner.span(), error))
+}
+
+fn wrapped_node(input: &DeriveInput, outer: &Ident, fields: &[&Ident]) -> TokenStream2 {
+  let inner = &input.ident;
+  let vis = &input.vis;
+  quote! {
+    #vis type #outer = AstNodeWrapper<#inner>;
+
+    impl #inner {
+      pub fn with_location(self, loc: NodeLocation) -> #outer {
+        #outer { _loc: loc, _node: self }
+      }
+      pub fn with_span(self, start: usize, end: usize) -> #outer {
+        self.with_location(NodeLocation::from_span(start, end))
+      }
+    }
+
+    impl #outer {
+      pub fn internal(&self) -> &#inner { &self._node }
+      pub fn internal_mut(&mut self) -> &mut #inner { &mut self._node }
+    }
+
+    impl AstWalker for #outer {
+      fn walk<V>(&self, v: &mut V) {
+        v.visit(self);
+        v.visit(&self._loc);
+        #(self._node.#fields.walk(v);)*
+      }
+      fn walk_mut<V>(&mut self, v: &mut V) {
+        v.visit_mut(self);
+        v.visit_mut(&mut self._loc);
+        #(self._node.#fields.walk_mut(v);)*
+      }
+    }
+  }
+}
+
+fn derive_struct(input: &DeriveInput, outer: &Ident, fields: &Fields, omit_span_constructor: bool) -> TokenStream2 {
+  let inner = &input.ident;
+  let names: Vec<_> = fields.iter().map(|field| field.ident.as_ref().unwrap()).collect();
+  let wrapper = wrapped_node(input, outer, &names);
+  let mut args = Vec::new();
+  let mut init = Vec::new();
+  let mut accessors = Vec::new();
+  for (field, name) in fields.iter().zip(names) {
+    let vis = &field.vis;
+    let ty = &field.ty;
+    let name_mut = format_ident!("{name}_mut");
+    let arg_type = if let Some(ty) = type_arg(ty, "Box") {
+      init.push(quote!(#name: Box::new(#name)));
+      ty
+    } else {
+      init.push(quote!(#name));
+      ty
+    };
+    args.push(quote!(#name: #arg_type));
+    accessors.push(quote! {
+      #vis fn #name(&self) -> &#arg_type { &self._node.#name }
+      #vis fn #name_mut(&mut self) -> &mut #arg_type { &mut self._node.#name }
+    });
+
+    let has = format_ident!("has_{name}");
+    if let Some(elem) = type_arg(ty, "Vec") {
+      let num = format_ident!("num_{name}");
+      let iter = format_ident!("iter_{name}");
+      let iter_mut = format_ident!("iter_{name}_mut");
+      accessors.push(quote! {
+        #vis fn #has(&self) -> bool { !self.#name().is_empty() }
+        #vis fn #num(&self) -> usize { self.#name().len() }
+        #vis fn #iter(&self) -> impl Iterator<Item = &#elem> { self.#name().iter() }
+        #vis fn #iter_mut(&mut self) -> impl Iterator<Item = &mut #elem> { self.#name_mut().iter_mut() }
+      });
+    } else if type_arg(ty, "Option").is_some() {
+      accessors.push(quote!(#vis fn #has(&self) -> bool { self.#name().is_some() }));
+    }
+  }
+
+  let with_span = (!omit_span_constructor).then(|| {
+    quote! {
+      pub fn new_with_span(#(#args,)* start: usize, end: usize) -> Self {
+        Self { _loc: NodeLocation::from_span(start, end), _node: #inner { #(#init,)* } }
+      }
+    }
+  });
+  quote! {
+    #wrapper
+    impl #inner {
+      pub fn new(#(#args),*) -> Self { Self { #(#init,)* } }
+    }
+    impl #outer {
+      pub fn new(#(#args),*) -> Self {
+        Self { _loc: NodeLocation::default(), _node: #inner { #(#init,)* } }
+      }
+      pub fn new_with_loc(#(#args,)* _loc: NodeLocation) -> Self {
+        Self { _loc, _node: #inner { #(#init,)* } }
+      }
+      #with_span
+      pub fn new_with_node_and_loc(node: #inner, loc: NodeLocation) -> Self {
+        Self { _loc: loc, _node: node }
+      }
+      pub fn with_node_and_span(node: #inner, start: usize, end: usize) -> Self {
+        Self::new_with_node_and_loc(node, NodeLocation::from_span(start, end))
+      }
+      #(#accessors)*
+    }
+  }
+}
+
+fn type_arg<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
+  if let Type::Path(ty) = ty
+    && ty.qself.is_none()
+    && ty.path.leading_colon.is_none()
+    && ty.path.segments.len() == 1
+    && ty.path.segments[0].ident == wrapper
+    && let PathArguments::AngleBracketed(args) = &ty.path.segments[0].arguments
+    && args.args.len() == 1
+    && let GenericArgument::Type(arg) = &args.args[0]
+  {
+    Some(arg)
   } else {
-    format!(
-      "pub fn new_with_span({fn_args} start: usize, end: usize) -> Self {{ Self {{ _loc: NodeLocation::from_span(start, end), _node: _{name} {{ {constructor_args} }} }} }}"
+    None
+  }
+}
+
+fn derive_variant_enum<'a>(name: &Ident, variants: impl Iterator<Item = (&'a Ident, &'a Type)>) -> TokenStream2 {
+  let (variants, types): (Vec<_>, Vec<_>) = variants.unzip();
+  let methods = variants.iter().zip(types).map(|(variant, ty)| {
+    let ctor = format_ident!("{}", variant.to_string().to_lowercase(), span = variant.span());
+    let is = format_ident!("is_{ctor}");
+    let as_variant = format_ident!("as_{ctor}");
+    quote! {
+      pub fn #ctor(v: #ty) -> Self { Self::#variant(v) }
+      pub fn #is(&self) -> bool { matches!(self, Self::#variant(_)) }
+      pub fn #as_variant(&self) -> Option<&#ty> {
+        match self { Self::#variant(v) => Some(v), _ => None }
+      }
+    }
+  });
+  quote! {
+    impl #name { #(#methods)* }
+
+    impl AstNode for #name {
+      fn location(&self) -> &NodeLocation {
+        match self { #(Self::#variants(v) => v.location(),)* }
+      }
+      fn location_mut(&mut self) -> &mut NodeLocation {
+        match self { #(Self::#variants(v) => v.location_mut(),)* }
+      }
+      fn clone_with_loc(&self, loc: NodeLocation) -> Self {
+        match self { #(Self::#variants(v) => Self::#variants(v.clone_with_loc(loc)),)* }
+      }
+    }
+
+    impl AstWalker for #name {
+      fn walk<V>(&self, v: &mut V) {
+        v.visit(self);
+        match self { #(Self::#variants(c) => c.walk(v),)* }
+      }
+      fn walk_mut<V>(&mut self, v: &mut V) {
+        v.visit_mut(self);
+        match self { #(Self::#variants(c) => c.walk_mut(v),)* }
+      }
+    }
+  }
+}
+
+fn terminal_methods(inner: &Ident, variant: &Ident, ty: Option<&Type>) -> TokenStream2 {
+  let ctor = format_ident!("{}", variant.to_string().to_lowercase(), span = variant.span());
+  let with_loc = format_ident!("{ctor}_with_loc");
+  let with_span = format_ident!("{ctor}_with_span");
+  let is = format_ident!("is_{ctor}");
+  let (arg, value, pattern, accessor) = if let Some(ty) = ty {
+    let as_variant = format_ident!("as_{ctor}");
+    (
+      quote!(v: #ty,),
+      quote!(#inner::#variant(v)),
+      quote!(#inner::#variant(_)),
+      quote! {
+        pub fn #as_variant(&self) -> Option<&#ty> {
+          match &self._node { #inner::#variant(v) => Some(v), _ => None }
+        }
+      },
     )
-  };
-  let new_impl = format!(
-    r#"
-    impl _{name} {{
-      pub fn new({fn_args}) -> Self {{ Self {{ {constructor_args} }} }}
-      pub fn with_location(self, loc: NodeLocation) -> {name} {{ {name} {{ _loc: loc, _node: self }} }}
-      pub fn with_span(self, start: usize, end: usize) -> {name} {{ {name} {{ _loc: NodeLocation::from_span(start, end), _node: self }} }}
-    }}
-    impl {name} {{
-      pub fn new({fn_args}) -> Self {{ Self {{ _loc: NodeLocation::default(), _node: _{name} {{ {constructor_args} }} }} }}
-      pub fn new_with_loc({fn_args} _loc: NodeLocation) -> Self {{ Self {{ _loc: _loc, _node: _{name} {{ {constructor_args} }} }} }}
-      {span_constructor}
-      pub fn new_with_node_and_loc(node: _{name}, loc: NodeLocation) -> Self {{ Self {{ _loc: loc, _node: node }} }}
-      pub fn with_node_and_span(node: _{name}, start: usize, end: usize) -> Self {{ Self {{ _loc: NodeLocation::from_span(start, end), _node: node }} }}
-      pub fn internal(&self) -> &_{name} {{ &self._node }}
-      pub fn internal_mut(&mut self) -> &mut _{name} {{ &mut self._node }}
-    }}
-  "#
-  );
-
-  // Walker
-  let (walker, walker_mut): (String, String) = fields
-    .iter()
-    .map(|(_, field_name, _)| {
-      let walk = format!("self._node.{field_name}.walk(v);");
-      let walk_mut = format!("self._node.{field_name}.walk_mut(v);");
-      (walk, walk_mut)
-    })
-    .unzip();
-  let impl_walker = format!(
-    r#"
-    impl AstWalker for {name} {{
-      fn walk<V>(&self, v: &mut V) {{ v.visit(self); v.visit(&self._loc); {walker} }}
-      fn walk_mut<V>(&mut self, v: &mut V) {{ v.visit_mut(self); v.visit_mut(&mut self._loc); {walker_mut} }}
-    }}
-  "#
-  );
-
-  // Accessor
-  let fields_accessor = fields
-    .iter()
-    .map(|(is_pub, field_name, field_type)| {
-      let pub_kw = if *is_pub { "pub" } else { "" };
-      let basic = if field_type.len() > 4 && &field_type[0..4] == "Box<" {
-        let elem = &field_type[4..field_type.len() - 1];
-        format!(r#"
-          {pub_kw} fn {field_name}(&self) -> &{elem} {{ &self._node.{field_name} }}
-          {pub_kw} fn {field_name}_mut(&mut self) -> &mut {elem} {{ &mut self._node.{field_name} }}
-        "#)
-      } else {
-        format!(r#"
-          {pub_kw} fn {field_name}(&self) -> &{field_type} {{ &self._node.{field_name} }}
-          {pub_kw} fn {field_name}_mut(&mut self) -> &mut {field_type} {{ &mut self._node.{field_name} }}
-        "#)
-      };
-      if field_type.len() > 4 && &field_type[0..4] == "Vec<" {
-        let elem_type = &field_type[4..field_type.len() - 1];
-        format!(r#"
-          {basic}
-          {pub_kw} fn has_{field_name}(&self) -> bool {{ !self.{field_name}().is_empty() }}
-          {pub_kw} fn num_{field_name}(&self) -> usize {{ self.{field_name}().len() }}
-          {pub_kw} fn iter_{field_name}(&self) -> impl Iterator<Item = &{elem_type}> {{ self.{field_name}().iter() }}
-          {pub_kw} fn iter_{field_name}_mut(&mut self) -> impl Iterator<Item = &mut {elem_type}> {{ self.{field_name}_mut().iter_mut() }}
-        "#)
-      } else if field_type.len() > 6 && &field_type[0..7] == "Option<" {
-        format!(r#"
-          {basic}
-          {pub_kw} fn has_{field_name}(&self) -> bool {{ self.{field_name}().is_some() }}
-        "#)
-      } else {
-        basic
-      }
-    })
-    .collect::<Vec<_>>()
-    .join("\n");
-  let fields_impl = format!(r#"impl {name} {{ {fields_accessor} }}"#);
-
-  [struct_def, new_impl, impl_walker, fields_impl].join("\n")
-}
-
-fn derive_enum(pub_kw: &str, name: String, has_pub: bool, token_list: &[TokenTree]) -> String {
-  let variants = get_enum_variants(has_pub, token_list);
-  if variants.iter().any(|(_, ty)| ty.is_none()) {
-    derive_const_enum(pub_kw, name, variants)
   } else {
-    derive_variant_enum(name, variants)
+    (quote!(), quote!(#inner::#variant), quote!(#inner::#variant), quote!())
+  };
+  quote! {
+    pub fn #ctor(#arg) -> Self {
+      Self { _loc: NodeLocation::default(), _node: #value }
+    }
+    pub fn #with_loc(#arg loc: NodeLocation) -> Self {
+      Self { _loc: loc, _node: #value }
+    }
+    pub fn #with_span(#arg start: usize, end: usize) -> Self {
+      Self { _loc: NodeLocation::from_span(start, end), _node: #value }
+    }
+    pub fn #is(&self) -> bool { matches!(&self._node, #pattern) }
+    #accessor
   }
-}
-
-fn derive_variant_enum(name: String, variants: Vec<(String, Option<String>)>) -> String {
-  let imut_cases = variants
-    .iter()
-    .map(|(name, _)| format!("Self::{name}(v) => v.location()"))
-    .collect::<Vec<_>>()
-    .join(",");
-  let mut_cases = variants
-    .iter()
-    .map(|(name, _)| format!("Self::{name}(v) => v.location_mut()"))
-    .collect::<Vec<_>>()
-    .join(",");
-  let clone_cases = variants
-    .iter()
-    .map(|(name, _)| format!("Self::{name}(v) => Self::{name}(v.clone_with_loc(loc))"))
-    .collect::<Vec<_>>()
-    .join(",");
-
-  let ast_node_impl = format!(
-    r#"
-    impl AstNode for {name} {{
-      fn location(&self) -> &NodeLocation {{ match self {{ {imut_cases} }} }}
-      fn location_mut(&mut self) -> &mut NodeLocation {{ match self {{ {mut_cases} }} }}
-      fn clone_with_loc(&self, loc: NodeLocation) -> Self {{ match self {{ {clone_cases} }} }}
-    }}
-  "#
-  );
-
-  let helpers = variants
-    .iter()
-    .map(|(variant_name, variant_type)| {
-      let lower_case_variant_name = variant_name.to_lowercase();
-      if let Some(var_type) = variant_type {
-        format!(r#"
-          pub fn {lower_case_variant_name}(v: {var_type}) -> Self {{ Self::{variant_name}(v) }}
-          pub fn is_{lower_case_variant_name}(&self) -> bool {{ match self {{ {name}::{variant_name}(_) => true, _ => false }} }}
-          pub fn as_{lower_case_variant_name}(&self) -> Option<&{var_type}> {{ match self {{ {name}::{variant_name}(v) => Some(v), _ => None }} }}
-        "#)
-      } else {
-        unreachable!()
-      }
-    })
-    .collect::<Vec<_>>()
-    .join("\n");
-  let match_helper_impl = format!(r#"impl {name} {{ {helpers} }}"#);
-
-  let (walkers, walker_muts): (String, String) = variants
-    .iter()
-    .map(|(name, _)| {
-      (
-        format!("Self::{name}(c) => c.walk(v),"),
-        format!("Self::{name}(c) => c.walk_mut(v),"),
-      )
-    })
-    .unzip();
-  let impl_walker = format!(
-    r#"
-    impl AstWalker for {name} {{
-      fn walk<V>(&self, v: &mut V) {{ v.visit(self); match self {{ {walkers} }} }}
-      fn walk_mut<V>(&mut self, v: &mut V) {{ v.visit_mut(self); match self {{ {walker_muts} }} }}
-    }}
-  "#
-  );
-
-  [ast_node_impl, match_helper_impl, impl_walker].join("\n")
-}
-
-fn derive_const_enum(pub_kw: &str, name: String, variants: Vec<(String, Option<String>)>) -> String {
-  assert!(
-    name.starts_with('_'),
-    "The first character of the name needs to be an underscore `_`"
-  );
-  let name = name[1..].to_string();
-  let type_def = format!(r#"{pub_kw} type {name} = AstNodeWrapper<_{name}>;"#);
-
-  let universal_helper = format!(
-    r#"
-    impl _{name} {{
-      pub fn with_location(self, loc: NodeLocation) -> {name} {{ {name} {{ _loc: loc, _node: self }} }}
-      pub fn with_span(self, start: usize, end: usize) -> {name} {{ {name} {{ _loc: NodeLocation::from_span(start, end), _node: self }} }}
-    }}
-    impl {name} {{
-      pub fn internal(&self) -> &_{name} {{ &self._node }}
-      pub fn internal_mut(&mut self) -> &mut _{name} {{ &mut self._node }}
-    }}
-  "#
-  );
-
-  let helpers = variants
-    .iter()
-    .map(|(variant_name, variant_type)| {
-      let lower_case_variant_name = variant_name.to_lowercase();
-      if let Some(var_type) = variant_type {
-        format!(r#"
-          pub fn {lower_case_variant_name}(v: {var_type}) -> Self {{ Self {{ _loc: NodeLocation::default(), _node: _{name}::{variant_name}(v) }} }}
-          pub fn {lower_case_variant_name}_with_loc(v: {var_type}, loc: NodeLocation) -> Self {{ Self {{ _loc: loc, _node: _{name}::{variant_name}(v) }} }}
-          pub fn {lower_case_variant_name}_with_span(v: {var_type}, start: usize, end: usize) -> Self {{ Self {{ _loc: NodeLocation::from_span(start, end), _node: _{name}::{variant_name}(v) }} }}
-          pub fn is_{lower_case_variant_name}(&self) -> bool {{ match &self._node {{ _{name}::{variant_name}(_) => true, _ => false }} }}
-          pub fn as_{lower_case_variant_name}(&self) -> Option<&{var_type}> {{ match &self._node {{ _{name}::{variant_name}(v) => Some(v), _ => None }} }}
-        "#)
-      } else {
-        format!(r#"
-          pub fn {lower_case_variant_name}() -> Self {{ Self {{ _loc: NodeLocation::default(), _node: _{name}::{variant_name} }} }}
-          pub fn {lower_case_variant_name}_with_loc(loc: NodeLocation) -> Self {{ Self {{ _loc: loc, _node: _{name}::{variant_name} }} }}
-          pub fn {lower_case_variant_name}_with_span(start: usize, end: usize) -> Self {{ Self {{ _loc: NodeLocation::from_span(start, end), _node: _{name}::{variant_name} }} }}
-          pub fn is_{lower_case_variant_name}(&self) -> bool {{ match &self._node {{ _{name}::{variant_name} => true, _ => false }} }}
-        "#)
-      }
-    })
-    .collect::<Vec<_>>()
-    .join("\n");
-  let match_helper_impl = format!(r#" impl {name} {{ {helpers} }} "#);
-
-  let impl_walker = format!(
-    r#"
-    impl AstWalker for {name} {{
-      fn walk<V>(&self, v: &mut V) {{ v.visit(self); v.visit(&self._loc); }}
-      fn walk_mut<V>(&mut self, v: &mut V) {{ v.visit_mut(self); v.visit_mut(&mut self._loc); }}
-    }}
-  "#
-  );
-
-  [type_def, universal_helper, match_helper_impl, impl_walker].join("\n")
 }
