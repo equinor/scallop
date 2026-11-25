@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::utils::FloatKey;
+use ordered_float::OrderedFloat;
 
 use super::*;
 
@@ -149,7 +149,7 @@ impl Ord for TensorExpr {
   fn cmp(&self, other: &Self) -> Ordering {
     match (self, other) {
       (Self::Symbol(a), Self::Symbol(b)) => a.cmp(b),
-      (Self::Float(a), Self::Float(b)) => FloatKey(*a).cmp(&FloatKey(*b)),
+      (Self::Float(a), Self::Float(b)) => OrderedFloat(*a).cmp(&OrderedFloat(*b)),
       (Self::Add(a, b), Self::Add(c, d))
       | (Self::Sub(a, b), Self::Sub(c, d))
       | (Self::Mul(a, b), Self::Mul(c, d))
@@ -176,7 +176,7 @@ impl std::hash::Hash for TensorExpr {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     match self {
       Self::Symbol(s) => s.hash(state),
-      Self::Float(f) => FloatKey(*f).hash(state),
+      Self::Float(f) => OrderedFloat(*f).hash(state),
       Self::Add(v1, v2) => {
         "add".hash(state);
         v1.hash(state);

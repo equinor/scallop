@@ -1,3 +1,5 @@
+use ordered_float::OrderedFloat;
+
 use crate::common::tuple::*;
 use crate::common::value_type::*;
 use crate::runtime::dynamic::*;
@@ -71,9 +73,9 @@ impl<Prov: Provenance> Aggregator<Prov> for RankAggregator {
   ) -> DynamicElements<Prov> {
     // Sort the batch
     if self.ascending {
-      batch.sort_by_cached_key(|elem| crate::utils::FloatKey(prov.weight(&elem.tag)));
+      batch.sort_by_cached_key(|elem| OrderedFloat(prov.weight(&elem.tag)));
     } else {
-      batch.sort_by_cached_key(|elem| crate::utils::FloatKey(-prov.weight(&elem.tag)));
+      batch.sort_by_cached_key(|elem| OrderedFloat(-prov.weight(&elem.tag)));
     }
 
     // Return

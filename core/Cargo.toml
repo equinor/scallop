@@ -22,6 +22,7 @@ csv = "1.1"
 sprs = "0.11"
 jiff = { version = "1", default-features = false, features = ["std", "js"] }
 num-bigint = "0.5"
+ordered-float = "5"
 regex = "1"
 dyn-clone = "1.0.10"
 thiserror = "2"

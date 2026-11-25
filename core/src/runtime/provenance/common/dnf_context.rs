@@ -1,10 +1,9 @@
 use std::collections::*;
 
 use itertools::Itertools;
+use ordered_float::OrderedFloat;
 use rand::distr::weighted::WeightedIndex;
 use rand::prelude::*;
-
-use crate::utils::FloatKey;
 
 use super::top_k_aggregation::ByPriority;
 use super::{Clause, DNFFormula, Literal};
@@ -33,7 +32,7 @@ pub trait DNFContextTrait {
   }
 
   fn retain_top_k(&self, clauses: &mut Vec<Clause>, k: usize) {
-    clauses.sort_by_cached_key(|p| FloatKey(-self.clause_probability(p)));
+    clauses.sort_by_cached_key(|p| OrderedFloat(-self.clause_probability(p)));
     clauses.truncate(k);
   }
 
@@ -72,7 +71,7 @@ pub trait DNFContextTrait {
         clause
           .literals
           .iter()
-          .sorted_by_cached_key(|x| FloatKey(-self.literal_probability(x)))
+          .sorted_by_cached_key(|x| OrderedFloat(-self.literal_probability(x)))
           .collect::<Vec<_>>()
       })
       .collect::<Vec<_>>();
