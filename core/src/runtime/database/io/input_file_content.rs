@@ -1,5 +1,4 @@
-use std::collections::*;
-use std::path::*;
+use std::path::PathBuf;
 
 use crate::common::input_file::InputFile;
 use crate::runtime::error::IOError;
@@ -25,7 +24,6 @@ impl InputFileContent {
 #[derive(Debug, Clone)]
 pub struct CSVFileContent {
   fields: Vec<String>,
-  field_id_map: BTreeMap<String, usize>,
   rows: Vec<Vec<String>>,
 }
 
@@ -41,19 +39,17 @@ impl CSVFileContent {
       })?;
 
     // Generate fields
-    let (fields, field_id_map) = if has_header {
-      let fields = rdr
+    let fields = if has_header {
+      rdr
         .headers()
         .map_err(|e| IOError::CannotReadHeader {
           error: format!("{}", e),
         })?
         .iter()
         .map(|s| s.to_string())
-        .collect::<Vec<_>>();
-      let field_id_map = fields.iter().enumerate().map(|(i, s)| (s.clone(), i)).collect();
-      (fields, field_id_map)
+        .collect()
     } else {
-      (vec![], BTreeMap::new())
+      vec![]
     };
 
     // Generate rows
@@ -65,11 +61,7 @@ impl CSVFileContent {
       rows.push(record.iter().map(|s| s.to_string()).collect());
     }
 
-    Ok(Self {
-      fields,
-      field_id_map,
-      rows,
-    })
+    Ok(Self { fields, rows })
   }
 
   pub fn num_columns(&self) -> usize {
@@ -81,7 +73,7 @@ impl CSVFileContent {
   }
 
   pub fn get_header_id(&self, header: &str) -> Option<usize> {
-    self.field_id_map.get(header).copied()
+    self.fields.iter().rposition(|field| field == header)
   }
 
   pub fn get_ith_header(&self, i: usize) -> Option<&String> {

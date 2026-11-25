@@ -149,6 +149,20 @@ fn io_student_with_fields() {
 }
 
 #[test]
+fn io_fields_use_the_last_duplicate_header() {
+  expect_interpret_result(
+    &format!(
+      r#"
+        @file("{}/res/testing/csv/duplicate_headers.csv", fields=["label", "value"])
+        type selected(label: String, value: i32)
+      "#,
+      CARGO_MANIFEST_DIR,
+    ),
+    ("selected", vec![("middle".to_string(), 30i32)]),
+  );
+}
+
+#[test]
 fn io_enrollment() {
   expect_interpret_result(
     &format!(
