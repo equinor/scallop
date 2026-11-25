@@ -177,8 +177,9 @@ impl<Prov: Provenance> DynamicRelation<Prov> {
     let mut to_add_batches = self.to_add.borrow_mut();
     let mut to_add = match to_add_batches.pop() {
       Some(mut to_add) => {
+        let mut merge_buffer = Vec::new();
         while let Some(to_add_more) = to_add_batches.pop() {
-          to_add = to_add.merge(to_add_more, ctx);
+          to_add = to_add.merge_with_buffer(to_add_more, ctx, &mut merge_buffer);
         }
         to_add
       }
@@ -223,12 +224,17 @@ impl<Prov: Provenance> DynamicRelation<Prov> {
     batches: DynamicBatches<'a, Prov>,
     runtime: &RuntimeEnvironment,
   ) {
-    for batch in batches {
+    for mut batch in batches {
       let sorted = batch.is_tuple_sorted();
-      let data = if runtime.early_discard {
-        batch.filter(move |e| !ctx.discard(&e.tag)).collect::<Vec<_>>()
+      let data = if let Some(mut rows) = batch.take_materialized() {
+        if runtime.early_discard {
+          rows.retain(|row| !ctx.discard(&row.tag));
+        }
+        rows
+      } else if runtime.early_discard {
+        Iterator::filter(batch, |row| !ctx.discard(&row.tag)).collect()
       } else {
-        batch.collect::<Vec<_>>()
+        batch.collect()
       };
       let collection = if sorted {
         DynamicSortedCollection::from_sorted_vec(data, ctx)

@@ -170,7 +170,13 @@ impl<Prov: Provenance> DynamicSortedCollection<Prov> {
 
   pub fn merge(self, other: Self, ctx: &Prov) -> Self {
     Self {
-      elements: merge_sorted_tagged(self.elements, other.elements, ctx),
+      elements: merge_sorted_tagged(self.elements, other.elements, ctx, None),
+    }
+  }
+
+  pub(crate) fn merge_with_buffer(self, other: Self, ctx: &Prov, buffer: &mut DynamicElements<Prov>) -> Self {
+    Self {
+      elements: merge_sorted_tagged(self.elements, other.elements, ctx, Some(buffer)),
     }
   }
 }
