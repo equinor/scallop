@@ -1,5 +1,3 @@
-use itertools::*;
-
 use super::*;
 
 pub struct DynamicAggregationJoinGroupDataflow<'a, Prov: Provenance> {
@@ -42,88 +40,44 @@ impl<'a, Prov: Provenance> DynamicAggregationJoinGroupDataflow<'a, Prov> {
 
 impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicAggregationJoinGroupDataflow<'a, Prov> {
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
-    let Some(mut group_by_c) = self.d1.iter_recent().next_batch() else {
+    let Some(group_by) = self.d1.iter_recent().next_batch() else {
       return DynamicBatches::empty();
     };
 
-    let Some(mut main_c) = self.d2.iter_recent().next_batch() else {
+    let Some(main) = self.d2.iter_recent().next_batch() else {
       return DynamicBatches::empty();
     };
 
-    let mut groups = vec![];
+    let mut group_by = group_by.peekable();
+    let mut main = main.peekable();
+    let mut result = Vec::new();
+    while let Some(first) = group_by.next() {
+      let key = &first.tuple[0];
+      while main.next_if(|row| &row.tuple[0] < key).is_some() {}
 
-    // Collect keys by iterating through all the groups
-    let (mut i, mut j) = (group_by_c.next_elem(), main_c.next_elem());
-    while let Some(group_by_elem) = &i {
-      let key_tag = &group_by_elem.tag;
-      let key_tup = &group_by_elem.tuple;
+      let inputs: DynamicElements<Prov> = std::iter::from_fn(|| main.next_if(|row| &row.tuple[0] == key))
+        .map(|row| DynamicElement::new(row.tuple.drain(1).expect("missing aggregate input payload"), row.tag))
+        .collect();
+      let matched = !inputs.is_empty();
+      let aggregates = self.agg.aggregate(self.ctx, self.runtime, inputs);
+      let mut append = |row: &DynamicElement<Prov>| {
+        let payload = &row.tuple[1];
+        result.extend(aggregates.iter().map(|aggregate| {
+          DynamicElement::new(
+            (key.clone(), payload.clone(), aggregate.tuple.clone()),
+            self.ctx.mult(&row.tag, &aggregate.tag),
+          )
+        }));
+      };
 
-      // If there is still an element
-      if let Some(to_agg_elem) = &j {
-        let to_agg_tup = &to_agg_elem.tuple;
-
-        // Compare the keys
-        if key_tup[0] == to_agg_tup[0] {
-          let key = key_tup[0].clone();
-
-          // Get the set of variables to join on
-          let mut to_join = vec![(key_tag.clone(), key_tup[1].clone())];
-          i = group_by_c.next_elem();
-          while let Some(e) = &i {
-            if e.tuple[0] == key {
-              to_join.push((e.tag.clone(), e.tuple[1].clone()));
-              i = group_by_c.next_elem();
-            } else {
-              break;
-            }
-          }
-
-          // Get the set of elements to aggregate on
-          let mut to_agg = vec![to_agg_elem.clone()];
-          j = main_c.next_elem();
-          while let Some(e) = &j {
-            if e.tuple[0] == key {
-              to_agg.push(e.clone());
-              j = main_c.next_elem();
-            } else {
-              break;
-            }
-          }
-
-          // Add this to the groups
-          groups.push((key, to_join, to_agg));
-        } else if key_tup[0] < to_agg_tup[0] {
-          groups.push((key_tup[0].clone(), vec![(key_tag.clone(), key_tup[1].clone())], vec![]));
-          i = group_by_c.next_elem();
-        } else {
-          j = main_c.next_elem();
+      append(&first);
+      // Unmatched rows each get their own empty-group aggregate.
+      if matched {
+        while let Some(row) = group_by.next_if(|row| &row.tuple[0] == key) {
+          append(&row);
         }
-      } else {
-        // If there is no element, but we still have a group,
-        // we create an empty batch for the group
-        groups.push((key_tup[0].clone(), vec![(key_tag.clone(), key_tup[1].clone())], vec![]));
-        i = group_by_c.next_elem();
       }
     }
-
-    let result: DynamicElements<Prov> = groups
-      .into_iter()
-      .flat_map(|(group_key, group_by_vals, to_agg_vals)| {
-        let to_agg_tups = to_agg_vals
-          .iter()
-          .map(|e| DynamicElement::new(e.tuple[1].clone(), e.tag.clone()))
-          .collect::<Vec<_>>();
-        let agg_results = self.agg.aggregate(self.ctx, self.runtime, to_agg_tups);
-        iproduct!(group_by_vals, agg_results)
-          .map(|((tag, t1), agg_result)| {
-            DynamicElement::new(
-              (group_key.clone(), t1.clone(), agg_result.tuple.clone()),
-              self.ctx.mult(&tag, &agg_result.tag),
-            )
-          })
-          .collect::<Vec<_>>()
-      })
-      .collect::<Vec<_>>();
 
     DynamicBatches::single(ElementsBatch::new(result))
   }

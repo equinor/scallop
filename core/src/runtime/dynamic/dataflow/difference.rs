@@ -18,12 +18,7 @@ impl<'a, Prov: Provenance> Clone for DynamicDifferenceDataflow<'a, Prov> {
 
 impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicDifferenceDataflow<'a, Prov> {
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
-    let op = DifferenceOp { ctx: self.ctx };
-    DynamicBatches::chain(vec![
-      DynamicBatches::binary(self.d1.iter_stable(), self.d2.iter_recent(), op.clone()),
-      DynamicBatches::binary(self.d1.iter_recent(), self.d2.iter_stable(), op.clone()),
-      DynamicBatches::binary(self.d1.iter_recent(), self.d2.iter_recent(), op.clone()),
-    ])
+    DynamicBatches::binary_recent(&self.d1, &self.d2, DifferenceOp { ctx: self.ctx })
   }
 }
 
@@ -78,31 +73,24 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicDifferenceBatch<'a, Prov> 
       match (&self.i1_curr, &self.i2_curr) {
         (Some(i1_curr_elem), Some(i2_curr_elem)) => match i1_curr_elem.tuple.cmp(&i2_curr_elem.tuple) {
           Ordering::Less => {
-            let result = i1_curr_elem.clone();
-            self.i1_curr = self.i1.next_elem();
-            return Some(result);
+            return std::mem::replace(&mut self.i1_curr, self.i1.next_elem());
           }
           Ordering::Equal => {
             let maybe_tag = self.ctx.minus(&i1_curr_elem.tag, &i2_curr_elem.tag);
+            let result = std::mem::replace(&mut self.i1_curr, self.i1.next_elem());
+            self.i2_curr = self.i2.next_elem();
             if let Some(tag) = maybe_tag {
-              let result = DynamicElement::new(i1_curr_elem.tuple.clone(), tag);
-              self.i1_curr = self.i1.next_elem();
-              self.i2_curr = self.i2.next_elem();
-              return Some(result);
-            } else {
-              self.i1_curr = self.i1.next_elem();
-              self.i2_curr = self.i2.next_elem();
+              return result.map(|mut elem| {
+                elem.tag = tag;
+                elem
+              });
             }
           }
           Ordering::Greater => {
             self.i2_curr = self.i2.search_until(&i1_curr_elem.tuple);
           }
         },
-        (Some(i1_curr_elem), None) => {
-          let result = i1_curr_elem.clone();
-          self.i1_curr = self.i1.next_elem();
-          return Some(result);
-        }
+        (Some(_), None) => return std::mem::replace(&mut self.i1_curr, self.i1.next_elem()),
         _ => return None,
       }
     }

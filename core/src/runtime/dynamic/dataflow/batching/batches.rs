@@ -1,3 +1,4 @@
+use super::super::{Dataflow, DynamicDataflow};
 use super::*;
 use crate::runtime::provenance::*;
 
@@ -39,6 +40,19 @@ impl<'a, Prov: Provenance> DynamicBatches<'a, Prov> {
 
   pub fn binary<Op: BatchBinaryOp<'a, Prov>>(self, b2: Self, op: Op) -> Self {
     Self::new(DynamicBatchesBinary::new(self, b2, op))
+  }
+
+  pub(crate) fn binary_recent<Op: BatchBinaryOp<'a, Prov> + Clone>(
+    left: &DynamicDataflow<'a, Prov>,
+    right: &DynamicDataflow<'a, Prov>,
+    op: Op,
+  ) -> Self {
+    let pairs = [
+      left.iter_stable().binary(right.iter_recent(), op.clone()),
+      left.iter_recent().binary(right.iter_stable(), op.clone()),
+      left.iter_recent().binary(right.iter_recent(), op),
+    ];
+    Self::from_iterator(pairs.into_iter().flatten())
   }
 
   pub fn unary<Op: BatchUnaryOp<'a, Prov> + Clone>(self, op: Op) -> Self {
