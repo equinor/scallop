@@ -33,44 +33,37 @@ impl<'a, Prov: Provenance> DynamicAggregationImplicitGroupDataflow<'a, Prov> {
 
 impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicAggregationImplicitGroupDataflow<'a, Prov> {
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
-    let Some(mut batch) = self.d.iter_recent().next_batch() else {
+    let Some(batch) = self.d.iter_recent().next_batch() else {
       return DynamicBatches::empty();
     };
-    // Temporary function to aggregate the group and populate the result
-    let consolidate_group = |result: &mut DynamicElements<Prov>, agg_key: Tuple, agg_group| {
-      let agg_results = self.agg.aggregate(self.ctx, self.runtime, agg_group);
-      let joined_results = agg_results
-        .into_iter()
-        .map(|agg_result| DynamicElement::new((agg_key.clone(), agg_result.tuple.clone()), agg_result.tag));
-      result.extend(joined_results);
-    };
-
-    let Some(first_elem) = batch.next_elem() else {
+    let mut rows = batch
+      .map(|row| {
+        let Tuple::Tuple(fields) = row.tuple else {
+          panic!("missing aggregate input key and payload");
+        };
+        let mut fields = fields.into_vec().into_iter();
+        let key = fields.next().expect("missing aggregate input key");
+        let payload = fields.next().expect("missing aggregate input payload");
+        (key, DynamicElement::new(payload, row.tag))
+      })
+      .peekable();
+    if rows.peek().is_none() {
       return DynamicBatches::empty();
-    };
-
-    // Internal states
-    let mut result = vec![];
-    let mut agg_key = first_elem.tuple[0].clone();
-    let mut agg_group = vec![DynamicElement::new(first_elem.tuple[1].clone(), first_elem.tag.clone())];
-
-    // Enter main loop
-    while let Some(curr_elem) = batch.next_elem() {
-      let curr_key = curr_elem.tuple[0].clone();
-      let elem = DynamicElement::new(curr_elem.tuple[1].clone(), curr_elem.tag.clone());
-      if curr_key == agg_key {
-        agg_group.push(elem);
-      } else {
-        let prev_key = std::mem::replace(&mut agg_key, curr_key);
-        let prev_group = std::mem::replace(&mut agg_group, vec![elem]);
-        consolidate_group(&mut result, prev_key, prev_group);
-      }
     }
 
-    // Make sure we handle the last group
-    consolidate_group(&mut result, agg_key, agg_group);
+    let mut result = Vec::new();
+    while let Some((key, first)) = rows.next() {
+      let group = std::iter::once(first)
+        .chain(std::iter::from_fn(|| rows.next_if(|(next_key, _)| next_key == &key)).map(|(_, row)| row))
+        .collect();
+      let aggregates = self.agg.aggregate(self.ctx, self.runtime, group);
+      result.extend(
+        aggregates
+          .into_iter()
+          .map(|row| DynamicElement::new((key.clone(), row.tuple), row.tag)),
+      );
+    }
 
-    // Return the result as a single batch
     DynamicBatches::single(ElementsBatch::new(result))
   }
 }

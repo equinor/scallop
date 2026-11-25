@@ -151,7 +151,7 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicExclusionBatch<'a, Prov> {
         match self.right_clone.next_elem() {
           Some(right) => {
             // Create a tuple combining left and right
-            let tuple: Tuple = (left.tuple.clone(), right.tuple.clone()).into();
+            let tuple: Tuple = (left.tuple.clone(), right.tuple).into();
             let me_input_tag = Prov::InputTag::from_dynamic_input_tag(&DynamicInputTag::Exclusive(exc_id));
             let me_tag = self.ctx.tagging_optional_fn(me_input_tag);
             let tag = self.ctx.mult(&left.tag, &me_tag);

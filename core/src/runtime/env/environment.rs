@@ -200,16 +200,23 @@ impl RuntimeEnvironment {
 
   pub fn internalize_value(&self, val: &Value) -> Option<Value> {
     match val {
+      Value::EntityString(s) => self.dynamic_entity_store.compile_and_add_entity_string(s).ok(),
+      other => self.internalize_owned_value(other.clone()),
+    }
+  }
+
+  pub(crate) fn internalize_owned_value(&self, val: Value) -> Option<Value> {
+    match val {
       Value::SymbolString(s) => {
-        let symbol_id = self.symbol_registry.register(s.clone());
+        let symbol_id = self.symbol_registry.register(s);
         Some(Value::Symbol(symbol_id))
       }
       Value::Tensor(t) => {
-        let tensor_symbol = self.tensor_registry.register(t.clone());
+        let tensor_symbol = self.tensor_registry.register(t);
         tensor_symbol.map(|s| Value::TensorValue(s.into()))
       }
-      Value::EntityString(s) => self.dynamic_entity_store.compile_and_add_entity_string(s).ok(),
-      other => Some(other.clone()),
+      Value::EntityString(s) => self.dynamic_entity_store.compile_and_add_entity_string(&s).ok(),
+      other => Some(other),
     }
   }
 

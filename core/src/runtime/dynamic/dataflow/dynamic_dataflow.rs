@@ -172,7 +172,7 @@ impl<'a, Prov: Provenance> DynamicDataflow<'a, Prov> {
     Self::new(ForeignPredicateConstraintDataflow {
       dataflow: self,
       foreign_predicate: pred,
-      args,
+      args: args.into(),
       ctx,
       runtime,
     })
@@ -188,7 +188,7 @@ impl<'a, Prov: Provenance> DynamicDataflow<'a, Prov> {
     Self::new(ForeignPredicateJoinDataflow {
       left: self,
       foreign_predicate: pred,
-      args,
+      args: args.into(),
       ctx,
       runtime,
     })

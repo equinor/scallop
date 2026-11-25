@@ -1,9 +1,3 @@
-use crate::common::foreign_predicate::*;
-use crate::common::tuple::*;
-use crate::common::value::*;
-use crate::runtime::env::*;
-use crate::runtime::provenance::*;
-
 use super::*;
 
 #[derive(Clone)]
@@ -26,27 +20,19 @@ pub struct ForeignPredicateGroundDataflow<'a, Prov: Provenance> {
 
 impl<'a, Prov: Provenance> ForeignPredicateGroundDataflow<'a, Prov> {
   /// Generate a batch from the foreign predicate
-  fn generate_batch(&self, runtime: &RuntimeEnvironment) -> ElementsBatch<Prov> {
+  fn generate_batch(&self) -> ElementsBatch<Prov> {
     // Fetch the foreign predicate
-    let foreign_predicate = runtime
+    let foreign_predicate = self
+      .runtime
       .predicate_registry
       .get(&self.foreign_predicate)
       .expect("Foreign predicate not found");
-
-    // Evaluate the foreign predicate
-    let elements = foreign_predicate
-      .evaluate_with_env(runtime, &self.bounded_constants)
-      .into_iter()
-      .filter_map(|(input_tag, values)| {
-        let input_tag = StaticInputTag::from_dynamic_input_tag(&input_tag);
-        let tag = self.ctx.tagging_optional_fn(input_tag);
-        let tuple = Tuple::from(values);
-        let internal_tuple = runtime.internalize_tuple(&tuple)?;
-        Some(DynamicElement::new(internal_tuple, tag))
-      })
-      .collect::<Vec<_>>();
-
-    ElementsBatch::new(elements)
+    ElementsBatch::new(evaluate_output(
+      foreign_predicate,
+      &self.bounded_constants,
+      self.runtime,
+      self.ctx,
+    ))
   }
 }
 
@@ -55,13 +41,13 @@ impl<'a, Prov: Provenance> Dataflow<'a, Prov> for ForeignPredicateGroundDataflow
     if self.first_iteration {
       DynamicBatches::empty()
     } else {
-      DynamicBatches::single(self.generate_batch(self.runtime))
+      DynamicBatches::single(self.generate_batch())
     }
   }
 
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
     if self.first_iteration {
-      DynamicBatches::single(self.generate_batch(self.runtime))
+      DynamicBatches::single(self.generate_batch())
     } else {
       DynamicBatches::empty()
     }
