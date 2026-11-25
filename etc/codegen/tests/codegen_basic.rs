@@ -408,14 +408,15 @@ fn codegen_count_edge_1() {
   mod count_edge {
     use scallop_codegen::scallop;
     scallop! {
-      rel edge :- {(0, 1), (1, 2)}
+      type edge(usize, usize)
+      rel edge :- {(0, 1), (1, 2), (2, 3)}
       rel num_edges(n) :- n = count(a, b: edge(a, b))
     }
   }
 
   let mut ctx = unit::UnitProvenance;
   let result = count_edge::run(&mut ctx);
-  expect_static_output_collection(&result.num_edges, vec![(2,)]);
+  expect_static_output_collection(&result.num_edges, vec![(3,)]);
 }
 
 #[test]
