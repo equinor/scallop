@@ -83,6 +83,11 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicRelationStableBatch<'a, Pr
     }
   }
 
+  fn remaining_slice(&self) -> Option<&[DynamicElement<Prov>]> {
+    let rows = &self.collections[self.rela_id].elements;
+    Some(&rows[self.elem_id.min(rows.len())..])
+  }
+
   fn step(&mut self, u: usize) {
     self.elem_id += u;
   }
@@ -129,6 +134,11 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicRelationRecentBatch<'a, Pr
     } else {
       None
     }
+  }
+
+  fn remaining_slice(&self) -> Option<&[DynamicElement<Prov>]> {
+    let rows = &self.collection.elements;
+    Some(&rows[self.elem_id.min(rows.len())..])
   }
 
   fn step(&mut self, u: usize) {

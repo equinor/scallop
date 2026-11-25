@@ -1,12 +1,10 @@
 mod gallop;
-mod join_product;
 
 use std::cmp::Ordering;
 
 use crate::runtime::provenance::{Provenance, Tagged};
 
 pub(crate) use gallop::*;
-pub(crate) use join_product::JoinProduct;
 
 pub(crate) fn merge_sorted_tagged<T: Clone + Ord, P: Provenance>(
   mut left: Vec<Tagged<T, P>>,
