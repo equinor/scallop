@@ -4,6 +4,46 @@ import scallopy
 import torch
 
 class TestForward(unittest.TestCase):
+  def test_rejects_mixed_tensor_and_list_tag_dtypes(self):
+    for provenance in ("diffminmaxprob", "difftopkproofs"):
+      with self.subTest(provenance=provenance):
+        ctx = scallopy.Context(provenance=provenance)
+        ctx.add_relation("left", int, range(1))
+        ctx.add_relation("right", int)
+        ctx.add_rule("answer(x) = left(x) or right(x)")
+        forward = ctx.forward_function("answer", [0], dispatch="serial")
+
+        with self.assertRaisesRegex(TypeError, r"torch\.float32, got torch\.float64 in relation 'right' at batch index 0"):
+          forward(
+            left=torch.tensor([[0.5]], dtype=torch.float32),
+            right=[[(torch.tensor(0.25, dtype=torch.float64), (0,))]],
+          )
+
+  def test_rejects_mixed_forward_and_context_proof_tag_dtypes(self):
+    ctx = scallopy.Context(provenance="difftopkproofs")
+    ctx.add_relation("value", int)
+    ctx.add_facts("value", [(torch.tensor(0.25, dtype=torch.float64), (1,))])
+    ctx.add_rule("answer(x) = value(x)")
+    forward = ctx.forward_function("answer", [1, 2], dispatch="serial")
+
+    with self.assertRaisesRegex(TypeError, r"Expected proof tags with dtype torch\.float64, got torch\.float32"):
+      forward(value=[[(torch.tensor(0.5, dtype=torch.float32), (2,))]])
+
+  def test_ragged_proof_tags_keep_gradients_with_an_empty_first_row(self):
+    ctx = scallopy.Context(provenance="difftopkproofs")
+    ctx.add_relation("value", int)
+    ctx.add_rule("answer(x) = value(x)")
+    for sparse in (False, True):
+      with self.subTest(sparse=sparse):
+        forward = ctx.forward_function("answer", [1, 2], dispatch="serial", sparse_jacobian=sparse)
+        a, b, c = torch.tensor([0.25, 0.5, 0.75], dtype=torch.float64, requires_grad=True).unbind()
+
+        answer = forward(value=[[], [(a, (1,)), (b, (2,))], [(c, (2,))]])
+
+        torch.testing.assert_close(answer, answer.new_tensor([[0, 0], [0.25, 0.5], [0, 0.75]]))
+        for tag, grad in zip((a, b, c), torch.autograd.grad(answer.sum(), (a, b, c)), strict=True):
+          torch.testing.assert_close(grad, torch.ones_like(tag))
+
   def test_top_k_sample(self):
     # First setup the symbols
     symbols = [str(s) for s in range(10)] + ["+", "-", "*", "/"]
