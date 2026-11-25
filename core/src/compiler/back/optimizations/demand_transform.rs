@@ -416,40 +416,17 @@ impl Adornment {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum DemandTransformError {
-  InvalidPattern {
-    pattern: String,
-  },
+  #[error("Invalid pattern `{pattern}`")]
+  InvalidPattern { pattern: String },
+  #[error("Arity mismatch of demand pattern `{pattern}` for `{predicate}`. Expected {expected}, found {actual}.")]
   ArityMismatch {
     predicate: String,
     pattern: String,
     expected: usize,
     actual: usize,
   },
-}
-
-impl From<DemandTransformError> for BackCompileError {
-  fn from(e: DemandTransformError) -> Self {
-    Self::DemandTransformError(e)
-  }
-}
-
-impl std::fmt::Display for DemandTransformError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::InvalidPattern { pattern } => f.write_fmt(format_args!("Invalid pattern `{}`", pattern)),
-      Self::ArityMismatch {
-        predicate,
-        pattern,
-        expected,
-        actual,
-      } => f.write_fmt(format_args!(
-        "Arity mismatch of demand pattern `{}` for `{}`. Expected {}, found {}.",
-        pattern, predicate, expected, actual
-      )),
-    }
-  }
 }
 
 #[derive(Clone, Debug)]

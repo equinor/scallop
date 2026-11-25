@@ -34,6 +34,8 @@ pub struct FrontCompileError {
   pub errors: Vec<Box<dyn FrontCompileErrorTrait>>,
 }
 
+impl std::error::Error for FrontCompileError {}
+
 impl std::fmt::Display for FrontCompileError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     for error in &self.errors {

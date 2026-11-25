@@ -98,10 +98,35 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
   /// Run the main iteration, which iterates until a stopping criteria (provided in the runtime environment)
   /// is reached.
   pub fn run(&'a mut self, ctx: &Prov, runtime: &RuntimeEnvironment) -> HashMap<String, DynamicCollection<Prov>> {
+    self.run_inner::<()>(ctx, runtime, None)
+  }
+
+  pub fn run_with_monitor<M: Monitor<Prov>>(
+    &'a mut self,
+    ctx: &Prov,
+    runtime: &RuntimeEnvironment,
+    m: &M,
+  ) -> HashMap<String, DynamicCollection<Prov>> {
+    self.run_inner(ctx, runtime, Some(m))
+  }
+
+  fn run_inner<M: Monitor<Prov>>(
+    &'a mut self,
+    ctx: &Prov,
+    runtime: &RuntimeEnvironment,
+    monitor: Option<&M>,
+  ) -> HashMap<String, DynamicCollection<Prov>> {
     // Iterate until fixpoint
-    while self.need_to_iterate(ctx, runtime) {
+    while self.need_to_iterate(ctx, runtime, monitor) {
+      if let Some(m) = monitor {
+        m.observe_stratum_iteration(self.iter_num);
+      }
+
       // Perform updates
       for update in &self.updates {
+        if monitor.is_some() {
+          println!("    [Iteration #{}: Updating {}...]", self.iter_num, update.target);
+        }
         let dyn_update = self.build_dynamic_update(runtime, ctx, update);
         dyn_update
           .target
@@ -142,86 +167,21 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
   }
 
   /// Check if we need to continue the iteration
-  fn need_to_iterate(&mut self, ctx: &Prov, runtime: &RuntimeEnvironment) -> bool {
-    // Check if it has been changed
-    if self.changed(ctx, runtime) || self.is_first_iteration() {
-      // Check iter count; if reaching limit then we need to stop
-      if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit()
-        && self.iter_num > iter_limit
-      {
-        self.changed(ctx, runtime);
-        return false;
-      }
-
-      // Check if we have reached a goal
-      if runtime.stopping_criteria.stop_when_goal_relation_non_empty() && self.derived_non_empty_goal_relation() {
-        self.changed(ctx, runtime);
-        return false;
-      }
-
-      // If not reaching limit then we need to iterate
-      return true;
-    }
-
-    // If it is no longer changing, but we are still less than expected iter limit, continue
-    if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit()
-      && self.iter_num < iter_limit
-    {
-      return true;
-    }
-
-    // Finally, stop
-    false
-  }
-
-  pub fn run_with_monitor<M>(
-    &'a mut self,
+  fn need_to_iterate<M: Monitor<Prov>>(
+    &mut self,
     ctx: &Prov,
     runtime: &RuntimeEnvironment,
-    m: &M,
-  ) -> HashMap<String, DynamicCollection<Prov>>
-  where
-    M: Monitor<Prov>,
-  {
-    // Iterate until fixpoint
-    while self.need_to_iterate_with_monitor(ctx, runtime, m) {
-      // !SPECIAL MONITORING!
-      m.observe_stratum_iteration(self.iter_num);
-
-      // Perform updates
-      for update in &self.updates {
-        println!("    [Iteration #{}: Updating {}...]", self.iter_num, update.target);
-        let dyn_update = self.build_dynamic_update(runtime, ctx, update);
-        dyn_update
-          .target
-          .insert_dataflow_recent(ctx, &dyn_update.dataflow, runtime);
-      }
-
-      // Update iteration number
-      self.step();
-    }
-
-    // Generate result
-    let mut result = HashMap::new();
-    for (name, metadata) in &self.output_relations {
-      let col = self.dynamic_relations.remove(name).unwrap().complete(ctx);
-      result.insert(name.clone(), metadata.from_vec(col.elements, ctx));
-    }
-    result
-  }
-
-  fn need_to_iterate_with_monitor<M>(&mut self, ctx: &Prov, runtime: &RuntimeEnvironment, m: &M) -> bool
-  where
-    M: Monitor<Prov>,
-  {
+    monitor: Option<&M>,
+  ) -> bool {
     // Check if it has been changed
     if self.changed(ctx, runtime) || self.is_first_iteration() {
       // Check iter count; if reaching limit then we need to stop
       if let Some(iter_limit) = runtime.stopping_criteria.get_iter_limit()
         && self.iter_num > iter_limit
       {
-        // !SPECIAL MONITORING!
-        m.observe_hitting_iteration_limit();
+        if let Some(m) = monitor {
+          m.observe_hitting_iteration_limit();
+        }
 
         self.changed(ctx, runtime);
         return false;
@@ -229,8 +189,9 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
 
       // Check if we have reached a goal
       if runtime.stopping_criteria.stop_when_goal_relation_non_empty() && self.derived_non_empty_goal_relation() {
-        // !SPECIAL MONITORING!
-        m.observe_deriving_goal_relation();
+        if let Some(m) = monitor {
+          m.observe_deriving_goal_relation();
+        }
 
         self.changed(ctx, runtime);
         return false;
@@ -247,8 +208,9 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
       return true;
     }
 
-    // !SPECIAL MONITORING!
-    m.observe_converging();
+    if let Some(m) = monitor {
+      m.observe_converging();
+    }
 
     // Finally, stop
     false

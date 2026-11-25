@@ -55,11 +55,12 @@ impl<'a, Prov: Provenance> DynamicBatch<'a, Prov> {
     Self(Box::new(b))
   }
 
+  pub fn from_iterator(iter: impl Iterator<Item = DynamicElement<Prov>> + Clone + 'a) -> Self {
+    Self::new(IteratorBatch(iter))
+  }
+
   pub fn filter<F: Fn(&DynamicElement<Prov>) -> bool + Clone + 'a>(self, f: F) -> Self {
-    Self(Box::new(FilterBatch {
-      child: self,
-      filter_fn: f,
-    }))
+    Self::from_iterator(Iterator::filter(self, f))
   }
 
   pub fn collect_vec(&mut self) -> Vec<DynamicElement<Prov>> {
@@ -116,28 +117,15 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for ElementsBatch<Prov> {
 }
 
 #[derive(Clone)]
-pub struct FilterBatch<'a, Prov: Provenance, F: Fn(&DynamicElement<Prov>) -> bool + Clone + 'a> {
-  child: DynamicBatch<'a, Prov>,
-  filter_fn: F,
-}
+struct IteratorBatch<I>(I);
 
-impl<'a, Prov: Provenance, F: Fn(&DynamicElement<Prov>) -> bool + Clone> FilterBatch<'a, Prov, F> {
-  pub fn new<B: Batch<'a, Prov>>(child: B, filter_fn: F) -> Self {
-    Self {
-      child: DynamicBatch::new(child),
-      filter_fn,
-    }
-  }
-}
-
-impl<'a, Prov: Provenance, F: Fn(&DynamicElement<Prov>) -> bool + Clone> Batch<'a, Prov> for FilterBatch<'a, Prov, F> {
+impl<'a, Prov, I> Batch<'a, Prov> for IteratorBatch<I>
+where
+  Prov: Provenance,
+  I: Iterator<Item = DynamicElement<Prov>> + Clone + 'a,
+{
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
-    while let Some(e) = self.child.next_elem() {
-      if (self.filter_fn)(&e) {
-        return Some(e);
-      }
-    }
-    None
+    self.0.next()
   }
 }
 
