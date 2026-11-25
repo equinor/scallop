@@ -10,7 +10,10 @@ use scallop_core::runtime::dynamic::*;
 use scallop_core::runtime::env::*;
 use scallop_core::runtime::provenance::*;
 use scallop_core::utils::*;
-use scallopy_interop::{diff_exclusive_probability_tag, diff_probability_tag};
+use scallopy_interop::{
+  diff_exclusive_probability_tag, diff_probability_tag, exclusive_probability_tag, from_python_facts, to_py,
+  to_python_diff_probability,
+};
 
 use super::collection::*;
 use super::custom_tag;
@@ -21,37 +24,19 @@ use super::tuple::*;
 ///
 /// Contains the functions and default implementations for type conversion from and to python objects
 pub trait PythonProvenance: Provenance {
+  const TAGGED_FACTS: bool = true;
+
   /// Process a list of python facts while the tuples are typed with `tuple_type`
   fn process_typed_py_facts(
     facts: &Bound<'_, PyList>,
     tuple_type: &TupleType,
     env: &RuntimeEnvironment,
   ) -> PyResult<Vec<(Option<Self::InputTag>, Tuple)>> {
+    // Snapshot the list before conversions can call back into Python.
     let facts: Vec<Bound<'_, PyAny>> = facts.extract()?;
-    facts
-      .into_iter()
-      .map(|fact| {
-        let (maybe_py_tag, py_tup) = Self::split_py_fact(&fact)?;
-        let tag = Self::process_optional_py_tag(maybe_py_tag)?;
-        let tup = from_python_tuple(&py_tup, tuple_type, &env.into())?;
-        Ok((tag, tup))
-      })
-      .collect::<PyResult<Vec<_>>>()
-  }
-
-  /// Split a python object into (Option<PyTag>, PyTup) pair
-  fn split_py_fact<'py>(fact: &Bound<'py, PyAny>) -> PyResult<(Option<Bound<'py, PyAny>>, Bound<'py, PyAny>)> {
-    let (py_tag, py_tup) = fact.extract()?;
-    Ok((py_tag, py_tup))
-  }
-
-  /// Convert a python object into an optional input tag for this provenance context
-  fn process_optional_py_tag(maybe_py_tag: Option<Bound<'_, PyAny>>) -> PyResult<Option<Self::InputTag>> {
-    if let Some(py_tag) = maybe_py_tag {
-      Ok(Self::process_py_tag(&py_tag)?)
-    } else {
-      Ok(None)
-    }
+    from_python_facts(facts, Self::TAGGED_FACTS, Self::process_py_tag, |tuple| {
+      from_python_tuple(tuple, tuple_type, &env.into())
+    })
   }
 
   /// Convert a python object into an optional input tag for this provenance context
@@ -65,9 +50,7 @@ pub trait PythonProvenance: Provenance {
 }
 
 impl PythonProvenance for unit::UnitProvenance {
-  fn split_py_fact<'py>(fact: &Bound<'py, PyAny>) -> PyResult<(Option<Bound<'py, PyAny>>, Bound<'py, PyAny>)> {
-    Ok((None, fact.clone()))
-  }
+  const TAGGED_FACTS: bool = false;
 
   fn process_py_tag(_: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
     Ok(None)
@@ -78,7 +61,7 @@ impl PythonProvenance for unit::UnitProvenance {
   }
 
   fn to_output_py_tag(_: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| ().into_py_any(py).unwrap())
+    to_py(()).unwrap()
   }
 }
 
@@ -115,7 +98,7 @@ impl PythonProvenance for tropical::TropicalProvenance {
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| tag.into_py_any(py).unwrap())
+    to_py(tag).unwrap()
   }
 }
 
@@ -129,7 +112,7 @@ impl PythonProvenance for min_max_prob::MinMaxProbProvenance {
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| tag.into_py_any(py).unwrap())
+    to_py(tag).unwrap()
   }
 }
 
@@ -143,18 +126,13 @@ impl PythonProvenance for add_mult_prob::AddMultProbProvenance {
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| tag.into_py_any(py).unwrap())
+    to_py(tag).unwrap()
   }
 }
 
 impl PythonProvenance for top_k_proofs::TopKProofsProvenance<ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let (prob, disj_id): (Option<f64>, Option<usize>) = tag.extract()?;
-    if let Some(prob) = prob {
-      Ok(Some((prob, disj_id).into()))
-    } else {
-      Ok(None)
-    }
+    exclusive_probability_tag(tag)
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, _: &Self) -> CollectionEnum<ArcFamily> {
@@ -164,18 +142,13 @@ impl PythonProvenance for top_k_proofs::TopKProofsProvenance<ArcFamily> {
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| tag.into_py_any(py).unwrap())
+    to_py(tag).unwrap()
   }
 }
 
 impl PythonProvenance for top_bottom_k_clauses::TopBottomKClausesProvenance<ArcFamily> {
   fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
-    let (prob, disj_id): (Option<f64>, Option<usize>) = tag.extract()?;
-    if let Some(prob) = prob {
-      Ok(Some((prob, disj_id).into()))
-    } else {
-      Ok(None)
-    }
+    exclusive_probability_tag(tag)
   }
 
   fn to_collection_enum(col: Arc<DynamicOutputCollection<Self>>, _: &Self) -> CollectionEnum<ArcFamily> {
@@ -185,7 +158,7 @@ impl PythonProvenance for top_bottom_k_clauses::TopBottomKClausesProvenance<ArcF
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| tag.into_py_any(py).unwrap())
+    to_py(tag).unwrap()
   }
 }
 
@@ -236,7 +209,7 @@ impl PythonProvenance for diff_add_mult_prob::DiffAddMultProbProvenance<ExtTag, 
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| (tag.0, tag.1.clone()).into_py_any(py).unwrap())
+    to_python_diff_probability(tag).unwrap()
   }
 }
 
@@ -253,7 +226,7 @@ impl PythonProvenance for diff_nand_mult_prob::DiffNandMultProbProvenance<ExtTag
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| (tag.0, tag.1.clone()).into_py_any(py).unwrap())
+    to_python_diff_probability(tag).unwrap()
   }
 }
 
@@ -270,7 +243,7 @@ impl PythonProvenance for diff_max_mult_prob::DiffMaxMultProbProvenance<ExtTag, 
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| (tag.0, tag.1.clone()).into_py_any(py).unwrap())
+    to_python_diff_probability(tag).unwrap()
   }
 }
 
@@ -287,7 +260,7 @@ impl PythonProvenance for diff_nand_min_prob::DiffNandMinProbProvenance<ExtTag, 
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| (tag.0, tag.1.clone()).into_py_any(py).unwrap())
+    to_python_diff_probability(tag).unwrap()
   }
 }
 
@@ -304,7 +277,7 @@ impl PythonProvenance for diff_sample_k_proofs::DiffSampleKProofsProvenance<ExtT
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| (tag.0, tag.1.clone()).into_py_any(py).unwrap())
+    to_python_diff_probability(tag).unwrap()
   }
 }
 
@@ -321,7 +294,7 @@ impl PythonProvenance for diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, Ar
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| (tag.0, tag.1.clone()).into_py_any(py).unwrap())
+    to_python_diff_probability(tag).unwrap()
   }
 }
 
@@ -338,7 +311,7 @@ impl PythonProvenance for diff_top_bottom_k_clauses::DiffTopBottomKClausesProven
   }
 
   fn to_output_py_tag(tag: &Self::OutputTag) -> Py<PyAny> {
-    Python::attach(|py| (tag.0, tag.1.clone()).into_py_any(py).unwrap())
+    to_python_diff_probability(tag).unwrap()
   }
 }
 

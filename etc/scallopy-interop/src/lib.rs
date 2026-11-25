@@ -3,7 +3,7 @@ use pyo3::types::PyTuple;
 use pyo3::{prelude::*, IntoPyObjectExt};
 use scallop_core::common::foreign_tensor::FromTensor;
 use scallop_core::common::{tuple::Tuple, tuple_type::TupleType, value::Value, value_type::ValueType};
-use scallop_core::runtime::provenance::{InputDiffProb, InputExclusiveDiffProb};
+use scallop_core::runtime::provenance::{InputDiffProb, InputExclusiveDiffProb, InputExclusiveProb, OutputDiffProb};
 
 pub fn to_py<T: for<'py> IntoPyObject<'py>>(value: T) -> PyResult<Py<PyAny>> {
   Python::attach(|py| value.into_py_any(py))
@@ -75,6 +75,38 @@ macro_rules! scalar_conversions {
 
 scalar_conversions!(I8, I16, I32, I64, I128, ISize, U8, U16, U32, U64, U128, USize, F32, F64, Char, Bool, String);
 
+pub fn from_optional_python_tag<'py, T>(
+  tag: Option<&Bound<'py, PyAny>>,
+  convert_tag: impl FnOnce(&Bound<'py, PyAny>) -> PyResult<Option<T>>,
+) -> PyResult<Option<T>> {
+  tag.map_or(Ok(None), convert_tag)
+}
+
+/// Convert bare tuples or `(optional tag, tuple)` pairs in input order.
+///
+/// The caller chooses how to iterate the Python list and supplies tuple conversion
+/// so it can resolve runtime values or attach tuple-specific error context.
+pub fn from_python_facts<'py, T, E: From<PyErr>>(
+  facts: impl IntoIterator<Item = Bound<'py, PyAny>>,
+  tagged: bool,
+  convert_tag: impl Fn(&Bound<'py, PyAny>) -> PyResult<Option<T>>,
+  convert_tuple: impl Fn(&Bound<'py, PyAny>) -> Result<Tuple, E>,
+) -> Result<Vec<(Option<T>, Tuple)>, E> {
+  facts
+    .into_iter()
+    .map(|fact| {
+      let (tag, tuple) = if tagged { fact.extract()? } else { (None, fact) };
+      let tag = from_optional_python_tag(tag.as_ref(), &convert_tag)?;
+      Ok((tag, convert_tuple(&tuple)?))
+    })
+    .collect()
+}
+
+pub fn exclusive_probability_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<InputExclusiveProb>> {
+  let (probability, exclusion): (Option<f64>, Option<usize>) = tag.extract()?;
+  Ok(probability.map(|probability| (probability, exclusion).into()))
+}
+
 pub fn diff_probability_tag<'py, T>(
   tag: &Bound<'py, PyAny>,
   extract: impl FnOnce(&Bound<'py, PyAny>) -> PyResult<f64>,
@@ -102,4 +134,8 @@ where
       exclusion,
     )))
   }
+}
+
+pub fn to_python_diff_probability(tag: &OutputDiffProb) -> PyResult<Py<PyAny>> {
+  to_py((tag.0, tag.1.clone()))
 }

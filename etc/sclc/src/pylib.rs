@@ -156,7 +156,9 @@ fn generate_pylib_code(
     use scallop_core::runtime::provenance::*;
     use scallop_core::runtime::database::extensional::*;
     use scallop_core::utils::*;
-    use scallopy_interop::{diff_exclusive_probability_tag, diff_probability_tag, to_py};
+    use scallopy_interop::{
+      diff_exclusive_probability_tag, diff_probability_tag, from_python_facts, to_py, to_python_diff_probability,
+    };
     use std::collections::*;
     use std::sync::Arc;
     mod scallop_module { #module #create_edb_code }
@@ -557,36 +559,17 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     trait PythonProvenance: Provenance {
+      const TAGGED_FACTS: bool = true;
+
       /// Process a list of python facts while the tuples are typed with `tuple_type`
       fn process_typed_py_facts(facts: &Bound<'_, PyList>, tuple_type: &TupleType) -> Result<Vec<(Option<Self::InputTag>, Tuple)>, BindingError> {
-        facts
-          .iter()
-          .map(|fact| {
-            let (maybe_py_tag, py_tup) = Self::split_py_fact(fact)?;
-            let tag = Self::process_optional_py_tag(maybe_py_tag.as_ref())?;
-            let tup = from_python_tuple(&py_tup, tuple_type).map_err(|err| BindingError(format!("Cannot parse tuple `{}` with type `{}`: {}", py_tup, tuple_type, err)))?;
-            Ok((tag, tup))
-          })
-          .collect::<Result<Vec<_>, _>>()
-      }
-
-      /// Split a python object into (Option<PyTag>, PyTup) pair
-      fn split_py_fact(fact: Bound<'_, PyAny>) -> Result<(Option<Bound<'_, PyAny>>, Bound<'_, PyAny>), BindingError> {
-        let (py_tag, py_tup) = fact.extract()?;
-        Ok((py_tag, py_tup))
+        from_python_facts(facts.iter(), Self::TAGGED_FACTS, Self::process_py_tag, |tuple| {
+          from_python_tuple(tuple, tuple_type).map_err(|err| BindingError(format!("Cannot parse tuple `{}` with type `{}`: {}", tuple, tuple_type, err)))
+        })
       }
 
       /// Convert a python object into an optional input tag for this provenance context
-      fn process_optional_py_tag(maybe_py_tag: Option<&Bound<'_, PyAny>>) -> Result<Option<Self::InputTag>, BindingError> {
-        if let Some(py_tag) = maybe_py_tag {
-          Ok(Self::process_py_tag(py_tag)?)
-        } else {
-          Ok(None)
-        }
-      }
-
-      /// Convert a python object into an optional input tag for this provenance context
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError>;
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>>;
 
       /// Convert an output tag into a python object
       fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>>;
@@ -603,11 +586,9 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for unit::UnitProvenance {
-      fn split_py_fact(fact: Bound<'_, PyAny>) -> Result<(Option<Bound<'_, PyAny>>, Bound<'_, PyAny>), BindingError> {
-        Ok((None, fact))
-      }
+      const TAGGED_FACTS: bool = false;
 
-      fn process_py_tag(_: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
+      fn process_py_tag(_: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
         Ok(None)
       }
 
@@ -621,8 +602,8 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for min_max_prob::MinMaxProbProvenance {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        tag.extract().map(Some).map_err(BindingError::from)
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
+        tag.extract().map(Some)
       }
 
       fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
@@ -631,8 +612,8 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for add_mult_prob::AddMultProbProvenance {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        tag.extract().map(Some).map_err(BindingError::from)
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
+        tag.extract().map(Some)
       }
 
       fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
@@ -641,8 +622,8 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for diff_min_max_prob::DiffMinMaxProbProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        Ok(diff_probability_tag(tag, |tag| tag.extract())?)
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
+        diff_probability_tag(tag, |tag| tag.extract())
       }
 
       fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
@@ -657,12 +638,12 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        Ok(diff_exclusive_probability_tag(tag, |tag| tag.extract())?)
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
+        diff_exclusive_probability_tag(tag, |tag| tag.extract())
       }
 
       fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
-        to_py((tag.0, tag.1.clone()))
+        to_python_diff_probability(tag)
       }
 
       fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
@@ -671,12 +652,12 @@ fn generate_helper_functions() -> TokenStream {
     }
 
     impl PythonProvenance for diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance<ExtTag, ArcFamily> {
-      fn process_py_tag(tag: &Bound<'_, PyAny>) -> Result<Option<Self::InputTag>, BindingError> {
-        Ok(diff_exclusive_probability_tag(tag, |tag| tag.extract())?)
+      fn process_py_tag(tag: &Bound<'_, PyAny>) -> PyResult<Option<Self::InputTag>> {
+        diff_exclusive_probability_tag(tag, |tag| tag.extract())
       }
 
       fn to_output_py_tag(tag: &Self::OutputTag) -> PyResult<Py<PyAny>> {
-        to_py((tag.0, tag.1.clone()))
+        to_python_diff_probability(tag)
       }
 
       fn get_input_tags(&self) -> Option<Vec<Py<PyAny>>> {
