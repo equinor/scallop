@@ -2,11 +2,39 @@ from importlib.util import find_spec
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 import torch
 import scallopy
 
 class TensorTests(unittest.TestCase):
+  @unittest.skipUnless(find_spec("scallop_opencv"), "requires the OpenCV plugin")
+  def test_image_download_checks_http_status_before_decoding(self):
+    from io import BytesIO
+
+    import requests
+    from PIL import Image
+    from scallop_opencv.load_image import load_image_url
+
+    url = "https://example.invalid/image.png"
+    response = requests.Response()
+    response.url = url
+    response.status_code = 200
+    with BytesIO() as data:
+      Image.new("RGBA", (1, 1), (12, 34, 56, 78)).save(data, format="PNG")
+      response._content = data.getvalue()
+    with patch("requests.get", return_value=response) as get:
+      torch.testing.assert_close(load_image_url(url), torch.tensor([[[12, 34, 56]]], dtype=torch.uint8))
+      get.assert_called_once_with(url, timeout=30)
+
+    response.status_code = 404
+    response._content = b"not an image"
+    with patch("requests.get", return_value=response), self.assertRaises(requests.HTTPError):
+      load_image_url(url)
+
+    with patch("requests.get", side_effect=requests.Timeout), self.assertRaises(requests.Timeout):
+      load_image_url(url)
+
   @unittest.skipUnless(find_spec("PIL"), "requires Pillow")
   def test_debug_image_saves_jpeg_under_image_id(self):
     from PIL import Image

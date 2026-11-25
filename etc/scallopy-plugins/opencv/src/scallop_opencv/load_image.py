@@ -25,8 +25,7 @@ def load_image_url(image_url: str) -> Tensor:
     from io import BytesIO
     from PIL import Image
 
-    response = requests.get(image_url)
-    image = Image.open(BytesIO(response.content)).convert("RGB")
-    image_tensor = torch.tensor(numpy.asarray(image))
-
-    return image_tensor
+    response = requests.get(image_url, timeout=30)
+    response.raise_for_status()
+    with Image.open(BytesIO(response.content)) as image:
+        return torch.tensor(numpy.asarray(image.convert("RGB")))
