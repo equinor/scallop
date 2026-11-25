@@ -419,15 +419,8 @@ impl<'a> IntoIterator for &'a ForeignPredicateRegistry {
 }
 
 /// THe errors happening when handling foreign predicates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum ForeignPredicateError {
+  #[error("Foreign predicate `{id}` already existed")]
   AlreadyExisted { id: String },
-}
-
-impl std::fmt::Display for ForeignPredicateError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::AlreadyExisted { id } => write!(f, "Foreign predicate `{}` already existed", id),
-    }
-  }
 }

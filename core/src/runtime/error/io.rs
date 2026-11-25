@@ -3,52 +3,37 @@ use std::path::PathBuf;
 use crate::common::tuple_type::*;
 use crate::common::value_type::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum IOError {
+  #[error("IO: Cannot open file `{file_path}`: {error}")]
   CannotOpenFile { file_path: PathBuf, error: String },
+  #[error("IO: Cannot read file: {error}")]
   CannotReadFile { error: String },
+  #[error("IO: Cannot parse CSV: {error}")]
   CannotParseCSV { error: String },
+  #[error("IO: Cannot read CSV header: {error}")]
   CannotReadHeader { error: String },
+  #[error("IO: Cannot find field `{field}`")]
   CannotFindField { field: String },
+  #[error("IO: Index out of bounds: {index}")]
   IndexOutOfBounds { index: usize },
+  #[error("IO: Invalid tuple type: `{types}`")]
   InvalidType { types: TupleType },
+  #[error("IO: Expect `Symbol` type for field; found `{actual}`")]
   ExpectSymbolType { actual: ValueType },
+  #[error("IO: Expect `String` type for value; found `{actual}`")]
   ExpectStringType { actual: ValueType },
-  ValueParseError { error: ValueParseError },
+  #[error("{error}")]
+  ValueParseError {
+    #[source]
+    error: ValueParseError,
+  },
+  #[error("IO: Cannot parse probability `{value}`")]
   CannotParseProbability { value: String },
+  #[error("IO: Arity mismatch; expected {expected}, found {found}")]
   ArityMismatch { expected: usize, found: usize },
+  #[error("IO: Cannot write record: {error}")]
   CannotWriteRecord { error: String },
+  #[error("IO: Invalid file format")]
   InvalidFileFormat {},
-}
-
-impl std::fmt::Display for IOError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::CannotOpenFile { file_path, error } => f.write_fmt(format_args!(
-        "IO: Cannot open file `{}`: {}",
-        file_path.as_os_str().to_string_lossy(),
-        error
-      )),
-      Self::CannotReadFile { error } => f.write_fmt(format_args!("IO: Cannot read file: {}", error)),
-      Self::CannotParseCSV { error } => f.write_fmt(format_args!("IO: Cannot parse CSV: {}", error)),
-      Self::CannotReadHeader { error } => f.write_fmt(format_args!("IO: Cannot read CSV header: {}", error)),
-      Self::CannotFindField { field } => f.write_fmt(format_args!("IO: Cannot find field `{}`", field)),
-      Self::IndexOutOfBounds { index } => f.write_fmt(format_args!("IO: Index out of bounds: {}", index)),
-      Self::InvalidType { types } => f.write_fmt(format_args!("IO: Invalid tuple type: `{}`", types)),
-      Self::ExpectSymbolType { actual } => {
-        f.write_fmt(format_args!("IO: Expect `Symbol` type for field; found `{}`", actual))
-      }
-      Self::ExpectStringType { actual } => {
-        f.write_fmt(format_args!("IO: Expect `String` type for value; found `{}`", actual))
-      }
-      Self::ValueParseError { error } => std::fmt::Display::fmt(error, f),
-      Self::CannotParseProbability { value } => f.write_fmt(format_args!("IO: Cannot parse probability `{}`", value)),
-      Self::ArityMismatch { expected, found } => f.write_fmt(format_args!(
-        "IO: Arity mismatch; expected {}, found {}",
-        expected, found
-      )),
-      Self::CannotWriteRecord { error } => f.write_fmt(format_args!("IO: Cannot write record: {}", error)),
-      Self::InvalidFileFormat {} => f.write_fmt(format_args!("IO: Invalid file format")),
-    }
-  }
 }

@@ -1,8 +1,27 @@
+use std::error::Error;
+
 use scallop_core::common::value::*;
+use scallop_core::common::value_type::{ValueParseError, ValueType};
+use scallop_core::runtime::database::DatabaseError;
+use scallop_core::runtime::error::{IOError, RuntimeError};
 use scallop_core::runtime::provenance::*;
 use scallop_core::testing::*;
 
 static CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+
+#[test]
+fn runtime_io_errors_preserve_the_message_and_source_chain() {
+  let io = IOError::ValueParseError {
+    error: ValueParseError::new("not an integer", &ValueType::I32),
+  };
+  let runtime = RuntimeError::from(DatabaseError::IO(io));
+  assert_eq!(runtime.to_string(), "Cannot parse value `not an integer` as `i32`");
+  let database = runtime.source().unwrap();
+  assert!(database.is::<DatabaseError>());
+  let io = database.source().unwrap();
+  assert!(io.is::<IOError>());
+  assert!(io.source().unwrap().is::<ValueParseError>());
+}
 
 #[test]
 fn io_edge() {
