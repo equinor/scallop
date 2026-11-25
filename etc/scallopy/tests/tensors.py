@@ -1,9 +1,25 @@
+from importlib.util import find_spec
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 
 import torch
 import scallopy
 
 class TensorTests(unittest.TestCase):
+  @unittest.skipUnless(find_spec("PIL"), "requires Pillow")
+  def test_debug_image_saves_jpeg_under_image_id(self):
+    from PIL import Image
+    from scallopy.utils.image import save_debug_image
+
+    tensor = torch.zeros((2, 3), dtype=torch.uint8)
+    with TemporaryDirectory() as root:
+      for index in range(2):
+        save_debug_image(root, 42, index, "mask", tensor)
+        with Image.open(Path(root) / "42" / f"mask-{index}.jpg") as image:
+          self.assertEqual(image.format, "JPEG")
+          self.assertEqual(image.size, (3, 2))
+
   @unittest.skipIf(not scallopy.torch_tensor_enabled(), "not supported in this scallopy version")
   def test_tensor_foreign_function_in_parallel_batch(self):
     @scallopy.foreign_function

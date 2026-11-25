@@ -2,11 +2,10 @@ from argparse import ArgumentParser
 from typing import Dict, List, Optional
 import os
 
-from PIL import Image
 import numpy
 import torch
 import scallopy
-from scallopy.utils.image import box_slices
+from scallopy.utils.image import box_slices, save_debug_image
 
 from scallop_gpu import get_device
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
@@ -179,23 +178,23 @@ class ScallopSamPlugin(scallopy.Plugin):
               if field == "mask":
                 result_tuple.append(segmentation)
                 if dump_image:
-                  save_temporary_image(id(img), i, field, segmentation)
+                  save_debug_image(DUMP_IMAGE_PATH, id(img), i, field, segmentation)
               elif field == "masked-cropped-image":
                 masked_img = torch.mul(img, segmentation.unsqueeze(-1))
                 masked_cropped_img = masked_img[rows, columns, :]
                 result_tuple.append(masked_cropped_img)
                 if dump_image:
-                  save_temporary_image(id(img), i, field, masked_cropped_img)
+                  save_debug_image(DUMP_IMAGE_PATH, id(img), i, field, masked_cropped_img)
               elif field == "cropped-image":
                 cropped_img = img[rows, columns, :]
                 result_tuple.append(cropped_img)
                 if dump_image:
-                  save_temporary_image(id(img), i, field, cropped_img)
+                  save_debug_image(DUMP_IMAGE_PATH, id(img), i, field, cropped_img)
               elif field == "cropped-mask":
                 cropped_mask = segmentation[rows, columns]
                 result_tuple.append(cropped_mask)
                 if dump_image:
-                  save_temporary_image(id(img), i, field, cropped_mask)
+                  save_debug_image(DUMP_IMAGE_PATH, id(img), i, field, cropped_mask)
               elif field == "area":
                 result_tuple.append(mask["area"])
               elif field == "bbox-x":
@@ -258,7 +257,7 @@ class ScallopSamPlugin(scallopy.Plugin):
             if field == "mask":
               result_tuple.append(mask)
               if dump_image:
-                save_temporary_image(dump_id, 0, field, mask)
+                save_debug_image(DUMP_IMAGE_PATH, dump_id, 0, field, mask)
             elif field == "masked-cropped-image":
               raise Exception("Not suppported")
             elif field == "cropped-image":
@@ -293,18 +292,6 @@ class ScallopSamPlugin(scallopy.Plugin):
     ctx.register_foreign_attribute(segment_anything)
 
   load_into_context = load_into_ctx
-
-def save_temporary_image(img_id, i, kind, img_tensor):
-  # First get the directory
-  directory = os.path.join(DUMP_IMAGE_PATH, f"{img_id}")
-  if not os.path.exists(directory):
-    os.makedirs(directory)
-
-  # Dump the image
-  file_name = os.path.join(directory, f"{kind}-{i}.jpg")
-  img = Image.fromarray(img_tensor.numpy())
-  img.save(file_name)
-
 
 def area_from_mask(mask) -> int:
   return int(torch.sum(mask))
