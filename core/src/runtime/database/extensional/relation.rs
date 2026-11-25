@@ -7,6 +7,7 @@ use crate::common::tuple::*;
 use crate::common::tuple_type::*;
 use crate::common::value::*;
 use crate::common::value_type::*;
+use crate::compiler::ram::Fact;
 use crate::runtime::dynamic::*;
 use crate::runtime::env::*;
 use crate::runtime::error::*;
@@ -23,9 +24,10 @@ pub struct ExtensionalRelation<Prov: Provenance> {
   /// The facts from the program
   program_facts: Vec<(DynamicInputTag, Tuple)>,
 
-  /// Whether we have internalized the program facts; we only allow a single
-  /// round of internalization of program facts
+  /// Whether a previous run has fixed the program's fact declarations.
   pub internalized_program_facts: bool,
+
+  num_internalized_program_facts: usize,
 
   /// Loaded files
   pub loaded_files: BTreeSet<PathBuf>,
@@ -60,6 +62,7 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
       metadata,
       program_facts: vec![],
       internalized_program_facts: false,
+      num_internalized_program_facts: 0,
       loaded_files: BTreeSet::new(),
       dynamic_input: vec![],
       static_input: vec![],
@@ -76,6 +79,7 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
       metadata: self.metadata.clone(),
       program_facts: self.program_facts.clone(),
       internalized_program_facts: false,
+      num_internalized_program_facts: 0,
       loaded_files: BTreeSet::new(),
       dynamic_input: self.dynamic_input.clone(),
       static_input: self
@@ -105,7 +109,26 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
   where
     I: Iterator<Item = (DynamicInputTag, Tuple)>,
   {
-    self.program_facts.extend(i)
+    let previous_count = self.program_facts.len();
+    self.program_facts.extend(i);
+    if self.program_facts.len() != previous_count {
+      self.internalized = false;
+    }
+  }
+
+  pub(super) fn set_program_facts(&mut self, facts: &[Fact]) -> bool {
+    if self.internalized_program_facts {
+      return self
+        .program_facts
+        .iter()
+        .map(|(tag, tuple)| (tag, tuple))
+        .eq(facts.iter().map(|fact| (&fact.tag, &fact.tuple)));
+    }
+
+    self.program_facts.clear();
+    self.num_internalized_program_facts = 0;
+    self.add_program_facts(facts.iter().map(|fact| (fact.tag.clone(), fact.tuple.clone())));
+    true
   }
 
   pub fn add_facts(&mut self, facts: Vec<Tuple>) {
@@ -146,7 +169,7 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
 
     // Load the file into the dynamic input
     let result = load_from_file(env, file, loaded_file_content, types).map_err(DatabaseError::IO)?;
-    self.dynamic_input.extend(result);
+    self.add_dynamic_input_facts(result);
 
     // If succeeded, add the file into the file_path
     self.loaded_files.insert(file.file_path().clone());
@@ -158,19 +181,13 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
   pub fn internalize(&mut self, env: &RuntimeEnvironment, ctx: &Prov) {
     let mut elems: Vec<DynamicElement<Prov>> = Vec::new();
 
-    // First internalize program facts, only if there is program facts
-    if !self.program_facts.is_empty() {
-      // Iterate (not drain) the program facts
-      elems.extend(self.program_facts.iter().filter_map(|(tag, tup)| {
-        let int_tup = env.internalize_tuple(tup)?;
-        let maybe_input_tag = StaticInputTag::from_dynamic_input_tag(tag);
-        let tag = ctx.tagging_optional_fn(maybe_input_tag);
-        Some(DynamicElement::new(int_tup, tag))
-      }));
-
-      // Set the internalization to `true`
-      self.internalized_program_facts = true;
-    }
+    // Keep previously assigned tags stable across runs.
+    elems.extend(self.take_pending_program_facts().filter_map(|(tag, tup)| {
+      let int_tup = env.internalize_tuple(tup)?;
+      let maybe_input_tag = StaticInputTag::from_dynamic_input_tag(tag);
+      let tag = ctx.tagging_optional_fn(maybe_input_tag);
+      Some(DynamicElement::new(int_tup, tag))
+    }));
 
     // First internalize dynamic input facts
     elems.extend(self.dynamic_input.drain(..).filter_map(|(tag, tup)| {
@@ -198,23 +215,16 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
   pub fn internalize_with_monitor<M: Monitor<Prov>>(&mut self, env: &RuntimeEnvironment, ctx: &Prov, m: &M) {
     let mut elems: Vec<DynamicElement<Prov>> = Vec::new();
 
-    // First internalize program facts, only if there is program facts
-    if !self.program_facts.is_empty() {
-      // Iterate (not drain) the program facts
-      elems.extend(self.program_facts.iter().filter_map(|(tag, tup)| {
-        let int_tup = env.internalize_tuple(tup)?;
-        let maybe_input_tag = StaticInputTag::from_dynamic_input_tag(tag);
-        let tag = ctx.tagging_optional_fn(maybe_input_tag.clone());
+    elems.extend(self.take_pending_program_facts().filter_map(|(tag, tup)| {
+      let int_tup = env.internalize_tuple(tup)?;
+      let maybe_input_tag = StaticInputTag::from_dynamic_input_tag(tag);
+      let tag = ctx.tagging_optional_fn(maybe_input_tag.clone());
 
-        // !SPECIAL MONITORING!
-        m.observe_tagging(&int_tup, &maybe_input_tag, &tag);
+      // !SPECIAL MONITORING!
+      m.observe_tagging(&int_tup, &maybe_input_tag, &tag);
 
-        Some(DynamicElement::new(int_tup, tag))
-      }));
-
-      // Set the internalization to `true`
-      self.internalized_program_facts = true;
-    }
+      Some(DynamicElement::new(int_tup, tag))
+    }));
 
     // First internalize dynamic input facts
     elems.extend(self.dynamic_input.drain(..).filter_map(|(tag, tup)| {
@@ -245,6 +255,13 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
     // Finally sort the internal facts; note that we need to merge possibly duplicated tags
     self.internal = self.metadata.from_vec(elems, ctx);
     self.internalized = true;
+  }
+
+  fn take_pending_program_facts(&mut self) -> impl Iterator<Item = &(DynamicInputTag, Tuple)> {
+    let first = self.num_internalized_program_facts;
+    self.num_internalized_program_facts = self.program_facts.len();
+    self.internalized_program_facts |= self.has_program_facts();
+    self.program_facts[first..].iter()
   }
 }
 

@@ -12,7 +12,7 @@ pub enum DatabaseError {
   },
   #[error("Unknown relation `{relation}`")]
   UnknownRelation { relation: String },
-  #[error("New facts in program declared for relation `{relation}`; cannot incrementally compute")]
+  #[error("Program facts changed for relation `{relation}`; cannot incrementally compute")]
   NewProgramFacts { relation: String },
   #[error("{0}")]
   IO(#[source] IOError),

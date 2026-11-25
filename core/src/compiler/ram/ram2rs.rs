@@ -1021,30 +1021,7 @@ fn needs_shared_ops(flow: &Dataflow) -> bool {
     | ForeignPredicateJoin(..) => true,
     _ => false,
   };
-  shared || flow_children(flow).any(needs_shared_ops)
-}
-
-fn flow_children(flow: &Dataflow) -> impl Iterator<Item = &Dataflow> {
-  use Dataflow::*;
-  let children = match flow {
-    Project(d, _)
-    | Filter(d, _)
-    | Find(d, _)
-    | Sorted(d)
-    | JoinIndexedVec(d, _)
-    | OverwriteOne(d)
-    | ForeignPredicateConstraint(d, _, _)
-    | ForeignPredicateJoin(d, _, _) => [Some(d.as_ref()), None],
-    Union(l, r)
-    | Join(l, r)
-    | Intersect(l, r)
-    | Product(l, r)
-    | Antijoin(l, r)
-    | Difference(l, r)
-    | Exclusion(l, r) => [Some(l.as_ref()), Some(r.as_ref())],
-    _ => [None, None],
-  };
-  children.into_iter().flatten()
+  shared || flow.children().any(needs_shared_ops)
 }
 
 impl Program {
@@ -1129,7 +1106,7 @@ impl Program {
       }
       _ => {}
     }
-    flow_children(flow).try_for_each(|child| self.validate_flow(child))
+    flow.children().try_for_each(|child| self.validate_flow(child))
   }
 
   fn validate_expr(&self, expr: &Expr) -> Result<(), RustEmissionError> {

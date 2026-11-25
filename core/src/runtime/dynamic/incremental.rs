@@ -15,6 +15,7 @@ use crate::utils::*;
 #[derive(Clone, Debug)]
 pub struct ExecutionOptions {
   pub type_check: bool,
+  /// Retain results for subsequent runs in the same runtime and provenance context.
   pub incremental_maintain: bool,
   pub retain_internal_when_recover: bool,
 }
@@ -41,6 +42,7 @@ pub struct DynamicExecutionContext<Prov: Provenance, Ptr: PointerFamily = RcFami
   pub program: ram::Program,
   pub edb: ExtensionalDatabase<Prov>,
   pub idb: IntentionalDatabase<Prov, Ptr>,
+  cached_early_discard: Option<bool>,
 }
 
 impl<Prov: Provenance, Ptr: PointerFamily> Clone for DynamicExecutionContext<Prov, Ptr> {
@@ -50,6 +52,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> Clone for DynamicExecutionContext<Pro
       program: self.program.clone(),
       edb: self.edb.clone(),
       idb: self.idb.clone(),
+      cached_early_discard: self.cached_early_discard,
     }
   }
 }
@@ -61,15 +64,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
   }
 
   pub fn new_with_options(options: ExecutionOptions) -> Self {
-    let edb = ExtensionalDatabase::new_with_options(options.type_check);
-    let idb = IntentionalDatabase::default();
-    let program = ram::Program::new();
-    Self {
-      options,
-      program,
-      edb,
-      idb,
-    }
+    Self::new_with_program_and_options(ram::Program::new(), options)
   }
 
   pub fn new_with_program_and_options(program: ram::Program, options: ExecutionOptions) -> Self {
@@ -80,6 +75,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       program,
       edb,
       idb,
+      cached_early_discard: None,
     }
   }
 
@@ -92,11 +88,13 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       program: self.program.clone(),
       edb: self.edb.clone_with_new_provenance::<Prov2>(),
       idb: self.idb.clone_with_new_provenance::<Prov2>(),
+      cached_early_discard: None,
     }
   }
 
   pub fn set_non_incremental(&mut self) {
     self.options.incremental_maintain = false;
+    self.cached_early_discard = None;
   }
 
   /// Directly execute the program stored in the file
@@ -143,40 +141,35 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     ctx: &Prov,
     monitor: Option<&M>,
   ) -> Result<(), RuntimeError> {
-    // Pull the IDB
-    let mut incremental_result = IntentionalDatabase::default();
-    std::mem::swap(&mut self.idb, &mut incremental_result);
+    let program_ref = maybe_new_program.as_ref().unwrap_or(&self.program);
+    self.edb.populate_program_facts(runtime, program_ref)?;
 
-    // Persistent relations
-    let mut temp_program = ram::Program::new();
-    std::mem::swap(&mut self.program, &mut temp_program);
-    let program_ref = if let Some(new_program) = &maybe_new_program {
-      // Process the EDB; populate using program facts
-      self.edb.populate_program_facts(runtime, new_program)?;
-
-      // If need to incrementalize, remove such computed results
-      let edb_need_update_relations = self.edb.need_update_relations();
-
-      // If a new program is provided, compute the persistent relations that we can re-use
-      let pers = if edb_need_update_relations.is_empty() {
-        self.program.persistent_relations(new_program)
-      } else {
+    let can_cache = self.options.incremental_maintain
+      && self.options.retain_internal_when_recover
+      && supports_result_reuse(program_ref, runtime);
+    let previous_cache = self.cached_early_discard.take();
+    let mut incremental_result = std::mem::take(&mut self.idb);
+    if can_cache && previous_cache == Some(runtime.early_discard) {
+      let mut need_update = self.edb.need_update_relations();
+      need_update.extend(program_ref.relations().filter_map(|relation| {
+        let predicate = &relation.predicate;
         self
           .program
-          .persistent_relations_with_need_update_relations(new_program, &edb_need_update_relations)
-      };
-
-      // Keep the relations only in the set of persistent relations
-      incremental_result.retain_relations(&pers);
-
-      // Return this new program
-      new_program
-    } else {
-      self.edb.populate_program_facts(runtime, &temp_program)?;
-
-      // If there is no new program, we directly take our current program
-      &temp_program
-    };
+          .relation(predicate)
+          .filter(|old| {
+            old.immutable != relation.immutable
+              || old.storage != relation.storage
+              || old.scheduler != relation.scheduler
+          })
+          .map(|_| predicate.clone())
+      }));
+      let reusable = self
+        .program
+        .persistent_relations_with_need_update_relations(program_ref, &need_update);
+      incremental_result.retain_relations(&reusable);
+    } else if self.options.incremental_maintain || maybe_new_program.is_some() {
+      incremental_result = IntentionalDatabase::default();
+    }
 
     // Internalize EDB relations
     if let Some(m) = monitor {
@@ -245,16 +238,15 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     // Update the program
     if let Some(new_program) = maybe_new_program {
       self.program = new_program;
-    } else {
-      self.program = temp_program;
     }
+    self.cached_early_discard = can_cache.then_some(runtime.early_discard);
 
     // Success!
     Ok(())
   }
 
   fn execute_stratum<M: Monitor<Prov>>(
-    &mut self,
+    &self,
     stratum_id: usize,
     current_idb: &IntentionalDatabase<Prov, Ptr>,
     execution: &StratumExecution<'_, Prov>,
@@ -305,8 +297,11 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
         }
       }
       for (rel, col) in current_idb {
-        observe_load(rel, false);
-        iter.add_input_dynamic_collection(rel, col.internal_facts.as_ref());
+        // A recovered immutable relation can have an output-only copy in the IDB.
+        if !ram_program.relation(rel).is_some_and(|r| r.immutable) {
+          observe_load(rel, false);
+          iter.add_input_dynamic_collection(rel, col.internal_facts.as_ref());
+        }
       }
     } else {
       // Non-incremental version:
@@ -412,6 +407,9 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
   }
 
   pub fn recover(&mut self, r: &str, runtime: &RuntimeEnvironment, ctx: &Prov) {
+    if !self.options.retain_internal_when_recover {
+      self.cached_early_discard = None;
+    }
     if self.idb.has_relation(r) {
       self
         .idb
@@ -424,6 +422,9 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
   }
 
   pub fn recover_with_monitor<M: Monitor<Prov>>(&mut self, r: &str, runtime: &RuntimeEnvironment, ctx: &Prov, m: &M) {
+    if !self.options.retain_internal_when_recover {
+      self.cached_early_discard = None;
+    }
     self
       .idb
       .recover_with_monitor(r, runtime, ctx, m, !self.options.retain_internal_when_recover)
@@ -466,6 +467,34 @@ struct StrataInformation {
   stratum_inputs: StratumInputs,
   stratum_outputs: StratumOutputs,
   relation_lifespan: RelationLifespan,
+}
+
+fn supports_result_reuse(program: &ram::Program, runtime: &RuntimeEnvironment) -> bool {
+  // Early stopping, implicit entity updates, and side effects cannot be tracked by RAM dependencies.
+  runtime.stopping_criteria.get_iter_limit().is_none()
+    && !runtime.stopping_criteria.stop_when_goal_relation_non_empty()
+    && program.adt_variant_registry.iter().next().is_none()
+    && (&runtime.function_registry)
+      .into_iter()
+      .all(|(name, _)| runtime.function_registry.is_builtin(name))
+    && runtime
+      .predicate_registry
+      .iter()
+      .all(|(name, _)| runtime.predicate_registry.is_builtin(name))
+    && runtime
+      .aggregate_registry
+      .iter()
+      .all(|(name, _)| runtime.aggregate_registry.is_builtin(name))
+    && program
+      .strata
+      .iter()
+      .flat_map(|stratum| &stratum.updates)
+      .all(|update| !uses_random_sampling(&update.dataflow))
+}
+
+fn uses_random_sampling(flow: &ram::Dataflow) -> bool {
+  matches!(flow, ram::Dataflow::Reduce(reduce) if matches!(reduce.aggregator.as_str(), "uniform" | "categorical"))
+    || flow.children().any(uses_random_sampling)
 }
 
 fn stratum_inputs_outputs(ram: &ram::Program) -> StrataInformation {
