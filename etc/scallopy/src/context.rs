@@ -13,6 +13,7 @@ use scallop_core::runtime::env::*;
 use scallop_core::runtime::monitor;
 use scallop_core::runtime::provenance::*;
 use scallop_core::utils::*;
+use scallopy_interop::from_optional_python_tag;
 
 use crate::custom_tag;
 
@@ -791,7 +792,7 @@ fn add_py_rule<P>(
 where
   P: PythonProvenance,
 {
-  let tag: Option<P::InputTag> = P::process_optional_py_tag(tag)?;
+  let tag = from_optional_python_tag(tag.as_ref(), P::process_py_tag)?;
   c.add_rule_with_options(rule, tag, attrs)?;
   Ok(())
 }
