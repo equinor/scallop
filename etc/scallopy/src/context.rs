@@ -7,7 +7,6 @@ use rayon::prelude::*;
 
 use scallop_core::common::tuple::*;
 use scallop_core::common::tuple_type::*;
-use scallop_core::compiler;
 use scallop_core::integrate::*;
 use scallop_core::runtime::env::*;
 use scallop_core::runtime::monitor;
@@ -401,38 +400,6 @@ impl Context {
   /// If called multiple times, the ram program compiled later will overwrite the previous ones.
   fn compile(&mut self) -> Result<(), BindingError> {
     match_context!(&mut self.ctx, c, c.compile().map_err(BindingError::from))
-  }
-
-  /// JIT compile the surface program into a python library, by invoking `sclc::pylib::create_pylib`.
-  ///
-  /// When succeeded, there will be a `target_file` created, which can be in turn imported by python runtime.
-  fn jit_compile(&mut self, target_relations: Vec<String>, target_file: String) -> Result<(), BindingError> {
-    match_context!(
-      &self.ctx,
-      c,
-      c.validate_rust_extensions()
-        .map_err(|err| BindingError::CompileError(err.to_string()))
-    )?;
-    let target_relations = target_relations.iter().map(String::as_str).collect::<Vec<_>>();
-    // First compile the program
-    match_context!(
-      &mut self.ctx,
-      c,
-      c.compile_with_output_relations(Some(target_relations))
-        .map_err(BindingError::from)
-    )?;
-
-    // Get the ram from compilation context
-    let ram = match_context!(&self.ctx, c, c.ram());
-
-    // Invoke sclc to compile the ram into rust code
-    let opt = sclc_core::options::Options {
-      input: std::path::PathBuf::from(target_file),
-      do_not_copy_artifact: true,
-      ..Default::default()
-    };
-    let compile_opt = compiler::CompileOptions::default();
-    sclc_core::pylib::create_pylib(&opt, compile_opt, ram).map_err(|err| BindingError::CompileError(err.to_string()))
   }
 
   /// Import a module written in scallop file

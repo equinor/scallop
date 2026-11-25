@@ -133,7 +133,7 @@ class MNISTHowMany3Or4Net(nn.Module):
     self.scl_ctx.add_rule("how_many(x) :- x = count(o: digit(o, 3) or digit(o, 4))")
 
     # The `how_many` logical reasoning module
-    self.how_many = self.scl_ctx.forward_function("how_many", list(range(num_elements + 1)), jit=args.jit)
+    self.how_many = self.scl_ctx.forward_function("how_many", list(range(num_elements + 1)))
 
   def forward(self, x: List[torch.Tensor]):
     # Apply mnist net on each image and stack them into the same big tensor
@@ -223,7 +223,6 @@ if __name__ == "__main__":
   parser.add_argument("--seed", type=int, default=1234)
   parser.add_argument("--provenance", type=str, default="difftopbottomkclauses")
   parser.add_argument("--top-k", type=int, default=2)
-  parser.add_argument("--jit", action="store_true")
   args = parser.parse_args()
 
   # Parameters

@@ -1,9 +1,5 @@
 from typing import Dict, Union, List, Optional, Tuple, Any, TypeAlias
 import logging
-import os
-import sys
-import zipfile
-import shutil
 
 from .context import ScallopContext
 from .provenance import ScallopProvenance
@@ -118,8 +114,6 @@ class ScallopForwardFunction(torch_importer.Module):
 
 
 class InternalScallopForwardFunction(torch_importer.Module):
-  FORWARD_FN_COUNTER = 1
-
   """
   A Scallop PyTorch forward function.
 
@@ -133,9 +127,6 @@ class InternalScallopForwardFunction(torch_importer.Module):
     output_mappings: Optional[Dict[str, Optional[_OutputMapping]]] = None,
     dispatch: str = "parallel",
     debug_provenance: bool = False,
-    jit: bool = False,
-    jit_name: str = "",
-    recompile: bool = False,
     sparse_jacobian: bool = False,
   ):
     super(InternalScallopForwardFunction, self).__init__()
@@ -144,11 +135,7 @@ class InternalScallopForwardFunction(torch_importer.Module):
     self.ctx = ctx
     self.dispatch = dispatch
     self.debug_provenance = debug_provenance
-    self.jit = jit
-    self.jit_name = jit_name
-    self.recompile = recompile
     self.sparse_jacobian = sparse_jacobian
-    self.fn_counter = self.FORWARD_FN_COUNTER
 
     # Preprocess the dispatch
     if self.ctx.provenance == "custom" and self.dispatch == "parallel":
@@ -161,21 +148,9 @@ class InternalScallopForwardFunction(torch_importer.Module):
       if not self.ctx.has_relation(output_relation):
         raise Exception(f"Unknown relation `{output_relation}`; cannot construct forward function")
 
-    # Counter
-    self.FORWARD_FN_COUNTER += 1
-
     # Default tensor apply function is an identity function; later it might be
     # a `to("cpu")` or `to("gpu")` function.
     self._torch_tensor_apply = lambda x: x
-
-    # Default static compiled module
-    self._static_compiled_module = None
-
-    # Compile if needs jit
-    if self.jit:
-      if len(self.outputs) == 0:
-        raise Exception("JIT compiled context must provide one output relation")
-      self._compile_for_jit(self.jit_name)
 
   def __getstate__(self):
     """
@@ -183,14 +158,14 @@ class InternalScallopForwardFunction(torch_importer.Module):
     """
     state = self.__dict__.copy()
     del state["_torch_tensor_apply"]
-    del state["_static_compiled_module"]
     return state
 
   def __setstate__(self, state):
     """
     Deserialize from pickle state
     """
-    # Serializable part
+    if state.get("jit"):
+      raise ValueError("Native JIT was removed. Recreate this forward function without jit=True.")
     self.__dict__.update(state)
     self._torch_tensor_apply = lambda x: x
 
@@ -245,36 +220,6 @@ class InternalScallopForwardFunction(torch_importer.Module):
     self._torch_tensor_apply = fn
     return super()._apply(fn, recurse=recurse)
 
-  def _compile_for_jit(self, name=""):
-    # First create a temporary directory
-    import __main__
-    entry_file = __main__.__file__
-    entry_file_name = os.path.splitext(os.path.basename(entry_file))[0]
-    mod_name = f"{entry_file_name}_{name if len(name) > 0 else self.fn_counter}"
-    temp_dir = os.path.abspath(os.path.join(entry_file, f"../.{mod_name}.jit.sclcmpl"))
-    temp_mod = os.path.join(temp_dir, f"{mod_name}_sclmodule.scl")
-
-    # Get the library
-    so_dir = os.path.join(temp_dir, f".{mod_name}_sclmodule.pylib.sclcmpl", "target", "wheels", "current")
-    if self.recompile or not self._check_compiled(so_dir):
-      # Invoke JIT compilation
-      self.ctx._internal.jit_compile(self.outputs, temp_mod)
-
-    # Load the library
-    so = os.path.join(so_dir, list(os.listdir(so_dir))[0])
-    load_dir = os.path.join(temp_dir, ".wheelext.sclcmpl") # Get a directory for extracting wheel
-    if os.path.exists(load_dir): shutil.rmtree(load_dir) # Remove the directory to clear up cache
-    with zipfile.ZipFile(so, "r") as whl: whl.extractall(load_dir) # Extract wheel into that directory
-    sys.path.append(os.path.join(load_dir, f"{mod_name}_sclmodule")) # Make sure that Python can load from that module
-    self._static_compiled_module = __import__(f"{mod_name}_sclmodule") # Dynamically load the module
-
-  def _check_compiled(self, so_dir):
-    if os.path.exists(so_dir):
-      ls = os.listdir(so_dir)
-      if len(ls) > 0:
-        return True
-    return False
-
   def forward(
     self,
     disjunctions: Dict[str, List[List[List[int]]]] = {},
@@ -293,59 +238,9 @@ class InternalScallopForwardFunction(torch_importer.Module):
     - None, if outputs are provided when constructing the ForwardFunction
     - [rela 1, rela 2, ..., rela B], if we want each data-point to produce different relations
     """
-    if self.jit:
-      return self._call_with_static_ctx(
-        disjunctions=disjunctions,
-        input_facts=input_facts)
-    else:
-      return self._call_with_dynamic_ctx(
-        disjunctions=disjunctions,
-        output_relations=output_relations,
-        output_mappings=output_mappings,
-        input_facts=input_facts)
-
-  def _call_with_static_ctx(
-    self,
-    disjunctions: Dict,
-    input_facts: Dict[str, Union[torch_importer.Tensor, List]],
-  ):
-    # First make sure all facts share the same batch size
-    batch_size = self._compute_and_check_batch_size(input_facts)
-
-    # Process the input into a unified form
-    all_inputs = self._process_all_input_facts(batch_size, input_facts, disjunctions)
-
-    if self.dispatch == "single":
-      # Execute static scallop program for each task from python
-      input_tags, output_results = [], []
-      for task_id in range(batch_size):
-        (task_input_tags, task_output_results) = self._run_single_static(task_id, all_inputs, self.output_mappings)
-        input_tags.append(task_input_tags)
-        output_results.append(task_output_results)
-    elif self.dispatch == "parallel":
-      # Directly dispatch all the inputs to rust, and execute with parallel
-      (input_tags, output_results) = self._run_batch_static(batch_size, all_inputs, self.output_mappings, parallel=True)
-    else:
-      # Directly dispatch all the inputs to rust
-      (input_tags, output_results) = self._run_batch_static(batch_size, all_inputs, self.output_mappings, parallel=False)
-
-    # Process the output
-    return self._process_output(batch_size, input_tags, output_results, self.output_mappings)
-
-  def _get_k(self) -> int:
-    k = self.ctx._train_k if self.training else self.ctx._test_k
-    return self.ctx._k if k is None else k
-
-  def _call_with_dynamic_ctx(
-    self,
-    disjunctions: Optional[Dict],
-    output_relations: Optional[Union[str, List[Union[str, List[str]]]]],
-    input_facts: Dict[str, Union[torch_importer.Tensor, List]],
-    output_mappings: Optional[Union[List, Dict[str, List]]] = None,
-  ):
     self.ctx._refresh_training_eval_state(self.training) # Set train/eval
     self.ctx._internal.set_non_incremental()
-    self.ctx._internal.compile() # Compile into back IR
+    self.ctx._internal.compile()
 
     # First make sure that all facts share the same batch size
     batch_size = self._compute_and_check_batch_size(input_facts)
@@ -574,58 +469,6 @@ class InternalScallopForwardFunction(torch_importer.Module):
     for task_id in range(batch_size):
       input_tags.append(results[task_id][0].input_tags())
       output_results.append([self._process_single_output(output_relations[task_id][i], c, output_mappings) for (i, c) in enumerate(results[task_id])])
-    return (input_tags, output_results)
-
-  def _new_static_ctx(self):
-    module = self._static_compiled_module
-    if module is None:
-      raise RuntimeError("The Scallop JIT module has not been compiled")
-    return module.StaticContext(provenance=self.ctx.provenance, top_k=self._get_k())
-
-  def _run_single_static(self, task_id, all_inputs, output_mappings):
-    """
-    Run a batch of tasks using
-    """
-    temp_ctx = self._new_static_ctx()
-
-    # Add the facts into the context
-    for (rela, rela_inputs) in all_inputs.items():
-      if not self.ctx.has_relation(rela):
-        raise Exception(f"Unknown relation `{rela}`")
-      facts = rela_inputs[task_id]
-      temp_ctx.add_facts(rela, facts)
-
-    # Execute the context
-    temp_ctx.run()
-
-    # Get input tags
-    input_tags = temp_ctx.input_tags()
-
-    # Get the collection for the target output
-    collections = [temp_ctx.relation(rel_name) for rel_name in self.outputs]
-    output_results = [self._process_single_output(self.outputs[i], c, output_mappings) for (i, c) in enumerate(collections)]
-
-    # Return
-    return (input_tags, output_results)
-
-  def _run_batch_static(self, batch_size, all_inputs, output_mappings, parallel):
-    """
-    Run a batch of tasks using statically compiled module
-    """
-    # Initialize a context
-    temp_ctx = self._new_static_ctx()
-
-    # Depending on whether its parallel, run on the batch
-    if parallel: result = temp_ctx.run_batch_parallel(all_inputs, self.outputs)
-    else: result = temp_ctx.run_batch_non_parallel(all_inputs, self.outputs)
-
-    # Collect the results
-    input_tags, output_results = [], []
-    for task_id in range(batch_size):
-      input_tags.append(result[task_id][0])
-      output_results.append([self._process_single_output(self.outputs[i], c, output_mappings) for (i, c) in enumerate(result[task_id][1])])
-
-    # Return
     return (input_tags, output_results)
 
   def _process_single_output(self, relation_name, internal_collection, output_mappings):
