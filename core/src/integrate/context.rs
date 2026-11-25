@@ -40,21 +40,6 @@ pub struct IntegrateContext<Prov: Provenance, P: PointerFamily = RcFamily> {
 }
 
 impl<Prov: Provenance, P: PointerFamily> IntegrateContext<Prov, P> {
-  pub fn validate_rust_extensions(&self) -> Result<(), compiler::ram::RustEmissionError> {
-    let front = &self.front_ctx;
-    if let Some(name) = front.attribute_processor_registry.registry.keys().min() {
-      return Err(compiler::ram::RustEmissionError::ForeignExtension {
-        kind: "attribute",
-        name: name.clone(),
-      });
-    }
-    compiler::ram::Program::validate_rust_extensions(
-      &front.foreign_function_registry,
-      &front.foreign_predicate_registry,
-      &front.foreign_aggregate_registry,
-    )
-  }
-
   pub fn new(prov_ctx: Prov) -> Self {
     Self {
       options: compiler::CompileOptions::default(),

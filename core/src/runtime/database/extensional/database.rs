@@ -8,7 +8,6 @@ use crate::runtime::dynamic::*;
 use crate::runtime::env::*;
 use crate::runtime::monitor::*;
 use crate::runtime::provenance::*;
-use crate::runtime::statics::*;
 
 use super::*;
 
@@ -165,35 +164,12 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
     Ok(())
   }
 
-  pub fn add_static_input_facts_without_type_check(
-    &mut self,
-    relation: &str,
-    facts: Vec<(Option<Prov::InputTag>, Tuple)>,
-  ) -> Result<(), DatabaseError> {
-    let facts: Vec<(_, Tuple)> = facts.into_iter().collect();
-    self
-      .extensional_relations
-      .entry(relation.to_string())
-      .or_default()
-      .add_static_input_facts(facts);
-    Ok(())
-  }
-
   pub fn get_dynamic_collection(&self, relation: &str) -> Option<DynamicCollectionRef<'_, Prov>> {
     self.extensional_relations.get(relation).map(|r| r.internal.as_ref())
   }
 
   pub fn pop_dynamic_collection(&mut self, relation: &str) -> Option<DynamicCollection<Prov>> {
     self.extensional_relations.remove(relation).map(|r| r.internal)
-  }
-
-  pub fn load_into_static_relation<Tup>(&self, relation: &str, ctx: &Prov, rela: &StaticRelation<Tup, Prov>)
-  where
-    Tup: StaticTupleTrait,
-  {
-    if let Some(collection) = self.get_dynamic_collection(relation) {
-      rela.insert_dynamic_elements(ctx, collection.iter());
-    }
   }
 
   pub fn populate_program_facts(

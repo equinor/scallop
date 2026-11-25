@@ -1,7 +1,7 @@
 distr_dir = target/distribute
 
 all:
-	@echo "Try `make install-scli`, `make install-sclc`, or `make install-scallopy`"
+	@echo "Try `make install-scli`, `make install-sclrepl`, or `make install-scallopy`"
 
 # ================================
 # === Base Scallop Executables ===
@@ -11,12 +11,6 @@ install-scli:
 
 build-scli:
 	cargo build --release --bin scli
-
-install-sclc:
-	cargo install --path etc/sclc
-
-build-sclc:
-	cargo build --release --bin sclc
 
 install-sclrepl:
 	cargo install --path etc/sclrepl
@@ -70,7 +64,6 @@ distribute:
 	@echo "==> Copy core scallop..."
 	cp target/release/scli $(distr_dir)
 	cp target/release/sclrepl $(distr_dir)
-	cp target/release/sclc $(distr_dir)
 
 	@echo "==> Copy wheels..."
 	cp target/wheels/*.whl $(distr_dir)

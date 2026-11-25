@@ -26,10 +26,6 @@ impl Duration {
       days.checked_mul(86_400).expect("Duration seconds overflow"),
     ))
   }
-
-  pub(crate) fn components(self) -> (i32, SignedDuration) {
-    (self.months, self.elapsed)
-  }
 }
 
 impl std::fmt::Display for Duration {

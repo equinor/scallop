@@ -2,6 +2,31 @@ use scallop_core::runtime::provenance::*;
 use scallop_core::testing::*;
 
 #[test]
+fn expression_tags_preserve_runtime_exclusions() {
+  let context = top_k_proofs::TopKProofsProvenance::<scallop_core::utils::RcFamily>::new(8, false);
+  let result = scallop_core::integrate::interpret_string_with_ctx(
+    r#"
+      rel variable = {1, 2}
+      rel { assignment(x, true); assignment(x, false) } = variable(x)
+      type denominator(i32, f32)
+      rel denominator = {(1, 1.0), (2, 2.0)}
+      rel (1.0 / p)::weighted(x, b) = assignment(x, b), denominator(x, p)
+      rel impossible(x) = weighted(x, true), weighted(x, false)
+    "#
+    .into(),
+    context,
+  )
+  .unwrap();
+  expect_output_collection_with_tag(
+    "weighted",
+    result.get_output_collection_ref("weighted").unwrap(),
+    vec![(1.0, (1, false)), (1.0, (1, true)), (0.5, (2, false)), (0.5, (2, true))],
+    |expected, actual| expected == actual,
+  );
+  assert!(result.get_output_collection_ref("impossible").unwrap().is_empty());
+}
+
+#[test]
 fn test_how_many_3_add_mult() {
   let ctx = add_mult_prob::AddMultProbProvenance::default();
   expect_interpret_result_with_tag(

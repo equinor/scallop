@@ -54,6 +54,26 @@ fn basic_odd_even() {
 }
 
 #[test]
+fn joins_and_antijoins_advance_past_duplicate_key_groups() {
+  expect_interpret_multi_result(
+    r#"
+      rel left = {(0, 7), (2, 1), (2, 2), (4, 8), (6, 3)}
+      rel right = {(1, 0), (2, 10), (2, 11), (5, 0), (6, 12)}
+      rel excluded = {2, 5}
+      rel joined(k, l, r) = left(k, l), right(k, r)
+      rel kept(k, l) = left(k, l), not excluded(k)
+    "#,
+    vec![
+      (
+        "joined",
+        vec![(2, 1, 10), (2, 1, 11), (2, 2, 10), (2, 2, 11), (6, 3, 12)].into(),
+      ),
+      ("kept", vec![(0, 7), (4, 8), (6, 3)].into()),
+    ],
+  );
+}
+
+#[test]
 fn basic_difference_1() {
   expect_interpret_result(
     r#"
