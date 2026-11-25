@@ -1,5 +1,4 @@
 use super::*;
-use crate::runtime::utils::JoinProduct;
 
 /// Note: d2 should always be a DynamicCollection
 pub struct DynamicAntijoinDataflow<'a, Prov: Provenance> {
@@ -48,7 +47,6 @@ impl<'a, Prov: Provenance> BatchBinaryOp<'a, Prov> for AntijoinOp<'a, Prov> {
       i1_curr,
       i2,
       i2_curr,
-      curr_iter: None,
       ctx: self.ctx,
     })
   }
@@ -59,7 +57,6 @@ pub struct DynamicAntijoinBatch<'a, Prov: Provenance> {
   i1_curr: Option<DynamicElement<Prov>>,
   i2: DynamicBatch<'a, Prov>,
   i2_curr: Option<DynamicElement<Prov>>,
-  curr_iter: Option<JoinProduct<DynamicElement<Prov>, DynamicElement<Prov>>>,
   ctx: &'a Prov,
 }
 
@@ -70,7 +67,6 @@ impl<'a, Prov: Provenance> Clone for DynamicAntijoinBatch<'a, Prov> {
       i1_curr: self.i1_curr.clone(),
       i2: self.i2.clone(),
       i2_curr: self.i2_curr.clone(),
-      curr_iter: self.curr_iter.clone(),
       ctx: self.ctx,
     }
   }
@@ -79,52 +75,26 @@ impl<'a, Prov: Provenance> Clone for DynamicAntijoinBatch<'a, Prov> {
 impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicAntijoinBatch<'a, Prov> {
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
     use std::cmp::Ordering;
-    loop {
-      if let Some(curr_prod_iter) = &mut self.curr_iter {
-        match curr_prod_iter.next() {
-          Some((e1, e2)) => {
-            let maybe_tag = self.ctx.minus(&e1.tag, &e2.tag);
-            if let Some(tag) = maybe_tag {
-              let result = DynamicElement::new(e1.tuple.clone(), tag);
-              return Some(result);
+    while let Some(left) = &mut self.i1_curr {
+      if let Some(right) = &self.i2_curr {
+        match left.tuple[0].cmp(&right.tuple) {
+          Ordering::Less => {}
+          Ordering::Equal => {
+            if let Some(tag) = self.ctx.minus(&left.tag, &right.tag) {
+              left.tag = tag;
             } else {
+              self.i1_curr = self.i1.next_elem();
               continue;
             }
           }
-          None => {
-            let (left_len, right_len) = curr_prod_iter.group_lengths();
-            self.i1.step(left_len - 1);
-            self.i1_curr = self.i1.next_elem();
-            self.i2.step(right_len - 1);
-            self.i2_curr = self.i2.next_elem();
-            self.curr_iter = None;
+          Ordering::Greater => {
+            self.i2_curr = self.i2.search_until(&left.tuple[0]);
+            continue;
           }
         }
       }
-
-      match (&self.i1_curr, &self.i2_curr) {
-        (Some(i1_curr_elem), Some(i2_curr_elem)) => match i1_curr_elem.tuple[0].cmp(&i2_curr_elem.tuple) {
-          Ordering::Less => {
-            let result = i1_curr_elem.clone();
-            self.i1_curr = self.i1.next_elem();
-            return Some(result);
-          }
-          Ordering::Equal => {
-            let key = &i1_curr_elem.tuple[0];
-            let v1 = std::iter::once(i1_curr_elem.clone())
-              .chain(self.i1.clone().take_while(|x| &x.tuple[0] == key))
-              .collect::<Vec<_>>();
-            self.curr_iter = Some(JoinProduct::new(v1, vec![i2_curr_elem.clone()]));
-          }
-          Ordering::Greater => self.i2_curr = self.i2.search_until(&i1_curr_elem.tuple[0]),
-        },
-        (Some(i1_curr_elem), None) => {
-          let result = i1_curr_elem.clone();
-          self.i1_curr = self.i1.next_elem();
-          return Some(result);
-        }
-        _ => break None,
-      }
+      return std::mem::replace(&mut self.i1_curr, self.i1.next_elem());
     }
+    None
   }
 }

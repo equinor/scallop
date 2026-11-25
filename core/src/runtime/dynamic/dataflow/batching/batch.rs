@@ -6,6 +6,11 @@ pub trait Batch<'a, Prov: Provenance>: 'a + dyn_clone::DynClone {
   /// Get the next element in the batch
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>>;
 
+  /// Borrow all unread elements, in iteration order, without advancing this batch.
+  fn remaining_slice(&self) -> Option<&[DynamicElement<Prov>]> {
+    None
+  }
+
   /// Step the batch iterator for `u` steps
   fn step(&mut self, u: usize) {
     for _ in 0..u {
@@ -38,12 +43,20 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicBatch<'a, Prov> {
     self.0.next_elem()
   }
 
+  fn remaining_slice(&self) -> Option<&[DynamicElement<Prov>]> {
+    self.0.remaining_slice()
+  }
+
   fn step(&mut self, u: usize) {
     self.0.step(u)
   }
 
   fn search_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
     self.0.search_until(until)
+  }
+
+  fn search_elem_0_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
+    self.0.search_elem_0_until(until)
   }
 }
 
@@ -87,6 +100,10 @@ impl<'a, Prov: Provenance> RefElementsBatch<'a, Prov> {
 impl<'a, Prov: Provenance> Batch<'a, Prov> for RefElementsBatch<'a, Prov> {
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
     self.iter.next().cloned()
+  }
+
+  fn remaining_slice(&self) -> Option<&[DynamicElement<Prov>]> {
+    Some(self.iter.as_slice())
   }
 }
 

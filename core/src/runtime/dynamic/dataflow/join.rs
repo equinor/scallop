@@ -1,6 +1,5 @@
 use super::*;
 use crate::common::tuple::Tuple;
-use crate::runtime::utils::JoinProduct;
 
 pub struct DynamicJoinDataflow<'a, Prov: Provenance> {
   pub d1: DynamicDataflow<'a, Prov>,
@@ -53,7 +52,8 @@ impl<'a, Prov: Provenance> BatchBinaryOp<'a, Prov> for JoinOp<'a, Prov> {
       i1_curr,
       i2,
       i2_curr,
-      curr_iter: None,
+      right_group: Vec::new(),
+      right_index: 0,
       ctx: self.ctx,
     })
   }
@@ -64,7 +64,8 @@ pub struct DynamicJoinBatch<'a, Prov: Provenance> {
   i1_curr: Option<DynamicElement<Prov>>,
   i2: DynamicBatch<'a, Prov>,
   i2_curr: Option<DynamicElement<Prov>>,
-  curr_iter: Option<JoinProduct<DynamicElement<Prov>, DynamicElement<Prov>>>,
+  right_group: Vec<DynamicElement<Prov>>,
+  right_index: usize,
   ctx: &'a Prov,
 }
 
@@ -75,7 +76,8 @@ impl<'a, Prov: Provenance> Clone for DynamicJoinBatch<'a, Prov> {
       i1_curr: self.i1_curr.clone(),
       i2: self.i2.clone(),
       i2_curr: self.i2_curr.clone(),
-      curr_iter: self.curr_iter.clone(),
+      right_group: self.right_group.clone(),
+      right_index: self.right_index,
       ctx: self.ctx,
     }
   }
@@ -84,43 +86,45 @@ impl<'a, Prov: Provenance> Clone for DynamicJoinBatch<'a, Prov> {
 impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicJoinBatch<'a, Prov> {
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
     use std::cmp::Ordering;
-    loop {
-      if let Some(curr_prod_iter) = &mut self.curr_iter {
-        match curr_prod_iter.next() {
-          Some((e1, e2)) => {
-            let tuple = Tuple::from((e1.tuple[0].clone(), e1.tuple[1].clone(), e2.tuple[1].clone()));
-            let tag = self.ctx.mult(&e1.tag, &e2.tag);
-            let result = DynamicElement::new(tuple, tag);
-            return Some(result);
-          }
-          None => {
-            let (left_len, right_len) = curr_prod_iter.group_lengths();
-            self.i1.step(left_len - 1);
-            self.i1_curr = self.i1.next_elem();
-            self.i2.step(right_len - 1);
-            self.i2_curr = self.i2.next_elem();
-            self.curr_iter = None;
-          }
-        }
+    while let Some(left) = &self.i1_curr {
+      if let Some(right) = self.right_group.get(self.right_index) {
+        self.right_index += 1;
+        let tuple = Tuple::from((left.tuple[0].clone(), left.tuple[1].clone(), right.tuple[1].clone()));
+        let tag = self.ctx.mult(&left.tag, &right.tag);
+        return Some(DynamicElement::new(tuple, tag));
       }
 
-      match (&self.i1_curr, &self.i2_curr) {
-        (Some(i1_curr_elem), Some(i2_curr_elem)) => match i1_curr_elem.tuple[0].cmp(&i2_curr_elem.tuple[0]) {
-          Ordering::Less => self.i1_curr = self.i1.search_elem_0_until(&i2_curr_elem.tuple[0]),
-          Ordering::Equal => {
-            let key = &i1_curr_elem.tuple[0];
-            let v1 = std::iter::once(i1_curr_elem.clone())
-              .chain(self.i1.clone().take_while(|x| &x.tuple[0] == key))
-              .collect::<Vec<_>>();
-            let v2 = std::iter::once(i2_curr_elem.clone())
-              .chain(self.i2.clone().take_while(|x| &x.tuple[0] == key))
-              .collect::<Vec<_>>();
-            self.curr_iter = Some(JoinProduct::new(v1, v2));
+      if let Some(first_right) = self.right_group.first() {
+        self.i1_curr = self.i1.next_elem();
+        self.right_index = 0;
+        if !self
+          .i1_curr
+          .as_ref()
+          .is_some_and(|next| next.tuple[0] == first_right.tuple[0])
+        {
+          self.right_group.clear();
+        }
+        continue;
+      }
+
+      let right = self.i2_curr.as_ref()?;
+      let key = &left.tuple[0];
+      match key.cmp(&right.tuple[0]) {
+        Ordering::Less => self.i1_curr = self.i1.search_elem_0_until(&right.tuple[0]),
+        Ordering::Equal => {
+          // Keep the first row of the next key as lookahead; only the right group is replayed.
+          self.right_group.push(self.i2_curr.take().unwrap());
+          while let Some(next) = self.i2.next_elem() {
+            if &next.tuple[0] != key {
+              self.i2_curr = Some(next);
+              break;
+            }
+            self.right_group.push(next);
           }
-          Ordering::Greater => self.i2_curr = self.i2.search_elem_0_until(&i1_curr_elem.tuple[0]),
-        },
-        _ => break None,
+        }
+        Ordering::Greater => self.i2_curr = self.i2.search_elem_0_until(key),
       }
     }
+    None
   }
 }
