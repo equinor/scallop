@@ -151,10 +151,19 @@ class InputMapping:
 
     # An empty sample leaves all indices eligible; emit facts in mapping order.
     threshold = self.retain_threshold
-    filtered_indices = [
-      index for index in self.all_indices()
-      if (not included or index in included) and not (threshold is not None and tensor[index] < threshold)
-    ]
+    if threshold is not None and tensor.layout == torch.strided and not tensor.is_quantized:
+      if included and self.shape:
+        indices = sorted(included)
+        coordinates = tuple(zip(*indices))
+        keep = (~(tensor[coordinates] < threshold)).tolist()
+        filtered_indices = [index for index, retain in zip(indices, keep, strict=True) if retain]
+      else:
+        filtered_indices = [tuple(index) for index in (~(tensor < threshold)).nonzero().tolist()]
+    else:
+      filtered_indices = [
+        index for index in self.all_indices()
+        if (not included or index in included) and not (threshold is not None and tensor[index] < threshold)
+      ]
 
     # Add disjunctions
     if self.supports_disjunctions:
