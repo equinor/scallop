@@ -3,14 +3,15 @@ use std::any::Any;
 
 use super::*;
 
-pub trait ExternalTensor: 'static + dyn_clone::DynClone + Send + Sync {
+pub trait ExternalTensor: Any + dyn_clone::DynClone + Send + Sync {
   fn shape(&self) -> TensorShape;
 
   fn get_f64(&self) -> f64;
-
-  fn as_any(&self) -> &dyn Any;
 }
 
+dyn_clone::clone_trait_object!(ExternalTensor);
+
+#[derive(Clone)]
 pub struct DynamicExternalTensor {
   tensor: Box<dyn ExternalTensor>,
 }
@@ -25,15 +26,7 @@ impl DynamicExternalTensor {
   }
 
   pub fn cast<T: ExternalTensor>(&self) -> Option<&T> {
-    self.internal().as_any().downcast_ref::<T>()
-  }
-}
-
-impl Clone for DynamicExternalTensor {
-  fn clone(&self) -> Self {
-    Self {
-      tensor: dyn_clone::clone_box(&*self.tensor),
-    }
+    (self.internal() as &dyn Any).downcast_ref::<T>()
   }
 }
 
@@ -75,10 +68,6 @@ impl ExternalTensor for DynamicExternalTensor {
 
   fn get_f64(&self) -> f64 {
     self.tensor.get_f64()
-  }
-
-  fn as_any(&self) -> &dyn Any {
-    self
   }
 }
 

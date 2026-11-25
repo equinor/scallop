@@ -5,6 +5,9 @@ pub trait Batches<'a, Prov: Provenance>: dyn_clone::DynClone + 'a {
   fn next_batch(&mut self) -> Option<DynamicBatch<'a, Prov>>;
 }
 
+dyn_clone::clone_trait_object!(<'a, Prov> Batches<'a, Prov> where Prov: Provenance);
+
+#[derive(Clone)]
 pub struct DynamicBatches<'a, Prov: Provenance>(Box<dyn Batches<'a, Prov>>);
 
 impl<'a, Prov: Provenance> Batches<'a, Prov> for DynamicBatches<'a, Prov> {
@@ -42,13 +45,6 @@ impl<'a, Prov: Provenance> DynamicBatches<'a, Prov> {
     Self::from_iterator(self.map(move |batch| op.apply(batch)))
   }
 }
-
-impl<'a, Prov: Provenance> Clone for DynamicBatches<'a, Prov> {
-  fn clone(&self) -> Self {
-    Self(dyn_clone::clone_box(&*self.0))
-  }
-}
-
 impl<'a, Prov: Provenance> Iterator for DynamicBatches<'a, Prov> {
   type Item = DynamicBatch<'a, Prov>;
 

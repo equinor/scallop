@@ -204,7 +204,10 @@ pub trait ForeignPredicate: DynClone {
   }
 }
 
+dyn_clone::clone_trait_object!(ForeignPredicate);
+
 /// The dynamic foreign predicate
+#[derive(Clone)]
 pub struct DynamicForeignPredicate {
   fp: Box<dyn ForeignPredicate + Send + Sync>,
   origin: PredicateOrigin,
@@ -222,15 +225,6 @@ impl DynamicForeignPredicate {
     Self {
       fp: Box::new(fp),
       origin: PredicateOrigin::Custom,
-    }
-  }
-}
-
-impl Clone for DynamicForeignPredicate {
-  fn clone(&self) -> Self {
-    Self {
-      fp: dyn_clone::clone_box(&*self.fp),
-      origin: self.origin.clone(),
     }
   }
 }

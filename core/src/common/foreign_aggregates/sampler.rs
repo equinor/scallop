@@ -13,6 +13,9 @@ pub trait SampleAggregate: dyn_clone::DynClone + 'static {
   fn instantiate(&self, info: AggregateInfo) -> DynamicSampler;
 }
 
+dyn_clone::clone_trait_object!(SampleAggregate);
+
+#[derive(Clone)]
 pub struct DynamicSampleAggregate(Box<dyn SampleAggregate>);
 
 unsafe impl Send for DynamicSampleAggregate {}
@@ -21,12 +24,6 @@ unsafe impl Sync for DynamicSampleAggregate {}
 impl DynamicSampleAggregate {
   pub fn new<T: SampleAggregate>(t: T) -> Self {
     Self(Box::new(t))
-  }
-}
-
-impl Clone for DynamicSampleAggregate {
-  fn clone(&self) -> Self {
-    Self(dyn_clone::clone_box(&*self.0))
   }
 }
 
@@ -88,17 +85,14 @@ pub trait Sampler: dyn_clone::DynClone + 'static {
   }
 }
 
+dyn_clone::clone_trait_object!(Sampler);
+
+#[derive(Clone)]
 pub struct DynamicSampler(Box<dyn Sampler>);
 
 impl DynamicSampler {
   pub fn new<T: Sampler>(t: T) -> Self {
     Self(Box::new(t))
-  }
-}
-
-impl Clone for DynamicSampler {
-  fn clone(&self) -> Self {
-    Self(dyn_clone::clone_box(&*self.0))
   }
 }
 

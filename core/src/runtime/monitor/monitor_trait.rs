@@ -57,6 +57,8 @@ pub trait Monitor<Prov: Provenance>: dyn_clone::DynClone + 'static {
   fn observe_finish_recovering_relation(&self, relation: &str) {}
 }
 
+dyn_clone::clone_trait_object!(<Prov> Monitor<Prov> where Prov: Provenance);
+
 impl<Prov: Provenance> Monitor<Prov> for () {
   fn name(&self) -> &'static str {
     "empty"

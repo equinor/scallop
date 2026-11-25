@@ -28,13 +28,10 @@ pub trait Batch<'a, Prov: Provenance>: 'a + dyn_clone::DynClone {
   }
 }
 
-pub struct DynamicBatch<'a, Prov: Provenance>(Box<dyn Batch<'a, Prov>>);
+dyn_clone::clone_trait_object!(<'a, Prov> Batch<'a, Prov> where Prov: Provenance);
 
-impl<'a, Prov: Provenance> Clone for DynamicBatch<'a, Prov> {
-  fn clone(&self) -> Self {
-    Self(dyn_clone::clone_box(&*self.0))
-  }
-}
+#[derive(Clone)]
+pub struct DynamicBatch<'a, Prov: Provenance>(Box<dyn Batch<'a, Prov>>);
 
 impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicBatch<'a, Prov> {
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
@@ -64,11 +61,7 @@ impl<'a, Prov: Provenance> DynamicBatch<'a, Prov> {
   }
 
   pub fn collect_vec(&mut self) -> Vec<DynamicElement<Prov>> {
-    let mut result = vec![];
-    while let Some(elem) = self.next_elem() {
-      result.push(elem);
-    }
-    result
+    self.collect()
   }
 }
 

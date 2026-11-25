@@ -1,50 +1,33 @@
-use std::collections::*;
+use indexmap::IndexSet;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SymbolRegistry {
-  pub symbol_to_id_map: BTreeMap<String, usize>,
-  pub id_to_symbol_map: Vec<String>,
+  symbols: IndexSet<String>,
 }
 
 impl SymbolRegistry {
   /// Create a new symbol registry
   pub fn new() -> Self {
-    Self {
-      symbol_to_id_map: BTreeMap::new(),
-      id_to_symbol_map: Vec::new(),
-    }
+    Self::default()
   }
 
   /// Check if the registry is empty
   pub fn is_empty(&self) -> bool {
-    self.id_to_symbol_map.is_empty()
+    self.symbols.is_empty()
   }
 
   /// Register a symbol into the registry and return an ID to represent the symbol
   pub fn register(&mut self, symbol: String) -> usize {
-    if let Some(id) = self.symbol_to_id_map.get(&symbol) {
-      *id
-    } else {
-      let id = self.id_to_symbol_map.len();
-      self.symbol_to_id_map.insert(symbol.clone(), id);
-      self.id_to_symbol_map.push(symbol);
-      id
-    }
+    self.symbols.insert_full(symbol).0
   }
 
   /// Getting the symbol id using the string
   pub fn get_id(&self, symbol: &str) -> Option<usize> {
-    self.symbol_to_id_map.get(symbol).cloned()
+    self.symbols.get_index_of(symbol)
   }
 
   /// Getting a symbol using its ID
   pub fn get_symbol(&self, id: usize) -> Option<&String> {
-    self.id_to_symbol_map.get(id)
-  }
-}
-
-impl Default for SymbolRegistry {
-  fn default() -> Self {
-    Self::new()
+    self.symbols.get_index(id)
   }
 }

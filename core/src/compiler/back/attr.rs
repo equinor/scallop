@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 use std::collections::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -50,6 +50,7 @@ impl Default for Attributes {
   }
 }
 
+#[derive(Clone)]
 pub struct Attribute {
   attr: Box<dyn AttributeTrait>,
 }
@@ -81,8 +82,7 @@ impl Attribute {
   }
 
   pub fn get<T: AttributeTrait>(&self) -> Option<&T> {
-    let attr = self.attr.as_ref();
-    attr.downcast_ref::<T>().ok()
+    (self.attr.as_ref() as &dyn Any).downcast_ref::<T>()
   }
 }
 
@@ -112,15 +112,7 @@ impl std::fmt::Display for Attribute {
   }
 }
 
-impl Clone for Attribute {
-  fn clone(&self) -> Self {
-    Self {
-      attr: dyn_clone::clone_box(&*self.attr),
-    }
-  }
-}
-
-pub trait AttributeTrait: dyn_clone::DynClone + downcast::Any + Send + 'static {
+pub trait AttributeTrait: dyn_clone::DynClone + Any + Send {
   fn name(&self) -> String;
 
   fn args(&self) -> Vec<String> {
@@ -128,4 +120,4 @@ pub trait AttributeTrait: dyn_clone::DynClone + downcast::Any + Send + 'static {
   }
 }
 
-downcast::downcast!(dyn AttributeTrait);
+dyn_clone::clone_trait_object!(AttributeTrait);

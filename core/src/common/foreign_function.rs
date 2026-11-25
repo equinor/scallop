@@ -346,7 +346,10 @@ pub trait ForeignFunction: DynClone {
   }
 }
 
+dyn_clone::clone_trait_object!(ForeignFunction);
+
 /// A dynamic foreign function that can hold any static foreign function
+#[derive(Clone)]
 pub struct DynamicForeignFunction {
   ff: Box<dyn ForeignFunction + Send + Sync>,
   builtin: bool,
@@ -432,15 +435,6 @@ impl std::fmt::Display for DynamicForeignFunction {
     f.write_fmt(format_args!(") -> {}", self.return_type()))?;
 
     Ok(())
-  }
-}
-
-impl Clone for DynamicForeignFunction {
-  fn clone(&self) -> Self {
-    Self {
-      ff: dyn_clone::clone_box(&*self.ff),
-      builtin: self.builtin,
-    }
   }
 }
 
