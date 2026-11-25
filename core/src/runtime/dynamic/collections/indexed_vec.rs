@@ -46,14 +46,16 @@ impl<Prov: Provenance> DynamicIndexedVecCollection<Prov> {
         // Insert elements into the storage
         for elem in elements {
           let DynamicElement { tuple, tag } = elem;
-          let mut values = tuple.as_values();
-
-          // Obtain the head and tail
-          let head = values.remove(0);
-          let tail = if values.len() == 1 {
-            Tuple::Value(values[0].clone())
+          let Tuple::Tuple(fields) = tuple else {
+            panic!("Not a tuple");
+          };
+          assert!(fields.iter().all(|field| field.get_value().is_some()), "Not a value");
+          let mut fields = fields.into_vec().into_iter();
+          let head = fields.next().expect("Indexed tuple must have a key").to_value();
+          let tail = if fields.len() == 1 {
+            fields.next().unwrap()
           } else {
-            Tuple::from_values(values.into_iter())
+            Tuple::Tuple(fields.collect())
           };
           let index = head.cast_to_usize();
 
@@ -100,7 +102,11 @@ impl<Prov: Provenance> DynamicIndexedVecCollection<Prov> {
 
   /// Get an element from the indexed vector; this operation is $O(1)$.
   pub fn get(&self, index: usize) -> Option<(Tuple, Prov::Tag)> {
-    self.vec.get(index).and_then(|e| e.clone())
+    self.get_ref(index).cloned()
+  }
+
+  pub(crate) fn get_ref(&self, index: usize) -> Option<&(Tuple, Prov::Tag)> {
+    self.vec.get(index)?.as_ref()
   }
 
   pub fn iter<'a>(&'a self) -> DynamicIndexedVecCollectionIter<'a, Prov> {
@@ -224,7 +230,9 @@ fn construct_dyn_elem<Prov: Provenance>(
   let index_value = index_type
     .value_from_usize(index)
     .expect("Expect a value type that can be casted from usize");
-  let tup = Tuple::from_values(std::iter::once(index_value).chain(tail.in_order_values()));
-
-  DynamicElement::<Prov>::new(tup, tag.clone())
+  let tuple = match tail {
+    Tuple::Value(value) => Tuple::from((index_value, value)),
+    Tuple::Tuple(fields) => Tuple::tuple(std::iter::once(Tuple::Value(index_value)).chain(fields.into_vec())),
+  };
+  DynamicElement::new(tuple, tag)
 }

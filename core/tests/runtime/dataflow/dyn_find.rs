@@ -37,6 +37,32 @@ fn test_dynamic_find_1() {
 }
 
 #[test]
+fn test_find_and_overwrite_preserve_batch_count_and_pull_timing() {
+  let ctx = natural::NaturalProvenance;
+  let pulls = Cell::new(0);
+  let rows = [
+    DynamicElement::new((1i32, 2i32), 3),
+    DynamicElement::new((1i32, 4i32), 5),
+  ];
+  let source = DynamicDataflow::new(CountedBatch::new(&rows, &pulls))
+    .find(1i32.into())
+    .overwrite_one(&ctx);
+  let mut batches = source.iter_recent();
+  assert_eq!(batches.size_hint(), (1, Some(1)));
+  assert_eq!(pulls.get(), 0);
+
+  let mut batch = batches.next().unwrap();
+  assert_eq!(batches.size_hint(), (0, Some(0)));
+  assert_eq!(pulls.get(), 1);
+  let elem = batch.next().unwrap();
+  assert_eq!((elem.tuple, elem.tag), (Tuple::from((1i32, 2i32)), 1));
+  assert_eq!(pulls.get(), 2);
+  let elem = batch.next().unwrap();
+  assert_eq!((elem.tuple, elem.tag), (Tuple::from((1i32, 4i32)), 1));
+  assert!(batch.next().is_none());
+}
+
+#[test]
 fn test_sorted_collection_seeks_by_key_and_full_tuple() {
   let ctx = unit::UnitProvenance;
   let entries = (0..1024i32)

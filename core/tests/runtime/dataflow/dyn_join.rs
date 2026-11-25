@@ -128,3 +128,27 @@ fn test_dynamic_batch_forwards_first_field_seek() {
   );
   assert_eq!(batch.next().unwrap().tuple, Tuple::from((3i32, 31i32)));
 }
+
+#[test]
+fn test_indexed_join_skips_missing_keys_and_preserves_input_order_and_tags() {
+  let ctx = natural::NaturalProvenance;
+  let right = DynamicIndexedVecCollection::from_vec(
+    vec![
+      DynamicElement::new((0usize, "zero"), 7),
+      DynamicElement::new((2usize, "two"), 11),
+    ],
+    &ctx,
+  );
+  let left = vec![
+    DynamicElement::new((2usize, "a"), 2),
+    DynamicElement::new((1usize, "miss"), 3),
+    DynamicElement::new((0usize, "b"), 5),
+    DynamicElement::new((2usize, "c"), 13),
+  ];
+  let join = DynamicDataflow::vec(&left).join_indexed_vec(&right, &ctx);
+  assert!(join.iter_recent().flatten().map(|e| (e.tuple, e.tag)).eq([
+    (Tuple::from((2usize, "a", "two")), 22),
+    (Tuple::from((0usize, "b", "zero")), 35),
+    (Tuple::from((2usize, "c", "two")), 143),
+  ]));
+}
