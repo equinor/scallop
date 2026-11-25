@@ -30,14 +30,11 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticOutputCollection<Tup, Prov> 
     self.elements.get(i).map(|e| &e.0)
   }
 
-  pub fn to_dynamic_vec(&self) -> Vec<(OutputTagOf<Prov>, Tuple)>
-  where
-    Tup: Into<Tuple>,
-  {
+  pub fn to_dynamic_vec(&self) -> Vec<(OutputTagOf<Prov>, Tuple)> {
     self
       .elements
       .iter()
-      .map(|(tag, tup)| (tag.clone(), tup.clone().into()))
+      .map(|(tag, tup)| (tag.clone(), tup.clone().into_dyn_tuple()))
       .collect()
   }
 }

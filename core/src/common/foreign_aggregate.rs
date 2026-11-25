@@ -430,7 +430,7 @@ impl std::fmt::Debug for DynamicAggregate {
 /// The registry of aggregates
 #[derive(Clone, Debug)]
 pub struct AggregateRegistry {
-  registry: HashMap<String, DynamicAggregate>,
+  registry: HashMap<String, (DynamicAggregate, bool)>,
 }
 
 impl AggregateRegistry {
@@ -470,20 +470,27 @@ impl AggregateRegistry {
     registry.register(DynamicSampleAggregate::new(UniformAggregate::new()));
 
     // Return
+    for (_, builtin) in registry.registry.values_mut() {
+      *builtin = true;
+    }
     registry
+  }
+
+  pub(crate) fn is_builtin(&self, name: &str) -> bool {
+    self.registry.get(name).is_some_and(|(_, builtin)| *builtin)
   }
 
   /// Register an aggregate into the registry
   pub fn register<A: Aggregate>(&mut self, agg: A) {
-    self.registry.entry(agg.name()).or_insert(agg.into());
+    self.registry.entry(agg.name()).or_insert_with(|| (agg.into(), false));
   }
 
   pub fn iter(&self) -> impl Iterator<Item = (&String, &DynamicAggregate)> {
-    self.registry.iter()
+    self.registry.iter().map(|(name, (aggregate, _))| (name, aggregate))
   }
 
   pub fn instantiate_aggregator<P: Provenance>(&self, name: &str, info: AggregateInfo) -> Option<DynamicAggregator<P>> {
-    if let Some(aggregate) = self.registry.get(name) {
+    if let Some((aggregate, _)) = self.registry.get(name) {
       match_aggregate!(aggregate, a, {
         let instantiated = a.instantiate::<P>(info);
         Some(DynamicAggregator(Box::new(instantiated)))
@@ -495,7 +502,6 @@ impl AggregateRegistry {
 
   pub fn create_type_registry(&self) -> HashMap<String, AggregateType> {
     self
-      .registry
       .iter()
       .map(|(name, agg)| (name.clone(), agg.aggregate_type()))
       .collect()

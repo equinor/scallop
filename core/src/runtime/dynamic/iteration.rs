@@ -183,7 +183,7 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
           m.observe_hitting_iteration_limit();
         }
 
-        self.changed(ctx, runtime);
+        self.finish_early(ctx);
         return false;
       }
 
@@ -193,7 +193,7 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
           m.observe_deriving_goal_relation();
         }
 
-        self.changed(ctx, runtime);
+        self.finish_early(ctx);
         return false;
       }
 
@@ -224,6 +224,12 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
         .goal_relations
         .iter()
         .all(|r| self.get_dynamic_relation_unsafe(r).num_recent() > 0)
+    }
+  }
+
+  fn finish_early(&self, ctx: &Prov) {
+    for relation in self.dynamic_relations.values() {
+      relation.finish_early(ctx);
     }
   }
 

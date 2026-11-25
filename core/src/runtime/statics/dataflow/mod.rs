@@ -1,6 +1,7 @@
 mod aggregation;
 mod antijoin;
 pub mod batching;
+mod builtin;
 mod collection;
 mod difference;
 mod filter;
@@ -18,6 +19,7 @@ mod vec;
 
 pub use aggregation::*;
 pub use antijoin::*;
+pub use builtin::*;
 pub use collection::*;
 pub use difference::*;
 pub use filter::*;

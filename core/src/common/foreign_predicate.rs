@@ -2,6 +2,7 @@ use std::collections::*;
 
 use dyn_clone::*;
 
+use crate::compiler::front::analyzers::tagged_rule::TagPredicate;
 use crate::runtime::env::RuntimeEnvironment;
 
 use super::foreign_predicates as fps;
@@ -206,11 +207,22 @@ pub trait ForeignPredicate: DynClone {
 /// The dynamic foreign predicate
 pub struct DynamicForeignPredicate {
   fp: Box<dyn ForeignPredicate + Send + Sync>,
+  origin: PredicateOrigin,
+}
+
+#[derive(Clone)]
+enum PredicateOrigin {
+  Custom,
+  Builtin,
+  RuleTag(TagPredicate),
 }
 
 impl DynamicForeignPredicate {
   pub fn new<P: ForeignPredicate + Send + Sync + 'static>(fp: P) -> Self {
-    Self { fp: Box::new(fp) }
+    Self {
+      fp: Box::new(fp),
+      origin: PredicateOrigin::Custom,
+    }
   }
 }
 
@@ -218,6 +230,7 @@ impl Clone for DynamicForeignPredicate {
   fn clone(&self) -> Self {
     Self {
       fp: dyn_clone::clone_box(&*self.fp),
+      origin: self.origin.clone(),
     }
   }
 }
@@ -332,16 +345,43 @@ impl ForeignPredicateRegistry {
     // Provenance
     reg.register(fps::NewTagVariable::new()).unwrap();
 
+    for predicate in reg.registry.values_mut() {
+      predicate.origin = PredicateOrigin::Builtin;
+    }
     reg
+  }
+
+  pub(crate) fn is_builtin(&self, name: &str) -> bool {
+    self
+      .get(name)
+      .is_some_and(|p| !matches!(p.origin, PredicateOrigin::Custom))
+  }
+
+  pub(crate) fn rule_tags(&self) -> impl Iterator<Item = &TagPredicate> {
+    self.registry.values().filter_map(|p| match &p.origin {
+      PredicateOrigin::RuleTag(tag) => Some(tag),
+      _ => None,
+    })
+  }
+
+  pub(crate) fn register_rule_tag(&mut self, tag: TagPredicate) -> Result<(), ForeignPredicateError> {
+    let id = tag.internal_name();
+    let predicate = DynamicForeignPredicate {
+      fp: Box::new(tag.clone()),
+      origin: PredicateOrigin::RuleTag(tag),
+    };
+    self.insert(id, predicate)
   }
 
   /// Register a new foreign predicate in the registry
   pub fn register<P: ForeignPredicate + Send + Sync + 'static>(&mut self, p: P) -> Result<(), ForeignPredicateError> {
-    let id = p.internal_name();
+    self.insert(p.internal_name(), DynamicForeignPredicate::new(p))
+  }
+
+  fn insert(&mut self, id: String, p: DynamicForeignPredicate) -> Result<(), ForeignPredicateError> {
     if self.contains(&id) {
-      Err(ForeignPredicateError::AlreadyExisted { id: id.to_string() })
+      Err(ForeignPredicateError::AlreadyExisted { id })
     } else {
-      let p = DynamicForeignPredicate::new(p);
       self.registry.insert(id, p);
       Ok(())
     }

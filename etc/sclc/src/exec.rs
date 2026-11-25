@@ -9,13 +9,18 @@ use std::process::Command;
 
 use scallop_core::compiler;
 
+use super::error::SclcError;
 use super::options::*;
 
-pub fn create_executable(opt: &Options, compile_opt: compiler::CompileOptions, ram: &compiler::ram::Program) {
+pub fn create_executable(
+  opt: &Options,
+  compile_opt: compiler::CompileOptions,
+  ram: &compiler::ram::Program,
+) -> Result<(), SclcError> {
   let program_name = opt.input.file_prefix().unwrap().to_str().unwrap();
 
   // Compile it to rust project
-  let (parent_dir, tmp_dir) = generate_exec_rust_project(opt, compile_opt, ram);
+  let (parent_dir, tmp_dir) = generate_exec_rust_project(opt, compile_opt, ram)?;
 
   // Compile the file: create command
   let mut cmd = Command::new("cargo");
@@ -24,23 +29,26 @@ pub fn create_executable(opt: &Options, compile_opt: compiler::CompileOptions, r
   cmd.current_dir(&tmp_dir).arg("build").arg("--release");
 
   // Run the command
-  let output = cmd.output().unwrap();
+  let output = cmd.output()?;
   if output.status.success() {
     // If we want to copy executable
     if !opt.do_not_copy_artifact {
       fs::copy(
         tmp_dir.join(format!("target/release/{}", program_name)),
         parent_dir.join(program_name),
-      )
-      .unwrap();
+      )?;
     }
 
     // If we do not want to keep the temporary directory
     if opt.do_not_keep_temporary_directory {
-      fs::remove_dir_all(tmp_dir).unwrap();
+      fs::remove_dir_all(tmp_dir)?;
     }
+    Ok(())
   } else {
-    println!("{}", std::str::from_utf8(&output.stderr).unwrap());
+    Err(SclcError::Build(
+      "cargo",
+      String::from_utf8_lossy(&output.stderr).into_owned(),
+    ))
   }
 }
 
@@ -48,9 +56,9 @@ pub fn generate_exec_rust_project(
   opt: &Options,
   compile_opt: compiler::CompileOptions,
   ram: &compiler::ram::Program,
-) -> (PathBuf, PathBuf) {
+) -> Result<(PathBuf, PathBuf), SclcError> {
   // Turn the ram module into a sequence of rust tokens
-  let module = ram.to_rs_module(&compile_opt);
+  let module = ram.to_rs_module(&compile_opt)?;
 
   // Print the module string if debugging
   if opt.debug_rs {
@@ -68,7 +76,7 @@ pub fn generate_exec_rust_project(
   let run_fn = run_function(output_code);
 
   // Generate main body
-  let main_fn = main_body(opt);
+  let main_fn = main_body(opt)?;
 
   // Generate full executable code
   let full_executable = quote! {
@@ -77,8 +85,9 @@ pub fn generate_exec_rust_project(
     mod scallop_module { #module }
     #cmd_line_opt_struct
     #run_fn
-    fn main() {
+    fn main() -> Result<(), scallop_core::runtime::error::RuntimeError> {
       #main_fn
+      Ok(())
     }
   };
 
@@ -88,20 +97,16 @@ pub fn generate_exec_rust_project(
   // Create a folder
   let parent_dir = opt.input.parent().unwrap();
   let tmp_dir = parent_dir.join(format!(".{}.exec.sclcmpl", program_name));
-  let scallop_source_dir = env::var("SCALLOPDIR").expect(
-    "Please set envrionment variable `SCALLOPDIR` to be the root of Scallop source directory before using `sclc`.",
-  );
+  let scallop_source_dir = env::var("SCALLOPDIR").map_err(|_| SclcError::MissingScallopDir)?;
 
   // Create a temporary directory holding the cargo project
-  fs::create_dir_all(&tmp_dir).unwrap();
-  fs::create_dir_all(tmp_dir.join("src")).unwrap();
+  fs::create_dir_all(tmp_dir.join("src"))?;
 
   // Create a Cargo.toml file
-  let mut cargo_toml_file = File::create(tmp_dir.join("Cargo.toml")).unwrap();
-  cargo_toml_file
-    .write_all(
-      format!(
-        r#"[package]
+  let mut cargo_toml_file = File::create(tmp_dir.join("Cargo.toml"))?;
+  cargo_toml_file.write_all(
+    format!(
+      r#"[package]
 name = "{}"
 version = "1.0.0"
 edition = "2024"
@@ -110,18 +115,17 @@ scallop-core = {{ path = "{}/core" }}
 clap = {{ version = "4.6", features = ["derive"] }}
 [workspace]
 "#,
-        program_name, scallop_source_dir,
-      )
-      .as_bytes(),
+      program_name, scallop_source_dir,
     )
-    .unwrap();
+    .as_bytes(),
+  )?;
 
   // Create a main.rs file
-  let mut main_rs_file = File::create(tmp_dir.join("src/main.rs")).unwrap();
-  main_rs_file.write_all(file_content.as_bytes()).unwrap();
+  let mut main_rs_file = File::create(tmp_dir.join("src/main.rs"))?;
+  main_rs_file.write_all(file_content.as_bytes())?;
 
   // Return
-  (parent_dir.to_path_buf(), tmp_dir)
+  Ok((parent_dir.to_path_buf(), tmp_dir))
 }
 
 fn cmd_line_option_struct(opt: &Options, program_name: &str) -> TokenStream {
@@ -147,33 +151,35 @@ fn cmd_line_option_struct(opt: &Options, program_name: &str) -> TokenStream {
 
 fn run_function(output_code: TokenStream) -> TokenStream {
   quote! {
-    fn run<C: Provenance>(mut ctx: C) {
-      let res = scallop_module::run(&mut ctx);
+    fn run<C: Provenance>(mut ctx: C) -> Result<(), scallop_core::runtime::error::RuntimeError> {
+      let res = scallop_module::try_run(&mut ctx)?;
       #output_code
+      Ok(())
     }
   }
 }
 
-fn main_body(opt: &Options) -> TokenStream {
+fn main_body(opt: &Options) -> Result<TokenStream, SclcError> {
   if let Some(p) = &opt.provenance {
     let top_k = opt.top_k;
     let wmc_with_disjunctions = opt.wmc_with_disjunctions;
-    match p.as_str() {
-      "unit" => quote! { run(unit::UnitProvenance::default()); },
-      "bool" => quote! { run(boolean::BooleanProvenance::default()); },
-      "minmaxprob" => quote! { run(min_max_prob::MinMaxProbProvenance::default()); },
-      "addmultprob" => quote! { run(add_mult_prob::AddMultProbProvenance::default()); },
+    let run = match p.as_str() {
+      "unit" => quote! { run(unit::UnitProvenance::default()) },
+      "bool" => quote! { run(boolean::BooleanProvenance::default()) },
+      "minmaxprob" => quote! { run(min_max_prob::MinMaxProbProvenance::default()) },
+      "addmultprob" => quote! { run(add_mult_prob::AddMultProbProvenance::default()) },
       "topkproofs" => {
-        quote! { run(top_k_proofs::TopKProofsProvenance::<RcFamily>::new(#top_k, #wmc_with_disjunctions)); }
+        quote! { run(top_k_proofs::TopKProofsProvenance::<RcFamily>::new(#top_k, #wmc_with_disjunctions)) }
       }
-      "samplekproofs" => quote! { run(sample_k_proofs::SampleKProofsProvenance::<RcFamily>::new(#top_k)); },
+      "samplekproofs" => quote! { run(sample_k_proofs::SampleKProofsProvenance::<RcFamily>::new(#top_k)) },
       "topbottomkclauses" => {
-        quote! { run(top_bottom_k_clauses::TopBottomKClausesProvenance::<RcFamily>::new(#top_k, #wmc_with_disjunctions)); }
+        quote! { run(top_bottom_k_clauses::TopBottomKClausesProvenance::<RcFamily>::new(#top_k, #wmc_with_disjunctions)) }
       }
-      p => panic!("Unknown provenance `{}`. Aborting", p),
-    }
+      p => return Err(SclcError::UnknownProvenance(p.into())),
+    };
+    Ok(quote! { #run?; })
   } else {
-    quote! {
+    Ok(quote! {
       let opt = Options::parse();
       match opt.provenance.as_str() {
         "unit" => run(unit::UnitProvenance::default()),
@@ -183,8 +189,8 @@ fn main_body(opt: &Options) -> TokenStream {
         "topkproofs" => run(top_k_proofs::TopKProofsProvenance::<RcFamily>::new(opt.top_k, opt.wmc_with_disjunctions)),
         "samplekproofs" => run(sample_k_proofs::SampleKProofsProvenance::<RcFamily>::new(opt.top_k)),
         "topbottomkclauses" => run(top_bottom_k_clauses::TopBottomKClausesProvenance::<RcFamily>::new(opt.top_k, opt.wmc_with_disjunctions)),
-        p => println!("Unknown provenance `{}`. Aborting", p),
-      }
-    }
+        p => { eprintln!("Unknown provenance `{}`. Aborting", p); std::process::exit(1); },
+      }?;
+    })
   }
 }

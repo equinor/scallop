@@ -81,8 +81,9 @@ impl Dataflow {
       Self::OverwriteOne(d) => {
         d.collect_dependency(preds);
       }
-      Self::Exclusion(d, _) => {
-        d.collect_dependency(preds);
+      Self::Exclusion(l, r) => {
+        l.collect_dependency(preds);
+        r.collect_dependency(preds);
       }
       Self::Sorted(d) => {
         d.collect_dependency(preds);

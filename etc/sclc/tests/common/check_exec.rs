@@ -32,7 +32,7 @@ pub fn check_compile_exec_from_program_string(program_name: &str, program_string
     input: scl_file_dir.clone(),
     ..Default::default()
   };
-  let (_, proj_dir) = exec::generate_exec_rust_project(&sclc_opt, opt, &ram);
+  let (_, proj_dir) = exec::generate_exec_rust_project(&sclc_opt, opt, &ram).unwrap();
 
   // Create command for cargo check on proj dir
   let mut cmd = Command::new("cargo");

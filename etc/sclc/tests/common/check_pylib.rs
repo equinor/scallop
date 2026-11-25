@@ -28,7 +28,7 @@ pub fn check_compile_pylib_from_program_string(program_name: &str, program_strin
       panic!("Unable to compile generated Python library test program");
     }
   };
-  let (_, proj_dir) = pylib::generate_pylib_rust_project(&scl_file_dir, opt, &ram);
+  let (_, proj_dir) = pylib::generate_pylib_rust_project(&scl_file_dir, opt, &ram).unwrap();
 
   // Create command for cargo check on proj dir
   let mut cmd = Command::new("cargo");

@@ -190,13 +190,9 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
   pub fn load_into_static_relation<Tup>(&self, relation: &str, ctx: &Prov, rela: &StaticRelation<Tup, Prov>)
   where
     Tup: StaticTupleTrait,
-    Tuple: AsTuple<Tup>,
   {
-    if let Some(extensional_relation) = self.extensional_relations.get(relation)
-      && !extensional_relation.internal.is_empty()
-    {
-      let data = extensional_relation.internal.iter().collect::<Vec<_>>();
-      rela.insert_dynamic_elements_ref(ctx, &data);
+    if let Some(collection) = self.get_dynamic_collection(relation) {
+      rela.insert_dynamic_elements(ctx, collection.iter());
     }
   }
 
@@ -205,11 +201,22 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
     env: &RuntimeEnvironment,
     program: &ram::Program,
   ) -> Result<(), DatabaseError> {
-    // Load and cache all the input files
-    self.input_file_registry.load(program).map_err(DatabaseError::IO)?;
+    self.populate_relations(env, program.relations())
+  }
+
+  pub fn populate_relations<'a>(
+    &mut self,
+    env: &RuntimeEnvironment,
+    relations: impl IntoIterator<Item = &'a ram::Relation>,
+  ) -> Result<(), DatabaseError> {
+    let relations = relations.into_iter().collect::<Vec<_>>();
+    self
+      .input_file_registry
+      .load_files(relations.iter().filter_map(|r| r.input_file.as_ref()))
+      .map_err(DatabaseError::IO)?;
 
     // Iterate through all relations declared in the program
-    for relation in program.relations() {
+    for relation in relations {
       // Create a relation in the EDB if the relation is populating EDB
       if relation.populates_edb() {
         self.create_relation(relation);

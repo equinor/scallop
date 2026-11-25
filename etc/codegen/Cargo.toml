@@ -10,3 +10,4 @@ proc-macro = true
 [dependencies]
 quote = "1.0"
 scallop-core = { path = "../../core" }
+syn = { version = "3", default-features = false, features = ["parsing", "proc-macro"] }

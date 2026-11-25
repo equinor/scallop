@@ -349,11 +349,15 @@ pub trait ForeignFunction: DynClone {
 /// A dynamic foreign function that can hold any static foreign function
 pub struct DynamicForeignFunction {
   ff: Box<dyn ForeignFunction + Send + Sync>,
+  builtin: bool,
 }
 
 impl DynamicForeignFunction {
   pub fn new<F: ForeignFunction + Send + Sync + 'static>(f: F) -> Self {
-    Self { ff: Box::new(f) }
+    Self {
+      ff: Box::new(f),
+      builtin: false,
+    }
   }
 }
 
@@ -435,6 +439,7 @@ impl Clone for DynamicForeignFunction {
   fn clone(&self) -> Self {
     Self {
       ff: dyn_clone::clone_box(&*self.ff),
+      builtin: self.builtin,
     }
   }
 }
@@ -557,7 +562,14 @@ impl ForeignFunctionRegistry {
     registry.register(ffs::Dim).unwrap();
     registry.register(ffs::Dot).unwrap();
 
+    for function in registry.registry.values_mut() {
+      function.builtin = true;
+    }
     registry
+  }
+
+  pub(crate) fn is_builtin(&self, name: &str) -> bool {
+    self.get(name).is_some_and(|function| function.builtin)
   }
 
   /// Register a new foreign function in this registry

@@ -6,7 +6,7 @@ use crate::runtime::provenance::*;
 pub struct StaticIteration<'a, Prov: Provenance> {
   pub iter_num: usize,
   pub early_discard: bool,
-  pub relations: Vec<Box<dyn StaticRelationTrait<Prov>>>,
+  relations: Vec<(Box<dyn StaticRelationTrait<Prov>>, Scheduler, bool)>,
   pub runtime_environment: &'a RuntimeEnvironment,
   pub provenance_context: &'a mut Prov,
 }
@@ -16,7 +16,7 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
   pub fn new(runtime_environment: &'a RuntimeEnvironment, provenance_context: &'a mut Prov) -> Self {
     Self {
       iter_num: 0,
-      early_discard: true,
+      early_discard: runtime_environment.early_discard,
       runtime_environment,
       provenance_context,
       relations: Vec::new(),
@@ -33,20 +33,49 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
 
   pub fn changed(&mut self) -> bool {
     let mut result = false;
-    for relation in self.relations.iter_mut() {
-      if relation.changed(self.provenance_context) {
+    for (relation, scheduler, _) in &mut self.relations {
+      if relation.changed_with_scheduler(self.provenance_context, scheduler) {
         result = true;
       }
     }
     result
   }
 
+  pub fn need_to_iterate(&mut self) -> bool {
+    let criteria = &self.runtime_environment.stopping_criteria;
+    let limit = criteria.get_iter_limit();
+    if self.changed() || self.is_first_iteration() {
+      let mut goals = self.relations.iter().filter(|(_, _, goal)| *goal).peekable();
+      let reached_goal = criteria.stop_when_goal_relation_non_empty()
+        && goals.peek().is_some()
+        && goals.all(|(relation, _, _)| relation.has_recent());
+      if limit.is_some_and(|limit| self.iter_num > limit) || reached_goal {
+        for (relation, _, _) in &self.relations {
+          relation.finish_early(self.provenance_context);
+        }
+        return false;
+      }
+      true
+    } else {
+      limit.is_some_and(|limit| self.iter_num < limit)
+    }
+  }
+
   pub fn create_relation<Tup>(&mut self) -> StaticRelation<Tup, Prov>
   where
     Tup: StaticTupleTrait + 'static,
   {
+    self.create_relation_with_options(None, false)
+  }
+
+  pub fn create_relation_with_options<Tup: StaticTupleTrait>(
+    &mut self,
+    scheduler: Option<Scheduler>,
+    is_goal: bool,
+  ) -> StaticRelation<Tup, Prov> {
     let relation = StaticRelation::new();
-    self.relations.push(Box::new(relation.clone()));
+    let scheduler = scheduler.unwrap_or_else(|| self.runtime_environment.get_default_scheduler().clone());
+    self.relations.push((Box::new(relation.clone()), scheduler, is_goal));
     relation
   }
 

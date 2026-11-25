@@ -1,6 +1,155 @@
 use scallop_core::runtime::provenance::*;
 use scallop_core::testing::*;
 
+macro_rules! compiled_fixture {
+  ($program:literal) => {
+    pub const SOURCE: &str = $program;
+    scallop_codegen::scallop! { $program }
+  };
+}
+
+fn check_parity<T, P>(
+  idb: &scallop_core::runtime::database::intentional::IntentionalDatabase<P>,
+  name: &str,
+  actual: &scallop_core::runtime::statics::StaticOutputCollection<T, P>,
+) where
+  T: scallop_core::runtime::statics::StaticTupleTrait,
+  P: Provenance,
+  P::OutputTag: PartialEq,
+{
+  let mut expected = idb.get_output_collection_ref(name).unwrap().elements.clone();
+  let mut actual = actual.to_dynamic_vec();
+  expected.sort_by(|a, b| a.1.cmp(&b.1));
+  actual.sort_by(|a, b| a.1.cmp(&b.1));
+  assert_eq!(actual, expected, "{name}");
+}
+
+#[test]
+fn codegen_builtin_expressions_and_grouped_aggregates_match_interpreter() {
+  mod program {
+    compiled_fixture! {r#"
+      type inputs(i32, i32, String)
+      rel inputs = {(2147483647, 0, "a"), (4, 2, "4"), (6, 2, "xyz")}
+      rel computed(x + 1, y + 1, $string_length(s + s), s, s) = inputs(x, y, s)
+      rel parsed(s as i32) = inputs(_, _, s)
+      rel saturated(x + 1) = inputs(x, _, _)
+      rel numbers(n) = n in 2..=4
+      rel average(y, a) = a := avg!(x: inputs(x, y, _))
+      rel largest(s, x) = (s, x) := max[s](x: inputs(x, _, s))
+    "#}
+  }
+  let mut prov = boolean::BooleanProvenance;
+  let expected = scallop_core::integrate::interpret_string_with_ctx(program::SOURCE.into(), prov.clone()).unwrap();
+  let actual = program::run(&mut prov);
+  check_parity(&expected, "computed", &actual.computed);
+  check_parity(&expected, "parsed", &actual.parsed);
+  check_parity(&expected, "saturated", &actual.saturated);
+  check_parity(&expected, "numbers", &actual.numbers);
+  check_parity(&expected, "average", &actual.average);
+  check_parity(&expected, "largest", &actual.largest);
+}
+
+#[test]
+fn codegen_entities_symbols_and_time_match_interpreter() {
+  mod program {
+    compiled_fixture! {r#"
+      type Expression = Number(i32) | Inc(Expression)
+      rel seed = {3, 5}
+      rel node(new Inc(new Number(n))) = seed(n)
+      rel match(n) = node(e), case e is Inc(Number(n))
+      rel stamp = {t"2020-01-31T12:30:00.125Z"}
+      rel offset = {d"1mo -1d 0.125s"}
+      rel shifted(a + b, b) = stamp(a), offset(b)
+      rel color = {s"red", s"blue"}
+      rel label(s, s as String) = color(s)
+    "#}
+  }
+  let mut prov = boolean::BooleanProvenance;
+  let expected = scallop_core::integrate::interpret_string_with_ctx(program::SOURCE.into(), prov.clone()).unwrap();
+  let actual = program::run(&mut prov);
+  check_parity(&expected, "match", &actual.r#match);
+  check_parity(&expected, "node", &actual.node);
+  check_parity(&expected, "shifted", &actual.shifted);
+  check_parity(&expected, "label", &actual.label);
+}
+
+#[test]
+fn codegen_tagged_rules_and_exclusion_match_interpreter() {
+  mod program {
+    compiled_fixture! {r#"
+      rel variable = {1, 2}
+      rel { assignment(x, true); assignment(x, false) } = variable(x)
+      type denominator(i32, f32)
+      rel denominator = {(1, 1.0), (2, 2.0)}
+      rel (1.0 / p)::weighted(x, b) = assignment(x, b), denominator(x, p)
+      rel impossible(x) = assignment(x, true), assignment(x, false)
+    "#}
+  }
+  let mut prov = top_k_proofs::TopKProofsProvenance::<scallop_core::utils::RcFamily>::new(8, false);
+  let expected = scallop_core::integrate::interpret_string_with_ctx(program::SOURCE.into(), prov.clone()).unwrap();
+  let actual = program::run(&mut prov);
+  check_parity(&expected, "weighted", &actual.weighted);
+  check_parity(&expected, "impossible", &actual.impossible);
+}
+
+#[test]
+fn codegen_indexed_and_wide_relations_match_interpreter() {
+  mod program {
+    compiled_fixture! {r#"
+      @storage("indexed_vec")
+      type indexed(i: usize, n: i32)
+      rel indexed = {(0, 7), (0, 8), (2, 9)}
+      type key(usize)
+      rel key = {0, 1, 2}
+      rel lookup(i, n) = key(i), indexed(i, n)
+      rel six = {(1, 2, 3, 4, 5, 6)}
+      rel wide(a, b, c, d, e, f, a, b, c, d, e, f, 13) = six(a, b, c, d, e, f)
+      rel projected(x) = wide(_, _, _, _, _, _, _, _, _, _, _, _, x)
+    "#}
+  }
+  let mut prov = boolean::BooleanProvenance;
+  let expected = scallop_core::integrate::interpret_string_with_ctx(program::SOURCE.into(), prov.clone()).unwrap();
+  let actual = program::run(&mut prov);
+  check_parity(&expected, "indexed", &actual.indexed);
+  check_parity(&expected, "lookup", &actual.lookup);
+  check_parity(&expected, "wide", &actual.wide);
+  check_parity(&expected, "projected", &actual.projected);
+}
+
+#[test]
+fn codegen_scheduler_and_goal_match_interpreter() {
+  use scallop_core::integrate::{IntegrateOptions, InterpretContext};
+  use scallop_core::runtime::env::{RuntimeEnvironmentOptions, Scheduler};
+
+  mod program {
+    compiled_fixture! {r#"
+      rel edge = {0.2::(0, 1), 0.9::(0, 2), 0.8::(2, 1), 0.7::(2, 3), 0.5::(3, 4)}
+      @scheduler("astar")
+      rel path(a, b) = edge(a, b) or (path(a, c), edge(c, b))
+      @goal
+      rel goal() = path(0, 1)
+    "#}
+  }
+  let mut prov = min_max_prob::MinMaxProbProvenance::new();
+  let options = RuntimeEnvironmentOptions::default()
+    .with_stop_when_goal_non_empty(true)
+    .with_default_scheduler(Some(Scheduler::Beam { beam_size: 2 }));
+  let mut interpreter = InterpretContext::<_, scallop_core::utils::RcFamily>::new_with_options(
+    program::SOURCE.into(),
+    prov.clone(),
+    IntegrateOptions {
+      runtime_environment_options: options.clone(),
+      ..Default::default()
+    },
+  )
+  .unwrap();
+  interpreter.run().unwrap();
+  let actual = program::try_run_with_edb(&mut prov, program::create_edb(), options).unwrap();
+  let expected = interpreter.idb();
+  check_parity(&expected, "path", &actual.path);
+  check_parity(&expected, "goal", &actual.goal);
+}
+
 #[test]
 fn codegen_edge_path_left_recursion() {
   mod edge_path {

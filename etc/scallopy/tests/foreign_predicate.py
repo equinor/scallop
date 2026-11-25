@@ -1,4 +1,6 @@
 from typing import *
+from tempfile import TemporaryDirectory
+from pathlib import Path
 import unittest
 
 import scallopy
@@ -15,6 +17,12 @@ class TestForeignPredicate(unittest.TestCase):
     ctx.add_rule("r(x) = my_range(1, 5, x)")
     ctx.run()
     self.assertEqual(list(ctx.relation("r")), [(1,), (2,), (3,), (4,)])
+
+    with TemporaryDirectory() as directory:
+      target = Path(directory) / "native.scl"
+      with self.assertRaisesRegex(Exception, "does not support custom foreign predicate `my_range`"):
+        ctx._internal.jit_compile(["r"], str(target))
+      self.assertEqual(list(Path(directory).iterdir()), [])
 
   def test_foreign_predicate_in_parallel_batch(self):
     @scallopy.foreign_predicate

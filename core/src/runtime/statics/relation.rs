@@ -6,6 +6,8 @@ use super::dataflow::Dataflow;
 use super::*;
 use crate::common::input_tag::*;
 use crate::common::tuple::*;
+use crate::runtime::dynamic::DynamicElement;
+use crate::runtime::env::Scheduler;
 use crate::runtime::monitor::*;
 use crate::runtime::provenance::*;
 use crate::runtime::utils::*;
@@ -15,6 +17,7 @@ pub struct StaticRelation<Tup: StaticTupleTrait, Prov: Provenance> {
   pub stable: Rc<RefCell<Vec<StaticCollection<Tup, Prov>>>>,
   pub recent: Rc<RefCell<StaticCollection<Tup, Prov>>>,
   to_add: Rc<RefCell<Vec<StaticCollection<Tup, Prov>>>>,
+  waitlist: Rc<RefCell<Vec<DynamicElement<Prov>>>>,
 }
 
 impl<Tup: StaticTupleTrait, Prov: Provenance> StaticRelation<Tup, Prov> {
@@ -23,6 +26,7 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticRelation<Tup, Prov> {
       stable: Rc::new(RefCell::new(Vec::new())),
       recent: Rc::new(RefCell::new(StaticCollection::empty())),
       to_add: Rc::new(RefCell::new(Vec::new())),
+      waitlist: Rc::new(RefCell::new(Vec::new())),
     }
   }
 
@@ -103,13 +107,14 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticRelation<Tup, Prov> {
     self.insert_dataflow_recent(ctx, elements, false);
   }
 
-  pub fn insert_dynamic_elements(&self, ctx: &Prov, data: Vec<crate::runtime::dynamic::DynamicElement<Prov>>)
-  where
-    Tuple: AsTuple<Tup>,
-  {
+  pub fn insert_dynamic_elements(
+    &self,
+    ctx: &Prov,
+    data: impl IntoIterator<Item = crate::runtime::dynamic::DynamicElement<Prov>>,
+  ) {
     let data = data
       .into_iter()
-      .map(|e| StaticElement::new(<Tuple as AsTuple<Tup>>::as_tuple(&e.tuple), e.tag.clone()))
+      .map(|e| StaticElement::new(Tup::from_dyn_tuple(e.tuple), e.tag))
       .collect::<Vec<_>>();
     self.insert_dataflow_recent(ctx, data, false)
   }
@@ -170,6 +175,21 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticRelation<Tup, Prov> {
     }
     result
   }
+
+  pub fn insert_entity_facts(&self, ctx: &Prov, tuples: Vec<Tuple>) {
+    self.insert_dynamic_elements(ctx, tuples.into_iter().map(|t| DynamicElement::new(t, ctx.one())));
+  }
+
+  fn stabilize_recent(&self, ctx: &Prov) {
+    if !self.recent.borrow().is_empty() {
+      let mut recent = std::mem::replace(&mut *self.recent.borrow_mut(), StaticCollection::empty());
+      while self.stable.borrow().last().is_some_and(|x| x.len() <= 2 * recent.len()) {
+        let last = self.stable.borrow_mut().pop().unwrap();
+        recent = recent.merge(last, ctx);
+      }
+      self.stable.borrow_mut().push(recent);
+    }
+  }
 }
 
 impl<Tup: StaticTupleTrait, Prov: Provenance> Default for StaticRelation<Tup, Prov> {
@@ -180,6 +200,12 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> Default for StaticRelation<Tup, Pr
 
 pub trait StaticRelationTrait<Prov: Provenance> {
   fn changed(&mut self, semiring_ctx: &Prov) -> bool;
+
+  fn changed_with_scheduler(&mut self, semiring_ctx: &Prov, scheduler: &Scheduler) -> bool;
+
+  fn has_recent(&self) -> bool;
+
+  fn finish_early(&self, ctx: &Prov);
 }
 
 impl<Tup, Prov> StaticRelationTrait<Prov> for StaticRelation<Tup, Prov>
@@ -188,18 +214,33 @@ where
   Prov: Provenance,
 {
   fn changed(&mut self, ctx: &Prov) -> bool {
-    // 1. Merge self.recent into self.stable.
-    if !self.recent.borrow().is_empty() {
-      let mut recent = ::std::mem::replace(&mut (*self.recent.borrow_mut()), StaticCollection::empty());
-      while self.stable.borrow().last().map(|x| x.len() <= 2 * recent.len()) == Some(true) {
-        let last = self.stable.borrow_mut().pop().unwrap();
-        recent = recent.merge(last, ctx);
+    self.changed_with_scheduler(ctx, &Scheduler::LFP)
+  }
+
+  fn has_recent(&self) -> bool {
+    self.num_recent() > 0
+  }
+
+  fn changed_with_scheduler(&mut self, ctx: &Prov, scheduler: &Scheduler) -> bool {
+    self.stabilize_recent(ctx);
+    let to_add = self.to_add.borrow_mut().pop();
+    if *scheduler != Scheduler::LFP {
+      let mut delta = to_add.unwrap_or_else(StaticCollection::empty);
+      while let Some(other) = self.to_add.borrow_mut().pop() {
+        delta = delta.merge(other, ctx);
       }
-      self.stable.borrow_mut().push(recent);
+      let mut delta = delta.into_dynamic_sorted();
+      let mut stable = self.stable.borrow_mut();
+      let mut dynamic_stable = stable
+        .drain(..)
+        .map(StaticCollection::into_dynamic_sorted)
+        .collect::<Vec<_>>();
+      scheduler.schedule(&mut delta, &mut self.waitlist.borrow_mut(), &mut dynamic_stable, ctx);
+      stable.extend(dynamic_stable.into_iter().map(StaticCollection::from_dynamic_sorted));
+      *self.recent.borrow_mut() = StaticCollection::from_dynamic_sorted(delta);
+      return self.has_recent();
     }
 
-    // 2. Move self.to_add into self.recent.
-    let to_add = self.to_add.borrow_mut().pop();
     if let Some(mut to_add) = to_add {
       let mut to_remove_to_add_indices = HashSet::new();
       while let Some(to_add_more) = self.to_add.borrow_mut().pop() {
@@ -275,5 +316,11 @@ where
     }
 
     !self.recent.borrow().is_empty()
+  }
+
+  fn finish_early(&self, ctx: &Prov) {
+    self.stabilize_recent(ctx);
+    self.to_add.borrow_mut().clear();
+    self.waitlist.borrow_mut().clear();
   }
 }
