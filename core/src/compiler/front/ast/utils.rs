@@ -431,3 +431,24 @@ where
     self.2.walk_mut(v);
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  #[allow(dead_code)]
+  fn derives_final_unit_variant_without_trailing_comma() {
+    #[derive(astnode_derive::AstNode, Clone)]
+    #[rustfmt::skip]
+    enum _ExampleNode {
+      Numeric(i32),
+      Empty
+    }
+
+    let node = ExampleNode::empty_with_span(4, 7);
+    assert!(node.is_empty());
+    assert_eq!(node.location().offset_span, NodeLocation::from_span(4, 7).offset_span);
+    assert_eq!(ExampleNode::numeric(2).as_numeric(), Some(&2));
+  }
+}
