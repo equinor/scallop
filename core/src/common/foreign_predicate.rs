@@ -210,21 +210,14 @@ dyn_clone::clone_trait_object!(ForeignPredicate);
 #[derive(Clone)]
 pub struct DynamicForeignPredicate {
   fp: Box<dyn ForeignPredicate + Send + Sync>,
-  origin: PredicateOrigin,
-}
-
-#[derive(Clone)]
-enum PredicateOrigin {
-  Custom,
-  Builtin,
-  RuleTag(TagPredicate),
+  is_builtin: bool,
 }
 
 impl DynamicForeignPredicate {
   pub fn new<P: ForeignPredicate + Send + Sync + 'static>(fp: P) -> Self {
     Self {
       fp: Box::new(fp),
-      origin: PredicateOrigin::Custom,
+      is_builtin: false,
     }
   }
 }
@@ -340,29 +333,20 @@ impl ForeignPredicateRegistry {
     reg.register(fps::NewTagVariable::new()).unwrap();
 
     for predicate in reg.registry.values_mut() {
-      predicate.origin = PredicateOrigin::Builtin;
+      predicate.is_builtin = true;
     }
     reg
   }
 
   pub(crate) fn is_builtin(&self, name: &str) -> bool {
-    self
-      .get(name)
-      .is_some_and(|p| !matches!(p.origin, PredicateOrigin::Custom))
-  }
-
-  pub(crate) fn rule_tags(&self) -> impl Iterator<Item = &TagPredicate> {
-    self.registry.values().filter_map(|p| match &p.origin {
-      PredicateOrigin::RuleTag(tag) => Some(tag),
-      _ => None,
-    })
+    self.get(name).is_some_and(|p| p.is_builtin)
   }
 
   pub(crate) fn register_rule_tag(&mut self, tag: TagPredicate) -> Result<(), ForeignPredicateError> {
     let id = tag.internal_name();
     let predicate = DynamicForeignPredicate {
-      fp: Box::new(tag.clone()),
-      origin: PredicateOrigin::RuleTag(tag),
+      fp: Box::new(tag),
+      is_builtin: true,
     };
     self.insert(id, predicate)
   }
