@@ -8,3 +8,4 @@ mod transform;
 
 pub use ast::*;
 pub use dependency::*;
+pub use ram2rs::RustEmissionError;

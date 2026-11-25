@@ -153,8 +153,7 @@ impl<Prov: Provenance> DynamicRelation<Prov> {
     self.stable.borrow_mut().clear()
   }
 
-  pub fn changed(&mut self, ctx: &Prov, scheduler: &Scheduler) -> bool {
-    // 1. Merge self.recent into self.stable.
+  fn stabilize_recent(&self, ctx: &Prov) {
     if !self.recent.borrow().is_empty() {
       let mut recent = ::std::mem::replace(&mut (*self.recent.borrow_mut()), DynamicSortedCollection::empty());
       while self.stable.borrow().last().map(|x| x.len() <= 2 * recent.len()) == Some(true) {
@@ -163,7 +162,16 @@ impl<Prov: Provenance> DynamicRelation<Prov> {
       }
       self.stable.borrow_mut().push(recent);
     }
+  }
 
+  pub(crate) fn finish_early(&self, ctx: &Prov) {
+    self.stabilize_recent(ctx);
+    self.to_add.borrow_mut().clear();
+    self.waitlist.borrow_mut().clear();
+  }
+
+  pub fn changed(&mut self, ctx: &Prov, scheduler: &Scheduler) -> bool {
+    self.stabilize_recent(ctx);
     // 2. Condense self.to_add
     let mut to_add_batches = self.to_add.borrow_mut();
     let mut to_add = match to_add_batches.pop() {

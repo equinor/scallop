@@ -56,7 +56,7 @@ impl TaggedRuleAnalysis {
             // This means that we have an okay tag that is type checked
             // Create a foreign predicate and register it
             let fp = TagPredicate::new(tag_predicate.name.clone(), target_tag_ty);
-            if let Err(err) = foreign_predicate_registry.register(fp) {
+            if let Err(err) = foreign_predicate_registry.register_rule_tag(fp) {
               self.errors.push(FrontCompileErrorMessage::error().msg(err.to_string()));
             }
           }

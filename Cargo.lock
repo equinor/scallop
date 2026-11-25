@@ -1084,6 +1084,7 @@ version = "0.2.5"
 dependencies = [
  "quote",
  "scallop-core",
+ "syn",
 ]
 
 [[package]]
@@ -1151,6 +1152,7 @@ dependencies = [
  "quote",
  "scallop-core",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]

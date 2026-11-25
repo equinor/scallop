@@ -18,7 +18,7 @@ pub fn create_pylib(
   compile_opt: compiler::CompileOptions,
   ram: &compiler::ram::Program,
 ) -> Result<(), SclcError> {
-  let (parent_dir, tmp_dir) = generate_pylib_rust_project(&opt.input, compile_opt, ram);
+  let (parent_dir, tmp_dir) = generate_pylib_rust_project(&opt.input, compile_opt, ram)?;
 
   // Compile the file: create command
   let mut cmd = Command::new("maturin");
@@ -32,34 +32,42 @@ pub fn create_pylib(
     .arg(PathBuf::new().join("target").join("wheels").join("current"));
 
   // Run the command
-  let output = cmd.output().unwrap();
+  let output = cmd.output()?;
   if output.status.success() {
-    let whls = fs::read_dir(tmp_dir.join("target").join("wheels").join("current"))
-      .unwrap()
-      .collect::<Vec<_>>();
-    assert_eq!(whls.len(), 1, "Only one wheel should be generated for compilation");
-    let whl = whls.into_iter().next().unwrap().unwrap().path();
+    let whls =
+      fs::read_dir(tmp_dir.join("target").join("wheels").join("current"))?.collect::<std::io::Result<Vec<_>>>()?;
+    let [wheel] = whls.as_slice() else {
+      return Err(SclcError::Build(
+        "maturin",
+        format!("expected one wheel, got {}", whls.len()),
+      ));
+    };
+    let whl = wheel.path();
     let whl_name = whl.file_name().unwrap();
 
     // Copy the wheel to the wheels directory
-    fs::copy(whl.clone(), tmp_dir.join("target").join("wheels").join(whl_name)).unwrap();
+    fs::copy(&whl, tmp_dir.join("target").join("wheels").join(whl_name))?;
 
     // If we want to copy the wheel to the parent directory
     if !opt.do_not_copy_artifact {
-      fs::copy(whl.clone(), parent_dir.join(whl_name)).unwrap();
+      fs::copy(&whl, parent_dir.join(whl_name))?;
     }
 
     // If we want to remove the temporary directory
     if opt.do_not_keep_temporary_directory {
-      fs::remove_dir_all(tmp_dir).unwrap();
+      fs::remove_dir_all(tmp_dir)?;
     }
 
     Ok(())
   } else {
-    eprintln!("[Compile Error]");
-    eprintln!("stdout: {}", std::str::from_utf8(&output.stdout).unwrap());
-    eprintln!("{}", std::str::from_utf8(&output.stderr).unwrap());
-    Ok(())
+    Err(SclcError::Build(
+      "maturin",
+      format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+      ),
+    ))
   }
 }
 
@@ -67,33 +75,27 @@ pub fn generate_pylib_rust_project(
   input: &Path,
   compile_opt: compiler::CompileOptions,
   ram: &compiler::ram::Program,
-) -> (PathBuf, PathBuf) {
+) -> Result<(PathBuf, PathBuf), SclcError> {
   // Get program name
   let program_name = input.file_prefix().unwrap().to_str().unwrap();
 
   // Rust source
-  let file_content = generate_pylib_code(compile_opt, program_name, ram).to_string();
+  let file_content = generate_pylib_code(compile_opt, program_name, ram)?.to_string();
 
   // Create a folder
   let parent_dir = input.parent().unwrap();
   let tmp_dir = parent_dir.join(format!(".{}.pylib.sclcmpl", program_name));
-  let scallop_source_dir = env::var("SCALLOPDIR").expect(
-    "Please set envrionment variable `SCALLOPDIR` to be the root of Scallop source directory before using `sclc`.",
-  );
+  let scallop_source_dir = env::var("SCALLOPDIR").map_err(|_| SclcError::MissingScallopDir)?;
 
   // Create a temporary directory holding the cargo project
-  fs::create_dir_all(&tmp_dir).unwrap();
-  fs::create_dir_all(tmp_dir.join("src")).unwrap();
-  fs::create_dir_all(tmp_dir.join("target")).unwrap();
-  fs::create_dir_all(tmp_dir.join("target").join("wheels")).unwrap();
-  fs::create_dir_all(tmp_dir.join("target").join("wheels").join("current")).unwrap();
+  fs::create_dir_all(tmp_dir.join("src"))?;
+  fs::create_dir_all(tmp_dir.join("target").join("wheels").join("current"))?;
 
   // Create a Cargo.toml file
-  let mut cargo_toml_file = File::create(tmp_dir.join("Cargo.toml")).unwrap();
-  cargo_toml_file
-    .write_all(
-      format!(
-        r#"[package]
+  let mut cargo_toml_file = File::create(tmp_dir.join("Cargo.toml"))?;
+  cargo_toml_file.write_all(
+    format!(
+      r#"[package]
 name = "{}"
 version = "1.0.0"
 edition = "2024"
@@ -109,39 +111,39 @@ version = "0.30.1"
 features = ["extension-module"]
 [workspace]
 "#,
-        program_name, program_name, scallop_source_dir, scallop_source_dir,
-      )
-      .as_bytes(),
+      program_name, program_name, scallop_source_dir, scallop_source_dir,
     )
-    .unwrap();
+    .as_bytes(),
+  )?;
 
   // Create a lib.rs file
-  let mut lib_rs_file = File::create(tmp_dir.join("src/lib.rs")).unwrap();
-  lib_rs_file.write_all(file_content.as_bytes()).unwrap();
+  let mut lib_rs_file = File::create(tmp_dir.join("src/lib.rs"))?;
+  lib_rs_file.write_all(file_content.as_bytes())?;
 
   // Return
-  (parent_dir.to_path_buf(), tmp_dir)
+  Ok((parent_dir.to_path_buf(), tmp_dir))
 }
 
 fn generate_pylib_code(
   compile_opt: compiler::CompileOptions,
   program_name: &str,
   ram: &compiler::ram::Program,
-) -> TokenStream {
+) -> Result<TokenStream, SclcError> {
   let program_name_ident = format_ident!("{}", program_name);
 
   // Turn the ram module into a sequence of rust tokens
-  let module = ram.to_rs_module(&compile_opt);
+  let module = ram.to_rs_module(&compile_opt)?;
 
   // Generate code
   let create_edb_code = ram.to_rs_create_edb_fn();
   let static_context_code = generate_static_context_code(ram);
   let binding_error_code = generate_binding_error_code();
-  let context_code = generate_context_code();
+  let has_file_outputs = ram.relations().any(|r| matches!(r.output, OutputOption::File(_)));
+  let context_code = generate_context_code(has_file_outputs);
   let helper_functions = generate_helper_functions();
 
   // Generate the code
-  quote! {
+  Ok(quote! {
     use pyo3::{prelude::*, Bound, IntoPyObjectExt};
     use pyo3::exceptions::*;
     use pyo3::types::*;
@@ -167,7 +169,7 @@ fn generate_pylib_code(
       m.add_class::<Context>()?;
       Ok(())
     }
-  }
+  })
 }
 
 fn generate_static_context_code(ram: &compiler::ram::Program) -> TokenStream {
@@ -225,10 +227,13 @@ fn generate_static_context_code(ram: &compiler::ram::Program) -> TokenStream {
         }
       }
 
-      fn run(&mut self) {
+      fn run(&mut self) -> Result<(), BindingError> {
+        self.output = None;
         let edb_clone = self.edb.clone();
-        let res = scallop_module::run_with_edb(&mut self.prov_ctx, edb_clone);
+        let res = scallop_module::try_run_with_edb(&mut self.prov_ctx, edb_clone, Default::default())
+          .map_err(|err| BindingError(err.to_string()))?;
         self.output = Some(res);
+        Ok(())
       }
 
       fn relation(&self, r: &str) -> Result<Vec<(C::OutputTag, Tuple)>, BindingError> {
@@ -279,7 +284,7 @@ fn generate_binding_error_code() -> TokenStream {
   }
 }
 
-fn generate_context_code() -> TokenStream {
+fn generate_context_code(has_file_outputs: bool) -> TokenStream {
   quote! {
     #[derive(Clone)]
     enum ContextEnum {
@@ -334,7 +339,7 @@ fn generate_context_code() -> TokenStream {
         res.map_err(PyErr::from)
       }
 
-      fn run(&mut self) {
+      fn run(&mut self) -> PyResult<()> {
         match &mut self.ctx {
           ContextEnum::Unit(c) => c.run(),
           ContextEnum::MinMaxProb(c) => c.run(),
@@ -342,10 +347,14 @@ fn generate_context_code() -> TokenStream {
           ContextEnum::DiffMinMaxProb(c) => c.run(),
           ContextEnum::DiffTopKProofs(c) => c.run(),
           ContextEnum::DiffTopBottomKClauses(c) => c.run(),
-        }
+        }.map_err(PyErr::from)
       }
 
       fn run_batch_parallel(&self, py: Python<'_>, inputs: HashMap<String, Vec<Bound<'_, PyList>>>, outputs: Vec<String>) -> PyResult<Vec<(Option<Vec<Py<PyAny>>>, Vec<Vec<Py<PyAny>>>)>> {
+        if #has_file_outputs {
+          // Batch items share the same configured output paths.
+          return self.run_batch_non_parallel(inputs, outputs);
+        }
         let res = match &self.ctx {
           ContextEnum::Unit(c) => run_batch_parallel(py, c, inputs, outputs),
           ContextEnum::MinMaxProb(c) => run_batch_parallel(py, c, inputs, outputs),
@@ -418,7 +427,7 @@ fn generate_helper_functions() -> TokenStream {
           for (r, batch) in prep_inputs.iter() {
             temp_ctx.add_facts(r, batch[i].clone())?;
           }
-          temp_ctx.run();
+          temp_ctx.run()?;
           let input_tags = C::get_input_tags(&temp_ctx.prov_ctx);
           let relations = outputs.iter().map(|o| temp_ctx.relation(o)).collect::<Result<Vec<_>, _>>()?;
           Ok((input_tags, relations))
@@ -456,7 +465,7 @@ fn generate_helper_functions() -> TokenStream {
           for (r, batch) in prep_inputs.iter() {
             temp_ctx.add_facts(r, batch[i].clone())?;
           }
-          temp_ctx.run();
+          temp_ctx.run()?;
           let input_tags = C::get_input_tags(&temp_ctx.prov_ctx);
           let relations = outputs.iter().map(|o| temp_ctx.relation(o)).collect::<Result<Vec<_>, _>>()?;
           Ok((input_tags, relations))
@@ -484,6 +493,9 @@ fn generate_helper_functions() -> TokenStream {
     fn to_python_tuple(tup: &Tuple) -> PyResult<Py<PyAny>> {
       Python::attach(|py| scallopy_interop::to_python_tuple(py, tup, &|py, value| {
         match value {
+          Value::SymbolString(symbol) => symbol.into_py_any(py),
+          Value::DateTime(time) => display_date_time(*time).to_string().into_py_any(py),
+          Value::Duration(duration) => duration.to_string().into_py_any(py),
           Value::Entity(id) => id.into_py_any(py),
           _ => Err(PyTypeError::new_err(format!("Unsupported compiled output value `{value}`"))),
         }
@@ -493,6 +505,18 @@ fn generate_helper_functions() -> TokenStream {
     fn from_python_tuple(v: &Bound<'_, PyAny>, ty: &TupleType) -> PyResult<Tuple> {
       scallopy_interop::from_python_tuple(v, ty, &|v, ty| {
         match ty {
+          ValueType::Symbol => v.extract().map(Value::SymbolString),
+          ValueType::DateTime => {
+            let text: &str = v.extract()?;
+            parse_date_time_string(text).map(Value::DateTime)
+              .ok_or_else(|| PyTypeError::new_err(format!("Cannot parse into DateTime: {text}")))
+          }
+          ValueType::Duration => {
+            let text: &str = v.extract()?;
+            parse_duration_string(text).map(Value::Duration)
+              .ok_or_else(|| PyTypeError::new_err(format!("Cannot parse into Duration: {text}")))
+          }
+          ValueType::Entity if v.cast::<PyString>().is_ok() => v.extract().map(Value::EntityString),
           ValueType::Entity => v.extract().map(Value::Entity),
           _ => Err(PyTypeError::new_err(format!("Unsupported compiled input type `{ty}`"))),
         }

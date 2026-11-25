@@ -1,7 +1,7 @@
 use std::collections::*;
 use std::path::*;
 
-use crate::compiler::ram;
+use crate::common::input_file::InputFile;
 use crate::runtime::error::*;
 use crate::utils::*;
 
@@ -35,9 +35,9 @@ impl<Ptr: PointerFamily> InputFileRegistry<Ptr> {
     }
   }
 
-  pub fn load(&mut self, program: &ram::Program) -> Result<(), IOError> {
+  pub fn load_files<'a>(&mut self, mut files: impl Iterator<Item = &'a InputFile>) -> Result<(), IOError> {
     // Iterate through all the input files in the program
-    program.input_files().try_for_each(|input_file| {
+    files.try_for_each(|input_file| {
       if Ptr::get_rc(&self.input_files).contains_key(input_file.file_path()) {
         // Do nothing; the file is already loaded
         Ok(())

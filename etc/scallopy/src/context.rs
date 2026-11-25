@@ -406,6 +406,12 @@ impl Context {
   ///
   /// When succeeded, there will be a `target_file` created, which can be in turn imported by python runtime.
   fn jit_compile(&mut self, target_relations: Vec<String>, target_file: String) -> Result<(), BindingError> {
+    match_context!(
+      &self.ctx,
+      c,
+      c.validate_rust_extensions()
+        .map_err(|err| BindingError::CompileError(err.to_string()))
+    )?;
     let target_relations = target_relations.iter().map(String::as_str).collect::<Vec<_>>();
     // First compile the program
     match_context!(
@@ -425,10 +431,7 @@ impl Context {
       ..Default::default()
     };
     let compile_opt = compiler::CompileOptions::default();
-    sclc_core::pylib::create_pylib(&opt, compile_opt, ram).expect("Compile Error");
-
-    // Return result
-    Ok(())
+    sclc_core::pylib::create_pylib(&opt, compile_opt, ram).map_err(|err| BindingError::CompileError(err.to_string()))
   }
 
   /// Import a module written in scallop file

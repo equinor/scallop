@@ -1,9 +1,10 @@
 use std::fs::File;
-use std::path::*;
+use std::path::Path;
 
 use csv::WriterBuilder;
 
 use crate::common::output_option::*;
+use crate::common::tuple::Tuple;
 use crate::runtime::error::*;
 use crate::runtime::provenance::*;
 use crate::utils::*;
@@ -20,24 +21,40 @@ pub fn store_file<Prov: Provenance, Ptr: PointerFamily>(
 }
 
 pub fn store_csv_file<Prov: Provenance, Ptr: PointerFamily>(
-  file_path: &PathBuf,
+  file_path: &Path,
   deliminator: u8,
   idb_relation: &intentional::IntentionalRelation<Prov, Ptr>,
 ) -> Result<(), IOError> {
+  store_csv_tuples(
+    file_path,
+    deliminator,
+    Ptr::get_rc(&idb_relation.recovered_facts)
+      .iter()
+      .map(|(_, tuple)| tuple),
+  )
+}
+
+pub fn store_csv_tuples<'a>(
+  file_path: &Path,
+  deliminator: u8,
+  tuples: impl IntoIterator<Item = &'a Tuple>,
+) -> Result<(), IOError> {
   // Then load the file
   let file = File::create(file_path).map_err(|e| IOError::CannotOpenFile {
-    file_path: file_path.clone(),
+    file_path: file_path.to_path_buf(),
     error: format!("{}", e),
   })?;
 
   // Write the tuples to the file
   let mut wtr = WriterBuilder::new().delimiter(deliminator).from_writer(file);
-  for (_, tuple) in Ptr::get_rc(&idb_relation.recovered_facts).iter() {
+  for tuple in tuples {
     let record = tuple.as_ref_values().into_iter().map(|v| format!("{}", v));
     wtr
       .write_record(record)
       .map_err(|e| IOError::CannotWriteRecord { error: e.to_string() })?;
   }
 
-  Ok(())
+  wtr
+    .flush()
+    .map_err(|e| IOError::CannotWriteRecord { error: e.to_string() })
 }

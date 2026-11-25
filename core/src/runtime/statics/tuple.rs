@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+use crate::common::duration::Duration;
 use crate::common::tuple::*;
 use crate::common::value::*;
 use crate::utils::FloatKey;
@@ -194,163 +195,72 @@ impl StaticTupleTrait for String {
   }
 }
 
-impl<T1> StaticTupleTrait for (T1,)
-where
-  T1: StaticTupleTrait,
-{
+impl StaticTupleTrait for DateTime {
   fn from_dyn_tuple(dyn_tuple: Tuple) -> Self {
-    match dyn_tuple {
-      Tuple::Tuple(elems) => (T1::from_dyn_tuple(elems[0].clone()),),
-      _ => panic!("expected dyn tuple"),
-    }
+    dyn_tuple.as_value().as_date_time()
   }
 
   fn into_dyn_tuple(self) -> Tuple {
-    Tuple::Tuple(Box::new([self.0.into_dyn_tuple()]))
-  }
-
-  fn cmp_tuple(&self, other: &Self) -> Ordering {
-    self.0.cmp_tuple(&other.0)
+    Tuple::Value(Value::DateTime(self))
   }
 }
 
-impl<T1, T2> StaticTupleTrait for (T1, T2)
-where
-  T1: StaticTupleTrait,
-  T2: StaticTupleTrait,
-{
+impl StaticTupleTrait for Duration {
   fn from_dyn_tuple(dyn_tuple: Tuple) -> Self {
-    match dyn_tuple {
-      Tuple::Tuple(elems) => (
-        T1::from_dyn_tuple(elems[0].clone()),
-        T2::from_dyn_tuple(elems[1].clone()),
-      ),
-      _ => panic!("expected dyn tuple"),
-    }
+    dyn_tuple.as_value().as_duration()
   }
 
   fn into_dyn_tuple(self) -> Tuple {
-    Tuple::Tuple(Box::new([self.0.into_dyn_tuple(), self.1.into_dyn_tuple()]))
-  }
-
-  fn cmp_tuple(&self, other: &Self) -> Ordering {
-    self.0.cmp_tuple(&other.0).then_with(|| self.1.cmp_tuple(&other.1))
+    Tuple::Value(Value::Duration(self))
   }
 }
 
-impl<T1, T2, T3> StaticTupleTrait for (T1, T2, T3)
-where
-  T1: StaticTupleTrait,
-  T2: StaticTupleTrait,
-  T3: StaticTupleTrait,
-{
+impl StaticTupleTrait for Value {
   fn from_dyn_tuple(dyn_tuple: Tuple) -> Self {
-    match dyn_tuple {
-      Tuple::Tuple(elems) => (
-        T1::from_dyn_tuple(elems[0].clone()),
-        T2::from_dyn_tuple(elems[1].clone()),
-        T3::from_dyn_tuple(elems[2].clone()),
-      ),
-      _ => panic!("expected dyn tuple"),
-    }
+    dyn_tuple.to_value()
   }
 
   fn into_dyn_tuple(self) -> Tuple {
-    Tuple::Tuple(Box::new([
-      self.0.into_dyn_tuple(),
-      self.1.into_dyn_tuple(),
-      self.2.into_dyn_tuple(),
-    ]))
+    Tuple::Value(self)
+  }
+}
+
+impl StaticTupleTrait for Tuple {
+  fn from_dyn_tuple(dyn_tuple: Tuple) -> Self {
+    dyn_tuple
   }
 
-  fn cmp_tuple(&self, other: &Self) -> Ordering {
+  fn into_dyn_tuple(self) -> Tuple {
     self
-      .0
-      .cmp_tuple(&other.0)
-      .then_with(|| self.1.cmp_tuple(&other.1))
-      .then_with(|| self.2.cmp_tuple(&other.2))
   }
 }
 
-impl<T1, T2, T3, T4> StaticTupleTrait for (T1, T2, T3, T4)
-where
-  T1: StaticTupleTrait,
-  T2: StaticTupleTrait,
-  T3: StaticTupleTrait,
-  T4: StaticTupleTrait,
-{
-  fn from_dyn_tuple(dyn_tuple: Tuple) -> Self {
-    match dyn_tuple {
-      Tuple::Tuple(elems) => (
-        T1::from_dyn_tuple(elems[0].clone()),
-        T2::from_dyn_tuple(elems[1].clone()),
-        T3::from_dyn_tuple(elems[2].clone()),
-        T4::from_dyn_tuple(elems[3].clone()),
-      ),
-      _ => panic!("expected dyn tuple"),
+macro_rules! static_tuples {
+  ($($ty:ident $index:tt),+; $next:ident $next_index:tt $(, $rest:ident $rest_index:tt)*) => {
+    static_tuples!($($ty $index),+);
+    static_tuples!($($ty $index,)+ $next $next_index; $($rest $rest_index),*);
+  };
+  ($($ty:ident $index:tt),+;) => { static_tuples!($($ty $index),+); };
+  ($($ty:ident $index:tt),+) => {
+    impl<$($ty: StaticTupleTrait),+> StaticTupleTrait for ($($ty,)+) {
+      fn from_dyn_tuple(tuple: Tuple) -> Self {
+        let Tuple::Tuple(values) = tuple else { panic!("expected dyn tuple") };
+        let mut values = values.into_vec().into_iter();
+        ($($ty::from_dyn_tuple(values.next().expect("expected tuple field")),)+)
+      }
+
+      fn into_dyn_tuple(self) -> Tuple {
+        Tuple::Tuple(Box::new([$(self.$index.into_dyn_tuple()),+]))
+      }
+
+      fn cmp_tuple(&self, other: &Self) -> Ordering {
+        Ordering::Equal $(.then_with(|| self.$index.cmp_tuple(&other.$index)))+
+      }
     }
-  }
-
-  fn into_dyn_tuple(self) -> Tuple {
-    Tuple::Tuple(Box::new([
-      self.0.into_dyn_tuple(),
-      self.1.into_dyn_tuple(),
-      self.2.into_dyn_tuple(),
-      self.3.into_dyn_tuple(),
-    ]))
-  }
-
-  fn cmp_tuple(&self, other: &Self) -> Ordering {
-    self
-      .0
-      .cmp_tuple(&other.0)
-      .then_with(|| self.1.cmp_tuple(&other.1))
-      .then_with(|| self.2.cmp_tuple(&other.2))
-      .then_with(|| self.3.cmp_tuple(&other.3))
-  }
+  };
 }
 
-impl<T1, T2, T3, T4, T5> StaticTupleTrait for (T1, T2, T3, T4, T5)
-where
-  T1: StaticTupleTrait,
-  T2: StaticTupleTrait,
-  T3: StaticTupleTrait,
-  T4: StaticTupleTrait,
-  T5: StaticTupleTrait,
-{
-  fn from_dyn_tuple(dyn_tuple: Tuple) -> Self {
-    match dyn_tuple {
-      Tuple::Tuple(elems) => (
-        T1::from_dyn_tuple(elems[0].clone()),
-        T2::from_dyn_tuple(elems[1].clone()),
-        T3::from_dyn_tuple(elems[2].clone()),
-        T4::from_dyn_tuple(elems[3].clone()),
-        T5::from_dyn_tuple(elems[4].clone()),
-      ),
-      _ => panic!("expected dyn tuple"),
-    }
-  }
-
-  fn into_dyn_tuple(self) -> Tuple {
-    Tuple::Tuple(Box::new([
-      self.0.into_dyn_tuple(),
-      self.1.into_dyn_tuple(),
-      self.2.into_dyn_tuple(),
-      self.3.into_dyn_tuple(),
-      self.4.into_dyn_tuple(),
-    ]))
-  }
-
-  fn cmp_tuple(&self, other: &Self) -> Ordering {
-    self
-      .0
-      .cmp_tuple(&other.0)
-      .then_with(|| self.1.cmp_tuple(&other.1))
-      .then_with(|| self.2.cmp_tuple(&other.2))
-      .then_with(|| self.3.cmp_tuple(&other.3))
-      .then_with(|| self.4.cmp_tuple(&other.4))
-  }
-}
+static_tuples!(A 0; B 1, C 2, D 3, E 4, F 5, G 6, H 7, I 8, J 9, K 10, L 11);
 
 #[derive(Clone)]
 pub struct StaticTupleWrapper<T: StaticTupleTrait>(T);

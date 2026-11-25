@@ -1,9 +1,10 @@
 use clap::Parser;
+use std::process::ExitCode;
 
 use scallop_core::compiler;
 use sclc_core::*;
 
-fn main() {
+fn main() -> ExitCode {
   // Command line arguments
   let opt = options::Options::parse();
 
@@ -15,14 +16,24 @@ fn main() {
       for err in errs {
         eprintln!("{}", err);
       }
-      return;
+      return ExitCode::FAILURE;
     }
   };
 
   // Depending on the mode, create artifacts
-  match opt.mode.as_str() {
+  let result = match opt.mode.as_str() {
     "executable" | "exec" => exec::create_executable(&opt, compile_opt, &ram),
-    "pylib" => pylib::create_pylib(&opt, compile_opt, &ram).unwrap(),
-    m => panic!("Unknown compilation mode --mode `{}`", m),
+    "pylib" => pylib::create_pylib(&opt, compile_opt, &ram),
+    m => {
+      eprintln!("Unknown compilation mode --mode `{m}`");
+      return ExitCode::FAILURE;
+    }
   };
+  match result {
+    Ok(()) => ExitCode::SUCCESS,
+    Err(error) => {
+      eprintln!("{error}");
+      ExitCode::FAILURE
+    }
+  }
 }

@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 
 use super::*;
+use crate::runtime::dynamic::{DynamicElement, DynamicIndexedVecCollection, DynamicSortedCollection};
+use crate::runtime::env::RuntimeEnvironment;
 use crate::runtime::provenance::*;
 
 #[derive(Clone)]
@@ -93,6 +95,43 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticCollection<Tup, Prov> {
         .into_iter()
         .map(move |elem| (ctx.recover_fn(&elem.tag), elem.tuple.get().clone())),
     )
+  }
+
+  pub fn recover_with_env(self, ctx: &Prov, env: &RuntimeEnvironment) -> StaticOutputCollection<Tup, Prov> {
+    StaticOutputCollection::from(self.elements.into_iter().filter_map(|elem| {
+      let (tuple, tag) = elem.into();
+      let tuple = env.externalize_tuple(&tuple.into_dyn_tuple())?;
+      Some((ctx.recover_fn(&tag), Tup::from_dyn_tuple(tuple)))
+    }))
+  }
+
+  pub(crate) fn into_dynamic_sorted(self) -> DynamicSortedCollection<Prov> {
+    DynamicSortedCollection::from_vec_unchecked(
+      self
+        .into_iter()
+        .map(|elem| {
+          let (tuple, tag) = elem.into();
+          DynamicElement::new(tuple.into_dyn_tuple(), tag)
+        })
+        .collect(),
+    )
+  }
+
+  pub(crate) fn from_dynamic_sorted(collection: DynamicSortedCollection<Prov>) -> Self {
+    Self::from_dynamic_elements(collection)
+  }
+
+  pub fn from_dynamic_elements(collection: impl IntoIterator<Item = DynamicElement<Prov>>) -> Self {
+    Self::from_vec_unchecked(
+      collection
+        .into_iter()
+        .map(|e| StaticElement::new(Tup::from_dyn_tuple(e.tuple), e.tag))
+        .collect(),
+    )
+  }
+
+  pub fn into_indexed_vec(self, ctx: &Prov) -> DynamicIndexedVecCollection<Prov> {
+    DynamicIndexedVecCollection::from_vec(self.into_dynamic_sorted().elements, ctx)
   }
 
   pub fn merge(self, other: Self, ctx: &Prov) -> Self {
