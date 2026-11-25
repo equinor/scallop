@@ -1,7 +1,7 @@
 use colored::*;
 use petgraph::{
   graph::{EdgeIndex, Graph, NodeIndex},
-  visit::EdgeRef,
+  visit::{Dfs, EdgeRef, VisitMap, Visitable},
 };
 use std::collections::*;
 use std::sync::OnceLock;
@@ -79,19 +79,33 @@ impl DependencyGraph {
   }
 
   pub fn unused_relations(&self, targets: &HashSet<String>) -> HashSet<String> {
-    let mut unrelated = HashSet::new();
-    let output_ids = targets.iter().map(|r| self.predicate_node(r)).collect::<Vec<_>>();
-    for (predicate, rid) in &self.predicate_to_node_id {
-      if !targets.contains(predicate) {
-        let connected_to_output = output_ids
-          .iter()
-          .any(|oid| petgraph::algo::has_path_connecting(&self.graph, *oid, *rid, None));
-        if !connected_to_output {
-          unrelated.insert(predicate.clone());
-        }
-      }
+    let roots = targets.iter().map(|target| self.predicate_node(target)).collect();
+    let mut reachable = Dfs::from_parts(roots, self.graph.visit_map());
+    while reachable.next(&self.graph).is_some() {}
+
+    self
+      .graph
+      .node_indices()
+      .filter(|node| !reachable.discovered.is_visited(node))
+      .map(|node| self.graph[node].clone())
+      .collect()
+  }
+
+  pub(super) fn remove_predicates(&mut self, to_remove: &HashSet<String>) {
+    if to_remove.is_empty() {
+      return;
     }
-    unrelated
+
+    self.graph = std::mem::take(&mut self.graph).filter_map_owned(
+      |_, predicate| (!to_remove.contains(&predicate)).then_some(predicate),
+      |_, edge| Some(edge),
+    );
+    self.predicate_to_node_id = self
+      .graph
+      .node_indices()
+      .map(|node| (self.graph[node].clone(), node))
+      .collect();
+    self.sccs.take();
   }
 
   pub fn compute_scc(&mut self) {
@@ -104,10 +118,17 @@ impl DependencyGraph {
 
   pub fn stratify(&self) -> Result<Vec<Stratum>, SCCError> {
     let sccs = self.sccs();
-    for scc in sccs {
+    let mut component_of = vec![0; self.graph.node_count()];
+    for (component, scc) in sccs.iter().enumerate() {
+      for node in scc {
+        component_of[node.index()] = component;
+      }
+    }
+
+    for (component, scc) in sccs.iter().enumerate() {
       for node_id in scc {
         for edge in self.graph.edges(*node_id) {
-          if edge.weight().needs_stratification() && scc.contains(&edge.target()) {
+          if edge.weight().needs_stratification() && component_of[edge.target().index()] == component {
             return Err(SCCError::CannotStratify {
               pred_1: self.graph[edge.source()].clone(),
               pred_2: self.graph[edge.target()].clone(),
@@ -266,6 +287,90 @@ impl Program {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn unused_relations_keeps_dependencies_shared_by_multiple_outputs() {
+    let mut graph = DependencyGraph::new();
+    let [first, second, shared, recursive, leaf, consumer, isolated] =
+      ["first", "second", "shared", "recursive", "leaf", "consumer", "isolated"].map(str::to_owned);
+    for predicate in [&first, &second, &shared, &recursive, &leaf, &consumer, &isolated] {
+      graph.add_predicate(predicate);
+    }
+    for (from, to) in [
+      (&first, &shared),
+      (&second, &shared),
+      (&shared, &recursive),
+      (&recursive, &shared),
+      (&recursive, &leaf),
+      (&consumer, &shared),
+    ] {
+      graph.add_dependency(from, to, DependencyGraphEdge::Positive);
+    }
+
+    assert_eq!(
+      graph.unused_relations(&HashSet::new()),
+      HashSet::from([
+        first.clone(),
+        second.clone(),
+        shared,
+        recursive,
+        leaf,
+        consumer.clone(),
+        isolated.clone(),
+      ])
+    );
+    assert_eq!(
+      graph.unused_relations(&HashSet::from([first, second])),
+      HashSet::from([consumer, isolated])
+    );
+  }
+
+  #[test]
+  fn stratification_allows_negative_and_aggregate_edges_between_components() {
+    let mut graph = DependencyGraph::new();
+    let [first, second, dependency] = ["first", "second", "dependency"].map(str::to_owned);
+    for predicate in [&first, &second, &dependency] {
+      graph.add_predicate(predicate);
+    }
+    graph.add_dependency(&first, &second, DependencyGraphEdge::Positive);
+    graph.add_dependency(&second, &first, DependencyGraphEdge::Positive);
+    graph.add_dependency(&first, &dependency, DependencyGraphEdge::Negative);
+    graph.add_dependency(&second, &dependency, DependencyGraphEdge::Aggregation);
+
+    let strata = graph.stratify().unwrap();
+    assert_eq!(strata[0].predicates, ["dependency"]);
+    assert!(!strata[0].is_recursive);
+    assert_eq!(strata[1].predicates.len(), 2);
+    assert!(strata[1].is_recursive);
+
+    graph.add_dependency(&second, &first, DependencyGraphEdge::Aggregation);
+    assert!(matches!(
+      graph.stratify(),
+      Err(SCCError::CannotStratify { pred_1, pred_2, edge: DependencyGraphEdge::Aggregation })
+        if pred_1 == second && pred_2 == first
+    ));
+  }
+
+  #[test]
+  fn pruning_remaps_nodes_and_invalidates_cached_components() {
+    let mut graph = DependencyGraph::new();
+    let [unused, output, input] = ["unused", "output", "input"].map(str::to_owned);
+    for predicate in [&unused, &output, &input] {
+      graph.add_predicate(predicate);
+    }
+    graph.add_dependency(&output, &input, DependencyGraphEdge::Negative);
+    graph.add_dependency(&unused, &unused, DependencyGraphEdge::Negative);
+    graph.compute_scc();
+
+    let outputs = HashSet::from([output]);
+    graph.remove_predicates(&graph.unused_relations(&outputs));
+
+    assert!(graph.unused_relations(&outputs).is_empty());
+    let strata = graph.stratify().unwrap();
+    assert_eq!(strata.len(), 2);
+    assert_eq!(strata[0].predicates, ["input"]);
+    assert_eq!(strata[1].predicates, ["output"]);
+  }
 
   #[test]
   fn stratification_recomputes_modified_components() {
