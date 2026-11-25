@@ -48,9 +48,7 @@ impl Program {
     Ok(())
   }
 
-  /// Remove unused relation according to the dependency graph.
-  /// All the relations that are isolated from the queries will be removed, along
-  /// with their rules
+  /// Remove relations not reachable from the outputs and prune the program's dependency graph.
   pub fn remove_unused_relations(&mut self, dep_graph: &mut DependencyGraph) {
     // First collect all the relations to remove
     let to_remove = dep_graph.unused_relations(&self.output_relations());
@@ -64,8 +62,7 @@ impl Program {
     // Remove facts
     self.facts.retain(|f| !to_remove.contains(&f.predicate));
 
-    // Update dep_graph by re-computing it
-    *dep_graph = self.dependency_graph();
+    dep_graph.remove_predicates(&to_remove);
   }
 
   pub fn to_ram_program(&mut self, opt: &CompileOptions) -> Result<ram::Program, BackCompileError> {
