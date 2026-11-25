@@ -198,6 +198,20 @@ class TestInputMapping(unittest.TestCase):
     mapping = scallopy.InputMapping("only", retain_k=1)
     self.assertEqual(mapping.process_tensor(torch.tensor(0.75)), [(0.75, ("only",))])
 
+  def test_threshold_keeps_equal_and_nan_tags_with_gradients(self):
+    mapping = scallopy.InputMapping([["a", "b"], ["c", "d"]], retain_threshold=0.5)
+    values = torch.tensor([[0.5, 0.8], [float("nan"), 0.4]], requires_grad=True)
+    facts = mapping.process_tensor(values.t())
+    self.assertEqual([fact for _, fact in facts], [("a",), ("b",), ("c",)])
+    self.assertTrue(torch.isnan(facts[1][0]))
+    torch.stack([tag for tag, _ in facts]).sum().backward()
+    torch.testing.assert_close(values.grad, torch.tensor([[1.0, 1.0], [1.0, 0.0]]))
+
+  def test_threshold_drops_sampled_scalar_below_cutoff(self):
+    mapping = scallopy.InputMapping("only", retain_k=1, retain_threshold=0.5)
+    self.assertEqual(mapping.process_tensor(torch.tensor(0.4)), [])
+    self.assertEqual(mapping.process_tensor(torch.tensor(0.5)), [(0.5, ("only",))])
+
   def test_mult_dim_retain_k_2(self):
     im = scallopy.InputMapping({0: range(5), 1: range(3)}, retain_k=2, sample_dim=1)
     r = im.process_tensor(torch.randn((5, 3)))
