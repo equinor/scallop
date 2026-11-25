@@ -152,6 +152,28 @@ impl VariableTuple {
     }
   }
 
+  pub(crate) fn prefix_projection(&self, goal: &Self) -> Option<Expr> {
+    fn distinct<'a>(tuple: &'a VariableTuple, seen: &mut HashSet<&'a Variable>) -> bool {
+      match tuple {
+        VariableTuple::Value(variable) => seen.insert(variable),
+        VariableTuple::Tuple(fields) => fields.iter().all(|field| distinct(field, seen)),
+      }
+    }
+
+    if !distinct(goal, &mut HashSet::new()) {
+      // The general projection resolves duplicates by using the first occurrence of a variable.
+      return None;
+    }
+    match (self, goal) {
+      (source, goal) if source == goal => Some(Expr::access(())),
+      (Self::Tuple(fields), Self::Value(_)) if fields.first() == Some(goal) => Some(Expr::access(0)),
+      (Self::Tuple(fields), Self::Tuple(prefix)) if fields.starts_with(prefix) => {
+        Some(Expr::Tuple((0..prefix.len()).map(Expr::access).collect()))
+      }
+      _ => None,
+    }
+  }
+
   pub fn term_to_ram_expr(&self, t: &Term) -> Option<Expr> {
     match t {
       Term::Constant(c) => Some(Expr::Constant(c.clone())),

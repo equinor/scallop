@@ -658,9 +658,21 @@ impl Program {
     let sub_goal = goal.expand(filters.iter().flat_map(|c| c.unique_variable_args().cloned()));
     let sub_dataflow = self.plan_to_ram_dataflow(ctx, &sub_goal, subplan, prop);
     let filter = self.constraints_to_ram_filter(&sub_goal, filters);
-    let project = ram::Dataflow::project(ram::Dataflow::filter(sub_dataflow, filter), sub_goal.projection(goal));
-    // TODO: Optimize the case where sub_goal to goal preserves ordering
-    Self::process_dataflow(ctx, goal, project, prop)
+    let filtered = sub_dataflow.filter(filter);
+    if let Some(prefix) = sub_goal.prefix_projection(goal) {
+      let projected = if matches!(&prefix, Expr::Access(path) if path.is_empty()) {
+        filtered
+      } else {
+        filtered.project(prefix)
+      };
+      if prop.prefer_in_place_sorting && !prop.is_negative {
+        return projected;
+      }
+      // Sortedness alone cannot replace a temporary relation's consolidation of duplicate rows.
+      Self::process_dataflow(ctx, goal, projected, prop)
+    } else {
+      Self::process_dataflow(ctx, goal, filtered.project(sub_goal.projection(goal)), prop)
+    }
   }
 
   fn project_plan_to_ram_dataflow(
@@ -1344,5 +1356,50 @@ fn const_var(i: usize, ty: Type) -> Variable {
   Variable {
     name: format!("const#{}", i),
     ty,
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::compiler::compile_string_to_ram;
+  use crate::runtime::provenance::natural::NaturalProvenance;
+  use crate::testing::expect_interpret_result_with_tag;
+
+  #[test]
+  fn filtered_join_prefix_needs_no_in_place_sort() {
+    fn sorts_after_filters(dataflow: &ram::Dataflow) -> bool {
+      if let ram::Dataflow::Sorted(source) = dataflow
+        && (matches!(&**source, ram::Dataflow::Filter(..))
+          || matches!(&**source, ram::Dataflow::Project(input, _) if matches!(&**input, ram::Dataflow::Filter(..))))
+      {
+        return true;
+      }
+      dataflow.children().any(sorts_after_filters)
+    }
+
+    let inputs = r#"
+      rel left = {(0, -1), (0, 1), (0, 2), (1, 1)}
+      rel right = {(0, 0), (0, 1), (0, 2), (2, 3)}
+    "#;
+    let rule = "rel result(k) = left(k, p) and right(k, q) and p > 0 and q > 0\nquery result";
+    let in_place = format!("{inputs}\n@no_temp_relation\n{rule}");
+    let program = compile_string_to_ram(in_place.clone()).unwrap();
+    assert!(!program
+      .strata
+      .iter()
+      .flat_map(|s| &s.updates)
+      .any(|update| sorts_after_filters(&update.dataflow)));
+
+    let materialized = format!("{inputs}\n{rule}");
+    let program = compile_string_to_ram(materialized.clone()).unwrap();
+    assert!(program.strata.iter().flat_map(|s| &s.updates).any(|update| {
+      update.target.starts_with("#temp#")
+        && matches!(&update.dataflow, ram::Dataflow::Project(source, _) if matches!(&**source, ram::Dataflow::Filter(..)))
+    }));
+
+    for source in [in_place, materialized] {
+      expect_interpret_result_with_tag(&source, NaturalProvenance, ("result", vec![(4, (0i32,))]), usize::eq);
+    }
   }
 }
