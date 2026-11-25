@@ -5,31 +5,44 @@ use crate::utils::*;
 
 use super::*;
 
-pub struct DiffTopBottomKClausesProvenance<T: FromTensor, P: PointerFamily = RcFamily> {
+pub struct DiffTopBottomKClausesProvenance<
+  T: FromTensor,
+  P: PointerFamily = RcFamily,
+  W: WmcBackend = DefaultWmcBackend,
+> {
   pub k: usize,
   pub storage: DiffProbStorage<T, P>,
   pub disjunctions: P::Cell<Disjunctions>,
   pub wmc_with_disjunctions: bool,
+  wmc_backend: W,
 }
 
-impl<T: FromTensor, P: PointerFamily> Clone for DiffTopBottomKClausesProvenance<T, P> {
+impl<T: FromTensor, P: PointerFamily, W: WmcBackend> Clone for DiffTopBottomKClausesProvenance<T, P, W> {
   fn clone(&self) -> Self {
     Self {
       k: self.k,
       storage: self.storage.clone_internal(),
       disjunctions: P::clone_cell(&self.disjunctions),
       wmc_with_disjunctions: self.wmc_with_disjunctions,
+      wmc_backend: self.wmc_backend.clone(),
     }
   }
 }
 
 impl<T: FromTensor, P: PointerFamily> DiffTopBottomKClausesProvenance<T, P> {
   pub fn new(k: usize, wmc_with_disjunctions: bool) -> Self {
+    Self::new_with_wmc_backend(k, wmc_with_disjunctions, DefaultWmcBackend)
+  }
+}
+
+impl<T: FromTensor, P: PointerFamily, W: WmcBackend> DiffTopBottomKClausesProvenance<T, P, W> {
+  pub fn new_with_wmc_backend(k: usize, wmc_with_disjunctions: bool, wmc_backend: W) -> Self {
     Self {
       k,
       storage: DiffProbStorage::new(),
       disjunctions: P::new_cell(Disjunctions::new()),
       wmc_with_disjunctions,
+      wmc_backend,
     }
   }
 
@@ -42,7 +55,7 @@ impl<T: FromTensor, P: PointerFamily> DiffTopBottomKClausesProvenance<T, P> {
   }
 }
 
-impl<T: FromTensor, P: PointerFamily> CNFDNFContextTrait for DiffTopBottomKClausesProvenance<T, P> {
+impl<T: FromTensor, P: PointerFamily, W: WmcBackend> CNFDNFContextTrait for DiffTopBottomKClausesProvenance<T, P, W> {
   fn fact_probability(&self, id: &usize) -> f64 {
     self.storage.fact_probability(id)
   }
@@ -52,7 +65,7 @@ impl<T: FromTensor, P: PointerFamily> CNFDNFContextTrait for DiffTopBottomKClaus
   }
 }
 
-impl<T: FromTensor, P: PointerFamily> Provenance for DiffTopBottomKClausesProvenance<T, P> {
+impl<T: FromTensor, P: PointerFamily, W: WmcBackend> Provenance for DiffTopBottomKClausesProvenance<T, P, W> {
   type Tag = CNFDNFFormula;
 
   type InputTag = InputExclusiveDiffProb<T>;
@@ -97,9 +110,11 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffTopBottomKClausesProven
       }
     };
     let wmc_result = if self.wmc_with_disjunctions {
-      P::get_cell(&self.disjunctions, |disj| t.wmc_with_disjunctions(&s, &v, disj))
+      P::get_cell(&self.disjunctions, |disj| {
+        t.wmc_with_disjunctions_using(&self.wmc_backend, &s, &v, disj)
+      })
     } else {
-      t.wmc(&s, &v)
+      t.wmc_using(&self.wmc_backend, &s, &v)
     };
     let prob = wmc_result.real;
     let deriv = wmc_result
@@ -140,6 +155,6 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffTopBottomKClausesProven
 
   fn weight(&self, t: &Self::Tag) -> f64 {
     let v = |i: &usize| self.storage.get_prob(i);
-    t.wmc(&RealSemiring::new(), &v)
+    t.wmc_using(&self.wmc_backend, &RealSemiring::new(), &v)
   }
 }

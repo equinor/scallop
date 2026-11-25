@@ -17,6 +17,7 @@ mod output_diff_prob;
 mod output_diff_prob_with_proofs;
 mod real;
 mod top_k_aggregation;
+mod wmc;
 
 pub use as_boolean_formula::*;
 pub use boolean_formula::{BooleanFormula, Semiring};
@@ -37,3 +38,4 @@ pub use output_diff_prob::*;
 pub use output_diff_prob_with_proofs::*;
 pub use real::*;
 pub use top_k_aggregation::*;
+pub use wmc::{DefaultWmcBackend, WmcBackend};

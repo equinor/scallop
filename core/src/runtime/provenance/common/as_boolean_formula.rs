@@ -1,4 +1,4 @@
-use super::{BooleanFormula, Disjunctions, Literal, Semiring};
+use super::{BooleanFormula, DefaultWmcBackend, Disjunctions, Literal, Semiring, WmcBackend};
 
 pub trait AsBooleanFormula {
   fn as_boolean_formula(&self) -> BooleanFormula;
@@ -9,11 +9,35 @@ pub trait AsBooleanFormula {
     S: Semiring,
     V: Fn(&usize) -> S::Element,
   {
-    self.as_boolean_formula().wmc(s, v)
+    self.wmc_using(&DefaultWmcBackend, s, v)
+  }
+
+  /// Compute the weighted model count using a caller-supplied backend.
+  fn wmc_using<S, V>(&self, backend: &impl WmcBackend, s: &S, v: &V) -> S::Element
+  where
+    S: Semiring,
+    V: Fn(&usize) -> S::Element,
+  {
+    backend.wmc(&self.as_boolean_formula(), s, v)
   }
 
   /// Count assignments satisfying the formula or violating any exactly-one constraint.
   fn wmc_with_disjunctions<S, V>(&self, s: &S, v: &V, disj: &Disjunctions) -> S::Element
+  where
+    S: Semiring,
+    V: Fn(&usize) -> S::Element,
+  {
+    self.wmc_with_disjunctions_using(&DefaultWmcBackend, s, v, disj)
+  }
+
+  /// Count the query or any exactly-one violation using a caller-supplied backend.
+  fn wmc_with_disjunctions_using<S, V>(
+    &self,
+    backend: &impl WmcBackend,
+    s: &S,
+    v: &V,
+    disj: &Disjunctions,
+  ) -> S::Element
   where
     S: Semiring,
     V: Fn(&usize) -> S::Element,
@@ -30,6 +54,7 @@ pub trait AsBooleanFormula {
         }))
       }))
     });
-    BooleanFormula::disjunction(std::iter::once(self.as_boolean_formula()).chain(violations)).wmc(s, v)
+    let formula = BooleanFormula::disjunction(std::iter::once(self.as_boolean_formula()).chain(violations));
+    backend.wmc(&formula, s, v)
   }
 }

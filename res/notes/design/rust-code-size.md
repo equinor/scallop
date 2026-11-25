@@ -15,11 +15,13 @@ The goal is to maintain less handwritten Rust, not to shrink binaries or minimiz
 
 ## Weighted model counting
 
-[RSDD replaces the standalone `lib/sdd` crate](https://github.com/equinor/scallop/pull/20) and builds for `wasm32-unknown-unknown`. The pinned revision is `168a6b4bf8c60176a2575fb1158342c4f6da9077`. Scallop's weighted fold can evaluate owned semiring elements, such as sparse gradients, without the `Copy` bound of RSDD's generic fold. It maps sparse fact IDs to dense labels, memoizes weighted values, and complements subs rather than partition primes.
+Weighted model counting always compiles a diagram. The native backend uses OxiDD with a thread-local manager; each evaluation still has its own weights and memo table. WebAssembly uses RSDD because OxiDD's managers require native threads. Both backends map sparse fact IDs to dense labels and support owned semiring elements such as sparse gradients.
 
-Constants, single literals, and flat clauses with strictly ordered distinct fact IDs bypass diagram construction. Other formulas with at most eight distinct facts count directly over at most 256 assignments. For larger formulas that need a diagram, each RSDD builder allocates two fixed-size unique tables (131,072 slots each), so startup cost still matters. For exclusive groups, `wmc_with_disjunctions` counts the query OR any exactly-one violation; its complement counts assignments where the query is false and all groups satisfy exactly-one.
+Applications can implement `WmcBackend` and keep their diagram representation private. For exclusive groups, `wmc_with_disjunctions` counts the query OR any exactly-one violation; its complement counts assignments where the query is false and all groups satisfy exactly-one.
 
 ### Historical rollout measurements
+
+[RSDD originally replaced the standalone `lib/sdd` crate](https://github.com/equinor/scallop/pull/20). Each RSDD builder allocates two fixed-size unique tables (131,072 slots each), so startup cost mattered. The previous RSDD path counted constants, literals, flat clauses and formulas with up to eight facts directly.
 
 The prototype matched the previous backend and brute-force enumeration on 520 formulas for probabilities and sparse gradients, including constants, negation, sparse IDs, and a two-fact exclusivity case. The prototype timings below predate the bounded direct-count path. They are release-mode medians from five runs of 10,000 calls with prebuilt proof tags (adjacent-pair clauses, with two alternating groups in the exclusive case). They measure diagram compilation and weighted evaluation, not end-to-end Scallop throughput.
 
