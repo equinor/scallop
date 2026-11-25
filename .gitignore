@@ -9,6 +9,7 @@ target
 /.env
 .venv/
 __pycache__
+/etc/scallopy-plugins/*/build/
 
 # VSCode
 /.vscode
