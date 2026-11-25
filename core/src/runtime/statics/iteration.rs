@@ -149,46 +149,6 @@ impl<'a, Prov: Provenance> StaticIteration<'a, Prov> {
     dataflow::antijoin(v1, v2, self.provenance_context)
   }
 
-  pub fn aggregate<A, D, T1>(&self, agg: A, d: D) -> dataflow::AggregationSingleGroup<'_, A, D, T1, Prov>
-  where
-    A: Aggregator<T1, Prov>,
-    T1: StaticTupleTrait,
-    D: dataflow::Dataflow<T1, Prov>,
-  {
-    dataflow::AggregationSingleGroup::new(agg, d, self.runtime_environment, self.provenance_context)
-  }
-
-  pub fn aggregate_implicit_group<A, D, K, T1>(
-    &self,
-    agg: A,
-    d: D,
-  ) -> dataflow::AggregationImplicitGroup<'_, A, D, K, T1, Prov>
-  where
-    A: Aggregator<T1, Prov>,
-    K: StaticTupleTrait,
-    T1: StaticTupleTrait,
-    D: dataflow::Dataflow<(K, T1), Prov>,
-  {
-    dataflow::AggregationImplicitGroup::new(agg, d, self.runtime_environment, self.provenance_context)
-  }
-
-  pub fn aggregate_join_group<A, D1, D2, K, T1, T2>(
-    &self,
-    agg: A,
-    v1: D1,
-    v2: D2,
-  ) -> dataflow::AggregationJoinGroup<'_, A, D1, D2, K, T1, T2, Prov>
-  where
-    A: Aggregator<T2, Prov>,
-    K: StaticTupleTrait,
-    T1: StaticTupleTrait,
-    T2: StaticTupleTrait,
-    D1: dataflow::Dataflow<(K, T1), Prov>,
-    D2: dataflow::Dataflow<(K, T2), Prov>,
-  {
-    dataflow::AggregationJoinGroup::new(agg, v1, v2, self.runtime_environment, self.provenance_context)
-  }
-
   pub fn complete<Tup>(&self, r: &StaticRelation<Tup, Prov>) -> StaticCollection<Tup, Prov>
   where
     Tup: StaticTupleTrait,

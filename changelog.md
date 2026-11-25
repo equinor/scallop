@@ -18,6 +18,7 @@ Rust API migration:
 - Construct reduce query-plan nodes with `HighRamNode::reduce`. The `HighRamNode::Reduce` variant now contains a `Box<Reduce>`; front-end AST constructors and accessors are unchanged except for the `Reduce` constructor noted above.
 - The unimplemented dense-matrix Rust storage variant has been removed. Scallop still supports `sorted` and `indexed_vec`.
 - Use `Timestamp`'s `Display` implementation in place of `utils::display_date_time`.
+- The legacy typed aggregation Rust API has been removed: `StaticIteration::{aggregate, aggregate_implicit_group, aggregate_join_group}`, the typed aggregator and aggregation dataflow types, and their helper exports (`SumType`, `ProdType`, `BaseType`, `TupleLength`, `FlattenTuple`, `static_argmin`, and `static_argmax`). For hand-written typed dataflows, use the operators in `runtime::dynamic::dataflow::aggregation` with `runtime::statics::dataflow::{to_dynamic, from_dynamic}`, as the Rust emitter does. Scallop programs and the dynamic foreign aggregate API are unchanged.
 
 # v0.2.5, Sep 14, 2024
 
