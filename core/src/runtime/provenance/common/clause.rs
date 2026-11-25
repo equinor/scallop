@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use super::Literal;
 
-#[derive(Clone, PartialEq, PartialOrd, Eq)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Clause {
   pub literals: Vec<Literal>,
 }

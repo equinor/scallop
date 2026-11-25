@@ -17,6 +17,10 @@ impl<P1: Provenance, P2: Provenance> Provenance for DualProvenance<P1, P2> {
     format!("Dual({}, {})", self.p1.name(), self.p2.name())
   }
 
+  fn requires_stable_input_order(&self) -> bool {
+    self.p1.requires_stable_input_order() || self.p2.requires_stable_input_order()
+  }
+
   fn tagging_fn(&self, ext_tag: Self::InputTag) -> Self::Tag {
     Self::Tag {
       t1: self.p1.tagging_fn(ext_tag.t1),

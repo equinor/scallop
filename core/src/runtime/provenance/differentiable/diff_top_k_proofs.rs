@@ -70,6 +70,10 @@ impl<T: FromTensor, P: PointerFamily, W: WmcBackend> Provenance for DiffTopKProo
     "diff-top-k-proofs".to_string()
   }
 
+  fn requires_stable_input_order(&self) -> bool {
+    true
+  }
+
   fn tagging_fn(&self, input_tag: Self::InputTag) -> Self::Tag {
     let InputExclusiveDiffProb {
       prob,

@@ -6,6 +6,7 @@ use scallop_core::common::expr::*;
 use scallop_core::common::foreign_aggregate::*;
 use scallop_core::common::value_type::ValueType;
 use scallop_core::compiler::ram::*;
+use scallop_core::integrate::IntegrateContext;
 use scallop_core::runtime::dynamic::*;
 use scallop_core::runtime::env::*;
 use scallop_core::runtime::provenance::*;
@@ -193,6 +194,44 @@ fn test_diff_top_k_weighted_model_count_with_multiple_exclusions() {
 }
 
 #[test]
+fn test_top_k_proofs_breaks_addition_and_join_ties_by_literals() {
+  let ctx = diff_top_k_proofs::DiffTopKProofsProvenance::<(), RcFamily>::new(1, false);
+  let first = ctx.tagging_fn((0.5, (), None).into());
+  let second = ctx.tagging_fn((0.5, (), None).into());
+  let third = ctx.tagging_fn((0.5, (), None).into());
+  let first_and_third = ctx.mult(&first, &third);
+
+  for (left, right) in [(&first, &second), (&second, &first)] {
+    let winner = ctx.add(left, right);
+    assert_eq!(winner, first);
+    let OutputDiffProb(score, gradient) = ctx.recover_fn(&winner);
+    assert_eq!((score, gradient.as_slice()), (0.5, &[(0, 1.0)][..]));
+
+    let candidates = left.or(right);
+    assert_eq!(ctx.mult(&candidates, &third), first_and_third);
+    assert_eq!(ctx.mult(&third, &candidates), first_and_third);
+  }
+}
+
+#[test]
+fn test_top_k_proofs_breaks_negation_frontier_ties_by_literals() {
+  let ctx = top_k_proofs::TopKProofsProvenance::<RcFamily>::new(2, false);
+  let [a, b, c, d] = std::array::from_fn(|_| ctx.tagging_fn((0.5, None).into()));
+  let ab = ctx.mult(&a, &b);
+  let cd = ctx.mult(&c, &d);
+  for (left, right) in [(&ab, &cd), (&cd, &ab)] {
+    let result = ctx.negate(&left.or(right)).unwrap();
+    assert_eq!(
+      result.clauses,
+      [
+        Clause::new(vec![Literal::Neg(0), Literal::Neg(2)]),
+        Clause::new(vec![Literal::Neg(0), Literal::Neg(3)]),
+      ]
+    );
+  }
+}
+
+#[test]
 fn test_sample_k_weighted_model_count_with_overlapping_proofs() {
   let ctx = diff_sample_k_proofs::DiffSampleKProofsProvenance::<(), RcFamily>::new(2);
   let a = ctx.tagging_fn((0.5, (), None).into());
@@ -213,6 +252,100 @@ fn test_diff_min_max_prob_order_handles_nan_and_signed_zero() {
   assert_eq!(tags.len(), 2);
   assert_eq!(tags.pop_first(), Some(tag(-0.0)));
   assert_eq!(tags.pop_first(), Some(tag(f64::NAN)));
+}
+
+#[test]
+fn test_diff_min_max_prob_selects_tied_derivatives_independent_of_operand_order() {
+  use diff_min_max_prob::*;
+
+  let ctx = DiffMinMaxProbProvenance::<(), RcFamily>::default();
+  let tag = |p| ctx.tagging_fn((p, Some(())).into());
+  let derivative = |tag: Prob| {
+    let OutputDiffProb(_, id, sign, _) = ctx.recover_fn(&tag);
+    (id, sign)
+  };
+  let first = tag(0.5);
+  let second = tag(0.5);
+  let negated = ctx.negate(&second).unwrap();
+  for (left, right) in [(&first, &second), (&second, &first)] {
+    assert_eq!(derivative(ctx.add(left, right)), (1, 1));
+    assert_eq!(derivative(ctx.mult(left, right)), (0, 1));
+  }
+  for (left, right) in [(&second, &negated), (&negated, &second)] {
+    assert_eq!(derivative(ctx.add(left, right)), (1, 1));
+    assert_eq!(derivative(ctx.mult(left, right)), (1, -1));
+  }
+
+  let zero_score = tag(0.0);
+  let one_score = tag(1.0);
+  assert_eq!(derivative(ctx.add(&zero_score, &ctx.zero())), (2, 1));
+  assert_eq!(derivative(ctx.mult(&ctx.one(), &one_score)), (3, 1));
+}
+
+#[test]
+fn test_diff_min_max_prob_reordering_rules_preserves_gradients() {
+  use diff_min_max_prob::*;
+
+  for (first, second) in [("input_a", "input_b"), ("input_b", "input_a")] {
+    let mut ctx = IntegrateContext::<_, RcFamily>::new(DiffMinMaxProbProvenance::<(), RcFamily>::default());
+    ctx
+      .add_program(&format!(
+        r#"
+          type {first}(i32)
+          type {second}(i32)
+          rel alternative(x) = {first}(x)
+          rel alternative(x) = {second}(x)
+          rel joined(x) = {first}(x) and {second}(x)
+          query input_a
+          query input_b
+          query alternative
+          query joined
+        "#
+      ))
+      .unwrap();
+    for relation in [first, second] {
+      ctx
+        .add_facts(relation, vec![(Some((0.5, Some(())).into()), (1_i32,).into())], true)
+        .unwrap();
+    }
+    ctx.run().unwrap();
+
+    for (relation, expected_id) in [("input_a", 0), ("input_b", 1), ("alternative", 1), ("joined", 0)] {
+      let output = ctx.computed_relation_ref(relation).unwrap();
+      let [(OutputDiffProb(score, id, sign, _), _)] = output.elements.as_slice() else {
+        panic!("expected one result for {relation}");
+      };
+      assert_eq!((*score, *id, *sign), (0.5, expected_id, 1), "{relation}");
+    }
+  }
+}
+
+#[test]
+fn test_diff_min_max_prob_propagates_late_equal_score_gradient() {
+  use diff_min_max_prob::*;
+
+  let ctx = DiffMinMaxProbProvenance::<(), RcFamily>::default();
+  let mut iteration = DynamicIteration::new();
+  for relation in ["early", "late", "delay", "merged", "output"] {
+    iteration.create_dynamic_relation(relation);
+  }
+  for relation in ["early", "late"] {
+    iteration
+      .get_dynamic_relation_unsafe(relation)
+      .insert_one_tagged(&ctx, Some((0.5, Some(())).into()), (1_i32,));
+  }
+  iteration.add_update_dataflow("merged", Dataflow::relation("early"));
+  iteration.add_update_dataflow("delay", Dataflow::relation("late"));
+  iteration.add_update_dataflow("merged", Dataflow::relation("delay"));
+  iteration.add_update_dataflow("output", Dataflow::relation("merged"));
+  iteration.add_output_relation_with_default_storage("output");
+
+  let runtime = RuntimeEnvironment::default();
+  let result = iteration.run(&ctx, &runtime);
+  let mut output = result["output"].iter();
+  let OutputDiffProb(score, id, sign, _) = ctx.recover_fn(&output.next().unwrap().tag);
+  assert_eq!((score, id, sign), (0.5, 1, 1));
+  assert!(output.next().is_none());
 }
 
 #[test]

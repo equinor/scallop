@@ -1,6 +1,7 @@
 use scallop_core::runtime::dynamic::{DynamicElement, DynamicSortedCollection};
-use scallop_core::runtime::provenance::diff_min_max_prob::{Derivative, DiffMinMaxProbProvenance, Prob};
+use scallop_core::runtime::provenance::diff_max_mult_prob::DiffMaxMultProbProvenance;
 use scallop_core::runtime::provenance::natural::NaturalProvenance;
+use scallop_core::runtime::provenance::DualNumber2;
 use scallop_core::utils::RcFamily;
 
 #[test]
@@ -24,12 +25,12 @@ fn merge_combines_tags_when_first_tuples_match() {
 
 #[test]
 fn overlapping_merges_keep_the_tag_order_of_the_earlier_collection() {
-  let ctx = DiffMinMaxProbProvenance::<(), RcFamily>::default();
+  let ctx = DiffMaxMultProbProvenance::<(), RcFamily>::default();
   let collection = |facts: &[(i32, usize)]| {
     DynamicSortedCollection::from_vec(
       facts
         .iter()
-        .map(|&(x, id)| DynamicElement::new((x,), Prob(0.5, Derivative::Pos(id))))
+        .map(|&(x, id)| DynamicElement::new((x,), DualNumber2::new(id, 0.5)))
         .collect(),
       &ctx,
     )
@@ -39,10 +40,7 @@ fn overlapping_merges_keep_the_tag_order_of_the_earlier_collection() {
   let result: Vec<_> = left
     .merge(right, &ctx)
     .iter()
-    .map(|e| match e.tag.1 {
-      Derivative::Pos(id) => (e.tuple[0].as_i32(), id),
-      _ => panic!("expected a positive derivative"),
-    })
+    .map(|e| (e.tuple[0].as_i32(), e.tag.gradient.indices[0]))
     .collect();
   assert_eq!(result, [(1, 2), (2, 0), (3, 1), (4, 4)]);
 }

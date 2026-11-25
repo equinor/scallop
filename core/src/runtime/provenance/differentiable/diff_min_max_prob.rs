@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use ordered_float::OrderedFloat;
 
 use crate::common::element::*;
@@ -33,6 +35,23 @@ pub struct Prob(pub f64, pub Derivative);
 impl Prob {
   pub fn new(p: f64, d: Derivative) -> Self {
     Self(p, d)
+  }
+
+  fn cmp_tag(&self, other: &Self) -> Ordering {
+    self
+      .cmp(other)
+      .then_with(|| self.derivative_key().cmp(&other.derivative_key()))
+      .then_with(|| self.0.total_cmp(&other.0))
+  }
+
+  fn derivative_key(&self) -> (u8, usize, bool) {
+    match self.1 {
+      // Keep zero and one as the respective bottom and top tags for probabilities.
+      Derivative::Zero if self.0 == 1.0 => (2, 0, false),
+      Derivative::Zero => (0, 0, false),
+      Derivative::Neg(id) => (1, id, false),
+      Derivative::Pos(id) => (1, id, true),
+    }
   }
 }
 
@@ -119,6 +138,10 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffMinMaxProbProvenance<T,
     "diffminmaxprob".to_string()
   }
 
+  fn requires_stable_input_order(&self) -> bool {
+    true
+  }
+
   fn tagging_fn(&self, input_tag: Self::InputTag) -> Self::Tag {
     let InputDiffProb(p, t) = input_tag;
     if let Some(external_tag) = t {
@@ -161,7 +184,7 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffMinMaxProbProvenance<T,
   }
 
   fn add(&self, t1: &Self::Tag, t2: &Self::Tag) -> Self::Tag {
-    if t1.0 > t2.0 {
+    if t1.cmp_tag(t2).is_gt() {
       t1.clone()
     } else {
       t2.clone()
@@ -169,11 +192,11 @@ impl<T: FromTensor, P: PointerFamily> Provenance for DiffMinMaxProbProvenance<T,
   }
 
   fn saturated(&self, t_old: &Self::Tag, t_new: &Self::Tag) -> bool {
-    t_old.0 == t_new.0
+    t_old.cmp_tag(t_new).is_eq()
   }
 
   fn mult(&self, t1: &Self::Tag, t2: &Self::Tag) -> Self::Tag {
-    if t1.0 > t2.0 {
+    if t1.cmp_tag(t2).is_gt() {
       t2.clone()
     } else {
       t1.clone()

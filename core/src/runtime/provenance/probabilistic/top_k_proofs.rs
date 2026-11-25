@@ -78,6 +78,10 @@ impl<P: PointerFamily, W: WmcBackend> Provenance for TopKProofsProvenance<P, W> 
     "top-k-proofs".to_string()
   }
 
+  fn requires_stable_input_order(&self) -> bool {
+    true
+  }
+
   fn tagging_fn(&self, input_tag: Self::InputTag) -> Self::Tag {
     // First generate id and push the probability into the list
     let fact_id = self.num_facts();
