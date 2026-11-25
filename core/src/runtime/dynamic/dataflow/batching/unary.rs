@@ -4,17 +4,14 @@ pub trait BatchUnaryOp<'a, Prov: Provenance>: dyn_clone::DynClone + 'a {
   fn apply(&self, b: DynamicBatch<'a, Prov>) -> DynamicBatch<'a, Prov>;
 }
 
+dyn_clone::clone_trait_object!(<'a, Prov> BatchUnaryOp<'a, Prov> where Prov: Provenance);
+
+#[derive(Clone)]
 pub struct DynamicBatchUnaryOp<'a, Prov: Provenance>(Box<dyn BatchUnaryOp<'a, Prov> + 'a>);
 
 impl<'a, Prov: Provenance> DynamicBatchUnaryOp<'a, Prov> {
   pub fn new<Op: BatchUnaryOp<'a, Prov>>(op: Op) -> Self {
     Self(Box::new(op))
-  }
-}
-
-impl<'a, Prov: Provenance> Clone for DynamicBatchUnaryOp<'a, Prov> {
-  fn clone(&self) -> Self {
-    Self(dyn_clone::clone_box(&*self.0))
   }
 }
 

@@ -18,13 +18,10 @@ pub trait Dataflow<'a, Prov: Provenance>: 'a + dyn_clone::DynClone {
   }
 }
 
-pub struct DynamicDataflow<'a, Prov: Provenance>(Box<dyn Dataflow<'a, Prov>>);
+dyn_clone::clone_trait_object!(<'a, Prov> Dataflow<'a, Prov> where Prov: Provenance);
 
-impl<'a, Prov: Provenance> Clone for DynamicDataflow<'a, Prov> {
-  fn clone(&self) -> Self {
-    Self(dyn_clone::clone_box(&*self.0))
-  }
-}
+#[derive(Clone)]
+pub struct DynamicDataflow<'a, Prov: Provenance>(Box<dyn Dataflow<'a, Prov>>);
 
 impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicDataflow<'a, Prov> {
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {

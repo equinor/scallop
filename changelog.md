@@ -12,6 +12,8 @@ Rust API migration:
 - `ForeignFunction::infer_return_type` overrides now take `&[Value]` instead of `&Vec<Value>`.
 - `FrontContext::analysis` is now an `Rc<Analysis>`. Read it through dereferencing and use `Rc::make_mut` to update it.
 - Use `TensorValue::checked_add`, `checked_sub`, and `checked_mul` for shape-checked arithmetic. Incompatible shapes still return `None`.
+- Custom `ExternalTensor` implementations no longer implement `as_any`. Use `DynamicExternalTensor::cast` or upcast to `dyn std::any::Any` to downcast tensors. Use `Attribute::get` or `std::any::Any` to downcast compiler attributes.
+- `SymbolRegistry` now keeps its storage private. Use `register`, `get_id`, and `get_symbol` to intern and look up symbols; IDs are still assigned in insertion order.
 - Use a struct literal in place of `compiler::back::Reduce::new`. For a front-end `Reduce` with a source span, use `_Reduce::new(...).with_span(start, end)` instead of `Reduce::new_with_span`.
 - Construct reduce query-plan nodes with `HighRamNode::reduce`. The `HighRamNode::Reduce` variant now contains a `Box<Reduce>`; front-end AST constructors and accessors are unchanged except for the `Reduce` constructor noted above.
 - The unimplemented dense-matrix Rust storage variant has been removed. Scallop still supports `sorted` and `indexed_vec`.

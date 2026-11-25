@@ -3,16 +3,9 @@ use crate::runtime::provenance::*;
 
 use super::*;
 
+#[derive(Clone)]
 pub struct DynamicMonitors<Prov: Provenance> {
   pub monitors: Vec<Box<dyn Monitor<Prov>>>,
-}
-
-impl<Prov: Provenance> Clone for DynamicMonitors<Prov> {
-  fn clone(&self) -> Self {
-    Self {
-      monitors: self.monitors.iter().map(|m| dyn_clone::clone_box(&**m)).collect(),
-    }
-  }
 }
 
 impl<Prov: Provenance> DynamicMonitors<Prov> {

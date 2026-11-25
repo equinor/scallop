@@ -518,13 +518,10 @@ pub trait Aggregator<P: Provenance>: dyn_clone::DynClone + 'static {
   fn aggregate(&self, p: &P, env: &RuntimeEnvironment, elems: DynamicElements<P>) -> DynamicElements<P>;
 }
 
-pub struct DynamicAggregator<P: Provenance>(Box<dyn Aggregator<P>>);
+dyn_clone::clone_trait_object!(<P> Aggregator<P> where P: Provenance);
 
-impl<P: Provenance> Clone for DynamicAggregator<P> {
-  fn clone(&self) -> Self {
-    Self(dyn_clone::clone_box(&*self.0))
-  }
-}
+#[derive(Clone)]
+pub struct DynamicAggregator<P: Provenance>(Box<dyn Aggregator<P>>);
 
 impl<Prov: Provenance> DynamicAggregator<Prov> {
   pub fn aggregate(

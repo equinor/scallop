@@ -1,3 +1,5 @@
+use scallop_core::compiler::back::attributes::{GoalAttribute, StorageAttribute};
+use scallop_core::compiler::back::{Attribute, Attributes};
 use scallop_core::compiler::compile_string_to_ram;
 use scallop_core::compiler::front::ast;
 use scallop_core::compiler::front::attribute::*;
@@ -75,6 +77,16 @@ mod attr_1 {
       |s| s.contains("foo attribute requires a tuple as the first argument"),
     );
   }
+}
+
+#[test]
+fn backend_attributes_keep_concrete_types_when_cloned() {
+  let mut attrs = Attributes::new();
+  attrs.insert(GoalAttribute);
+  let attrs = attrs.clone();
+  assert!(attrs.get::<GoalAttribute>().is_some());
+  assert!(attrs.get::<StorageAttribute>().is_none());
+  assert!(Attribute::new(GoalAttribute).get::<StorageAttribute>().is_none());
 }
 
 #[test]

@@ -10,13 +10,15 @@ pub trait AttributeProcessor: DynClone + 'static {
   fn apply(&self, item: &ast::Item, attr: &ast::Attribute) -> Result<AttributeAction, AttributeError>;
 }
 
+dyn_clone::clone_trait_object!(AttributeProcessor);
+
 impl std::fmt::Debug for dyn AttributeProcessor {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self.name())
   }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct DynamicAttributeProcessor {
   proc: Box<dyn AttributeProcessor>,
 }
@@ -34,13 +36,5 @@ impl AttributeProcessor for DynamicAttributeProcessor {
 
   fn apply(&self, item: &ast::Item, attr: &ast::Attribute) -> Result<AttributeAction, AttributeError> {
     self.proc.apply(item, attr)
-  }
-}
-
-impl Clone for DynamicAttributeProcessor {
-  fn clone(&self) -> Self {
-    Self {
-      proc: dyn_clone::clone_box(&*self.proc),
-    }
   }
 }

@@ -1,5 +1,4 @@
 use pyo3::{Bound, Py, PyAny, Python};
-use std::any::Any;
 use std::sync::Arc;
 
 use scallop_core::common::foreign_tensor::*;
@@ -43,10 +42,6 @@ impl ExternalTensor for TorchTensor {
         .extract(py)
         .expect("Cannot turn `.item()` into f64")
     })
-  }
-
-  fn as_any(&self) -> &dyn Any {
-    self
   }
 }
 

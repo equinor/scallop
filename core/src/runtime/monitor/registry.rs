@@ -36,7 +36,7 @@ impl<Prov: Provenance> MonitorRegistry<Prov> {
     DynamicMonitors {
       monitors: names
         .iter()
-        .filter_map(|name| self.get(name).map(dyn_clone::clone_box))
+        .filter_map(|name| self.monitors.get(*name).cloned())
         .collect(),
     }
   }

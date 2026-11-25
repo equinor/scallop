@@ -31,13 +31,7 @@ where
   type Item = I;
 
   fn next(&mut self) -> Option<I> {
-    if self.batch.is_some() {
-      let mut result = None;
-      std::mem::swap(&mut result, &mut self.batch);
-      result
-    } else {
-      None
-    }
+    self.batch.take()
   }
 }
 

@@ -1,7 +1,43 @@
 use std::collections::{BTreeSet, HashSet};
 
-use scallop_core::common::foreign_tensor::{InternalTensorSymbol, TensorValue};
+use scallop_core::common::foreign_tensor::{
+  DynamicExternalTensor, ExternalTensor, InternalTensorSymbol, TensorShape, TensorValue,
+};
 use scallop_core::common::value::*;
+use scallop_core::runtime::env::SymbolRegistry2;
+
+#[test]
+fn shared_symbol_registry_keeps_insertion_ids() {
+  let registry = SymbolRegistry2::new();
+  let shared = registry.clone();
+  assert_eq!(registry.register("zebra".into()), 0);
+  assert_eq!(shared.register("ant".into()), 1);
+  assert_eq!(shared.register("zebra".into()), 0);
+  assert_eq!(registry.get_id("ant"), Some(1));
+  assert_eq!(shared.get_symbol(0).as_deref(), Some("zebra"));
+  assert_eq!(shared.get_id("missing"), None);
+  assert_eq!(registry.get_symbol(2), None);
+}
+
+#[test]
+fn cloned_external_tensor_can_be_downcast_to_its_concrete_type() {
+  #[derive(Clone)]
+  struct Scalar(f64);
+
+  impl ExternalTensor for Scalar {
+    fn shape(&self) -> TensorShape {
+      TensorShape::scalar()
+    }
+
+    fn get_f64(&self) -> f64 {
+      self.0
+    }
+  }
+
+  let tensor = DynamicExternalTensor::new(Scalar(3.0)).clone();
+  assert_eq!(tensor.cast::<Scalar>().unwrap().0, 3.0);
+  assert!(tensor.cast::<DynamicExternalTensor>().is_none());
+}
 
 #[test]
 fn value_try_into_1() {
