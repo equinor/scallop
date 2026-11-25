@@ -1,7 +1,6 @@
 use super::*;
 
 use crate::runtime::env::*;
-use crate::utils::display_date_time;
 
 /// Format foreign function
 ///
@@ -71,7 +70,7 @@ impl ForeignFunction for Format {
             Value::String(i) => i.to_string(),
             Value::Symbol(_) => panic!("[Internal Error] Symbol should not be processed by format"),
             Value::SymbolString(s) => s.to_string(),
-            Value::DateTime(i) => display_date_time(*i).to_string(),
+            Value::DateTime(i) => i.to_string(),
             Value::Duration(i) => i.to_string(),
             Value::Entity(e) => format!("entity({e:#x})"),
             Value::EntityString(_) => panic!("[Internal Error] Entity string should not be processed by format"),
@@ -119,7 +118,7 @@ impl ForeignFunction for Format {
               .get_symbol(*i)
               .expect("[Internal Error] Cannot find symbol"),
             Value::SymbolString(_) => panic!("[Internal Error] SymbolString should not be processed"),
-            Value::DateTime(i) => display_date_time(*i).to_string(),
+            Value::DateTime(i) => i.to_string(),
             Value::Duration(i) => i.to_string(),
             Value::Entity(e) => format!("entity({e:#x})"),
             Value::EntityString(_) => panic!("[Internal Error] Entity string should not be processed by format"),

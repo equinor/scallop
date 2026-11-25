@@ -270,14 +270,18 @@ fn equivalent_duration_literals_compare_and_deduplicate() {
 fn temporal_display_and_duration_serialization() {
   let datetime = parse_date_time_string("2021-01-01T05:30:01.100+05:30").unwrap();
   let duration = parse_duration_string("1mo -0.5s").unwrap();
-  assert_eq!(
-    Value::DateTime(datetime).to_string(),
-    r#"t"2021-01-01 00:00:01.100 UTC""#
-  );
+  assert_eq!(Value::DateTime(datetime).to_string(), r#"t"2021-01-01T00:00:01.1Z""#);
+  assert_eq!(parse_date_time_string("2021-01-01 00:00:01.100 UTC"), Some(datetime));
+  assert_eq!(parse_date_time_string(&datetime.to_string()), Some(datetime));
   assert_eq!(Value::Duration(duration).to_string(), r#"d"R1MO -PT0.5S""#);
   assert_eq!(parse_duration_string(&duration.to_string()), Some(duration));
+  assert_eq!(Duration::from(SignedDuration::from_secs(90)).to_string(), "PT1M30S");
+  assert_eq!(Duration::months(1).to_string(), "R1MO PT0S");
+  assert_eq!(parse_duration_string("R1MO P0D"), Some(Duration::months(1)));
   for duration in [
     Duration::months(1),
+    Duration::from(SignedDuration::MIN),
+    Duration::from(SignedDuration::MAX),
     Duration::from(SignedDuration::from_secs(-1_000_000_000_000)),
     Duration::new(1, SignedDuration::from_secs(-1_000_000_000_000)),
   ] {
@@ -296,9 +300,6 @@ fn datetime_fields_and_format_use_utc() {
       rel p = {t"2021-01-01T00:30:00+01:00"}
       rel r($datetime_year(d), $datetime_month(d), $datetime_day(d), $format("{}", d)) = p(d)
     "#,
-    (
-      "r",
-      vec![(2020i32, 12u32, 31u32, "2020-12-31 23:30:00 UTC".to_string())],
-    ),
+    ("r", vec![(2020i32, 12u32, 31u32, "2020-12-31T23:30:00Z".to_string())]),
   )
 }

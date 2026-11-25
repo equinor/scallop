@@ -494,7 +494,7 @@ fn generate_helper_functions() -> TokenStream {
       Python::attach(|py| scallopy_interop::to_python_tuple(py, tup, &|py, value| {
         match value {
           Value::SymbolString(symbol) => symbol.into_py_any(py),
-          Value::DateTime(time) => display_date_time(*time).to_string().into_py_any(py),
+          Value::DateTime(time) => time.to_string().into_py_any(py),
           Value::Duration(duration) => duration.to_string().into_py_any(py),
           Value::Entity(id) => id.into_py_any(py),
           _ => Err(PyTypeError::new_err(format!("Unsupported compiled output value `{value}`"))),
