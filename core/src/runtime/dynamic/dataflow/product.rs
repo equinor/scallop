@@ -24,12 +24,7 @@ impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicProductDataflow<'a, Pro
   }
 
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
-    let op = ProductOp { ctx: self.ctx };
-    DynamicBatches::chain(vec![
-      DynamicBatches::binary(self.d1.iter_stable(), self.d2.iter_recent(), op.clone()),
-      DynamicBatches::binary(self.d1.iter_recent(), self.d2.iter_stable(), op.clone()),
-      DynamicBatches::binary(self.d1.iter_recent(), self.d2.iter_recent(), op.clone()),
-    ])
+    DynamicBatches::binary_recent(&self.d1, &self.d2, ProductOp { ctx: self.ctx })
   }
 }
 
@@ -45,22 +40,47 @@ impl<'a, Prov: Provenance> Clone for ProductOp<'a, Prov> {
 
 impl<'a, Prov: Provenance> BatchBinaryOp<'a, Prov> for ProductOp<'a, Prov> {
   fn apply(&self, mut i1: DynamicBatch<'a, Prov>, i2: DynamicBatch<'a, Prov>) -> DynamicBatch<'a, Prov> {
+    let rows = i2.remaining_slice();
+    if matches!(rows, Some([])) {
+      return DynamicBatch::from_iterator(std::iter::empty());
+    }
     let i1_curr = i1.next_elem();
+    if i1_curr.is_none() {
+      return DynamicBatch::from_iterator(std::iter::empty());
+    }
+    let right = if rows.is_some() {
+      ProductRight::Borrowed { batch: i2, index: 0 }
+    } else {
+      ProductRight::Streaming {
+        start: i2.clone(),
+        cursor: i2,
+      }
+    };
     DynamicBatch::new(DynamicProductBatch {
       i1,
       i1_curr,
-      i2_source: i2.clone(),
-      i2_clone: i2,
+      right,
       ctx: self.ctx,
     })
   }
 }
 
+#[derive(Clone)]
+enum ProductRight<'a, Prov: Provenance> {
+  Borrowed {
+    batch: DynamicBatch<'a, Prov>,
+    index: usize,
+  },
+  Streaming {
+    start: DynamicBatch<'a, Prov>,
+    cursor: DynamicBatch<'a, Prov>,
+  },
+}
+
 pub struct DynamicProductBatch<'a, Prov: Provenance> {
   i1: DynamicBatch<'a, Prov>,
   i1_curr: Option<DynamicElement<Prov>>,
-  i2_source: DynamicBatch<'a, Prov>,
-  i2_clone: DynamicBatch<'a, Prov>,
+  right: ProductRight<'a, Prov>,
   ctx: &'a Prov,
 }
 
@@ -69,8 +89,7 @@ impl<'a, Prov: Provenance> Clone for DynamicProductBatch<'a, Prov> {
     Self {
       i1: self.i1.clone(),
       i1_curr: self.i1_curr.clone(),
-      i2_source: self.i2_source.clone(),
-      i2_clone: self.i2_clone.clone(),
+      right: self.right.clone(),
       ctx: self.ctx,
     }
   }
@@ -78,17 +97,32 @@ impl<'a, Prov: Provenance> Clone for DynamicProductBatch<'a, Prov> {
 
 impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicProductBatch<'a, Prov> {
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
-    while let Some(i1_elem) = &self.i1_curr {
-      match self.i2_clone.next_elem() {
-        Some(i2_elem) => {
-          let tuple = Tuple::from((i1_elem.tuple.clone(), i2_elem.tuple.clone()));
-          let tag = self.ctx.mult(&i1_elem.tag, &i2_elem.tag);
-          let elem = DynamicElement::new(tuple, tag);
-          return Some(elem);
+    while let Some(left) = &self.i1_curr {
+      let right = match &mut self.right {
+        ProductRight::Borrowed { batch, index } => {
+          let rows = batch
+            .remaining_slice()
+            .expect("borrowed product needs contiguous input");
+          if let Some(row) = rows.get(*index) {
+            *index += 1;
+            Some((row.tuple.clone(), self.ctx.mult(&left.tag, &row.tag)))
+          } else {
+            None
+          }
         }
-        None => {
-          self.i1_curr = self.i1.next_elem();
-          self.i2_clone = self.i2_source.clone();
+        ProductRight::Streaming { cursor, .. } => cursor
+          .next_elem()
+          .map(|row| (row.tuple, self.ctx.mult(&left.tag, &row.tag))),
+      };
+      if let Some((tuple, tag)) = right {
+        return Some(DynamicElement::new(Tuple::from((left.tuple.clone(), tuple)), tag));
+      }
+
+      self.i1_curr = self.i1.next_elem();
+      if self.i1_curr.is_some() {
+        match &mut self.right {
+          ProductRight::Borrowed { index, .. } => *index = 0,
+          ProductRight::Streaming { start, cursor } => *cursor = start.clone(),
         }
       }
     }

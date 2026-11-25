@@ -19,12 +19,7 @@ impl<'a, Prov: Provenance> Clone for DynamicAntijoinDataflow<'a, Prov> {
 
 impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicAntijoinDataflow<'a, Prov> {
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
-    let op = AntijoinOp { ctx: self.ctx };
-    DynamicBatches::chain(vec![
-      DynamicBatches::binary(self.d1.iter_stable(), self.d2.iter_recent(), op.clone()),
-      DynamicBatches::binary(self.d1.iter_recent(), self.d2.iter_stable(), op.clone()),
-      DynamicBatches::binary(self.d1.iter_recent(), self.d2.iter_recent(), op.clone()),
-    ])
+    DynamicBatches::binary_recent(&self.d1, &self.d2, AntijoinOp { ctx: self.ctx })
   }
 }
 

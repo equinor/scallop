@@ -1,7 +1,9 @@
 use scallop_core::common::expr::*;
 use scallop_core::common::foreign_aggregate::*;
+use scallop_core::common::tuple::Tuple;
 use scallop_core::common::value_type::*;
 use scallop_core::compiler::ram::*;
+use scallop_core::runtime::dynamic::dataflow::{Dataflow as _, DynamicAggregationJoinGroupDataflow, DynamicDataflow};
 use scallop_core::runtime::dynamic::*;
 use scallop_core::runtime::env::*;
 use scallop_core::runtime::provenance::*;
@@ -65,4 +67,49 @@ where
 fn test_group_by_key_1_unit() {
   let color_count = test_group_by_key_1::<unit::UnitProvenance>();
   expect_collection(&color_count, vec![("blue", 2usize), ("green", 1usize), ("red", 0usize)])
+}
+
+#[test]
+fn test_join_group_aggregate_preserves_matching_and_empty_groups() {
+  let ctx = natural::NaturalProvenance;
+  let rt = RuntimeEnvironment::new_std();
+  let agg = rt
+    .aggregate_registry
+    .instantiate_aggregator("count", AggregateInfo::default())
+    .unwrap();
+  let keys = vec![
+    DynamicElement::new((1i32, "a"), 2),
+    DynamicElement::new((1i32, "b"), 3),
+    DynamicElement::new((2i32, "c"), 5),
+    DynamicElement::new((2i32, "d"), 7),
+    DynamicElement::new((4i32, "e"), 11),
+  ];
+  let values = vec![
+    DynamicElement::new((0i32, 10i32), 13),
+    DynamicElement::new((1i32, 10i32), 17),
+    DynamicElement::new((1i32, 11i32), 19),
+    DynamicElement::new((3i32, 10i32), 23),
+    DynamicElement::new((4i32, 10i32), 29),
+  ];
+  let group = DynamicAggregationJoinGroupDataflow::new(
+    agg,
+    DynamicDataflow::vec(&keys),
+    DynamicDataflow::vec(&values),
+    &ctx,
+    &rt,
+  );
+  let expected = [
+    ((1i32, "a", 2usize), 2 * 17 * 19),
+    ((1, "b", 2), 3 * 17 * 19),
+    ((2, "c", 0), 5),
+    ((2, "d", 0), 7),
+    ((4, "e", 1), 11 * 29),
+  ];
+  let mut batches = group.iter_recent();
+  assert!(batches
+    .next()
+    .unwrap()
+    .map(|row| (row.tuple, row.tag))
+    .eq(expected.map(|(tuple, tag)| (Tuple::from(tuple), tag))));
+  assert!(batches.next().is_none());
 }

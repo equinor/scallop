@@ -1,12 +1,14 @@
 use std::cell::Cell;
 
 use scallop_core::common::tuple::Tuple;
-use scallop_core::runtime::dynamic::dataflow::batching::*;
+use scallop_core::runtime::dynamic::dataflow::batching::Batch;
 use scallop_core::runtime::dynamic::dataflow::*;
 use scallop_core::runtime::dynamic::*;
 use scallop_core::runtime::env::*;
 use scallop_core::runtime::provenance::*;
 use scallop_core::testing::*;
+
+use super::CountedBatch;
 
 #[test]
 fn test_dynamic_join_1() {
@@ -37,26 +39,6 @@ fn test_dynamic_join_1() {
   expect_collection(&target.complete(&ctx).into(), vec![(0i8, 1i8, 2i8), (1i8, 2i8, 5i8)]);
 }
 
-#[derive(Clone)]
-struct CountedBatch<'a, P: Provenance> {
-  rows: std::slice::Iter<'a, DynamicElement<P>>,
-  reads: &'a Cell<usize>,
-}
-
-impl<'a, P: Provenance> Batch<'a, P> for CountedBatch<'a, P> {
-  fn next_elem(&mut self) -> Option<DynamicElement<P>> {
-    let row = self.rows.next()?;
-    self.reads.set(self.reads.get() + 1);
-    Some(row.clone())
-  }
-}
-
-impl<'a, P: Provenance> Dataflow<'a, P> for CountedBatch<'a, P> {
-  fn iter_recent(&self) -> DynamicBatches<'a, P> {
-    DynamicBatches::single(self.clone())
-  }
-}
-
 #[test]
 fn test_dynamic_join_reads_matching_groups_once_in_left_major_order() {
   let ctx = natural::NaturalProvenance;
@@ -74,17 +56,8 @@ fn test_dynamic_join_reads_matching_groups_once_in_left_major_order() {
   ];
   let left_reads = Cell::new(0);
   let right_reads = Cell::new(0);
-  let join = DynamicDataflow::new(CountedBatch {
-    rows: left.iter(),
-    reads: &left_reads,
-  })
-  .join(
-    DynamicDataflow::new(CountedBatch {
-      rows: right.iter(),
-      reads: &right_reads,
-    }),
-    &ctx,
-  );
+  let join = DynamicDataflow::new(CountedBatch::new(&left, &left_reads))
+    .join(DynamicDataflow::new(CountedBatch::new(&right, &right_reads)), &ctx);
   let mut batch = join.iter_recent().next().unwrap();
   let first = batch.next().unwrap();
   assert_eq!((first.tuple, first.tag), (Tuple::from((1i32, 10i32, 20i32)), 14));
@@ -113,11 +86,7 @@ fn test_dynamic_antijoin_reads_matching_left_rows_once() {
     DynamicElement::new(3i32, false),
   ];
   let reads = Cell::new(0);
-  let antijoin = DynamicDataflow::new(CountedBatch {
-    rows: left.iter(),
-    reads: &reads,
-  })
-  .antijoin(DynamicDataflow::vec(&right), &ctx);
+  let antijoin = DynamicDataflow::new(CountedBatch::new(&left, &reads)).antijoin(DynamicDataflow::vec(&right), &ctx);
   let expected = [true, false, false, true, true];
   assert!(antijoin
     .iter_recent()
