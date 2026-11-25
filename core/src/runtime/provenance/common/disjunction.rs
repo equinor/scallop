@@ -1,7 +1,9 @@
-use std::collections::*;
+use std::collections::BTreeSet;
 pub use std::iter::FromIterator;
 
-#[derive(Clone, Debug)]
+use indexmap::IndexMap;
+
+#[derive(Clone, Debug, Default)]
 pub struct Disjunction {
   pub facts: BTreeSet<usize>,
 }
@@ -64,49 +66,31 @@ impl FromIterator<usize> for Disjunction {
 
 #[derive(Clone, Debug, Default)]
 pub struct Disjunctions {
-  pub id_map: HashMap<usize, usize>,
-  pub disjunctions: Vec<Disjunction>,
+  groups: IndexMap<usize, Disjunction>,
 }
 
 impl Disjunctions {
   pub fn new() -> Self {
-    Self {
-      id_map: HashMap::new(),
-      disjunctions: Vec::new(),
-    }
+    Self::default()
   }
 
   pub fn is_empty(&self) -> bool {
-    self.disjunctions.is_empty()
+    self.groups.is_empty()
   }
 
   pub fn len(&self) -> usize {
-    self.disjunctions.len()
+    self.groups.len()
+  }
+
+  pub fn iter(&self) -> impl Iterator<Item = &Disjunction> {
+    self.groups.values()
   }
 
   pub fn has_conflict(&self, facts: &BTreeSet<usize>) -> bool {
-    // Short hand
-    if facts.len() < 2 {
-      return false;
-    }
-
-    // Check conflict for each disjunction
-    for disj in &self.disjunctions {
-      if disj.has_conflict(facts) {
-        return true;
-      }
-    }
-    false
+    facts.len() >= 2 && self.iter().any(|group| group.has_conflict(facts))
   }
 
   pub fn add_disjunction(&mut self, disj_id: usize, fact_id: usize) {
-    if let Some(internal_disj_id) = self.id_map.get(&disj_id) {
-      self.disjunctions[*internal_disj_id].add_fact_id(fact_id)
-    } else {
-      let new_disj = Disjunction::from_iter(std::iter::once(fact_id));
-      let internal_disj_id = self.disjunctions.len();
-      self.disjunctions.push(new_disj);
-      self.id_map.insert(disj_id, internal_disj_id);
-    }
+    self.groups.entry(disj_id).or_default().add_fact_id(fact_id);
   }
 }

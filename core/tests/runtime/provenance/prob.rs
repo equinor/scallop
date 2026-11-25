@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use scallop_core::common::expr::*;
 use scallop_core::common::foreign_aggregate::*;
 use scallop_core::common::value_type::ValueType;
@@ -69,6 +71,19 @@ fn test_weighted_model_count_through_rsdd_for_overlapping_proofs() {
       1.0 / 256.0
     ]
   );
+}
+
+#[test]
+fn test_disjunctions_preserve_first_seen_order_for_sparse_groups() {
+  let mut disjunctions = Disjunctions::new();
+  for (group, fact) in [(usize::MAX, 7), (0, 5), (usize::MAX, 3), (0, 11), (usize::MAX, 7)] {
+    disjunctions.add_disjunction(group, fact);
+  }
+
+  let groups: Vec<_> = disjunctions.iter().map(|group| &group.facts).collect();
+  assert_eq!(groups, [&BTreeSet::from([3, 7]), &BTreeSet::from([5, 11])]);
+  assert!(disjunctions.has_conflict(&BTreeSet::from([3, 7])));
+  assert!(!disjunctions.has_conflict(&BTreeSet::from([3, 5])));
 }
 
 #[test]
