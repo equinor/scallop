@@ -1,4 +1,5 @@
-use std::collections::*;
+use indexmap::IndexSet;
+use petgraph::unionfind::UnionFind;
 
 use super::*;
 
@@ -11,97 +12,101 @@ pub fn deduplicate(ram: &mut Program) -> bool {
 }
 
 pub fn deduplicate_within_stratum(stratum: &mut Stratum) -> bool {
-  let mut has_update = false;
-  let mut equivalent_sets = EquivalentRelations::new();
-
-  // 1. Find temporary relations with the same update
-  for (i, update_i) in stratum.updates.iter().enumerate() {
-    for (j, update_j) in stratum.updates.iter().enumerate() {
-      // Check if the dataflow of the update looks exactly the same
-      if i != j && update_i.dataflow == update_j.dataflow {
-        let head_i = &update_i.target;
-        let head_j = &update_j.target;
-        if head_i != head_j && head_i.starts_with("#temp#") && head_j.starts_with("#temp#") {
-          equivalent_sets.add_equivalence(head_i, head_j);
-        }
+  let mut names = IndexSet::new();
+  let candidates: Vec<_> = stratum
+    .updates
+    .iter()
+    .filter(|update| update.target.starts_with("#temp#"))
+    .map(|update| (names.insert_full(update.target.as_str()).0, &update.dataflow))
+    .collect();
+  let mut sets = UnionFind::new(names.len());
+  for (i, &(left_id, left)) in candidates.iter().enumerate() {
+    for &(right_id, right) in &candidates[i + 1..] {
+      if left_id != right_id && left == right {
+        sets.union(left_id, right_id);
       }
     }
   }
 
-  // 2. Perform the substitution
-  for set in equivalent_sets.sets {
-    if set.len() < 2 {
-      continue;
-    }
-
-    // 2.1. Obtaining a pivot
-    let mut iterator = set.into_iter();
-    let pivot = iterator.next().unwrap();
-
-    // 2.2. Substitute all relations in the equivalent sets to pivot
-    for to_substitute in iterator {
-      // 2.2.1. Remove the to_substitue relation
-      stratum.relations.remove(&to_substitute);
-      has_update |= true;
-
-      stratum.updates.retain_mut(|update| {
-        if update.target == to_substitute {
-          // 2.2.2. Remove all the updates with the to_substitute head
-          false
-        } else {
-          // 2.2.3. Substitute the body dataflow
-          has_update |= update.dataflow.substitute_relation(&to_substitute, &pivot);
-          true
-        }
-      })
-    }
+  // Keep the first target in update order, independently of union-find root selection.
+  let mut representatives = vec![None; names.len()];
+  let substitutions: Vec<_> = names
+    .into_iter()
+    .zip(sets.into_labeling())
+    .filter_map(|(name, root)| {
+      let representative = *representatives[root].get_or_insert(name);
+      (name != representative).then(|| (name.to_owned(), representative.to_owned()))
+    })
+    .collect();
+  for (alias, representative) in &substitutions {
+    stratum.relations.remove(alias);
+    stratum.updates.retain_mut(|update| {
+      if update.target == *alias {
+        false
+      } else {
+        update.dataflow.substitute_relation(alias, representative);
+        true
+      }
+    });
   }
-
-  has_update
+  !substitutions.is_empty()
 }
 
-struct EquivalentRelations {
-  eq_map: HashMap<String, usize>,
-  sets: Vec<HashSet<String>>,
-}
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::common::tuple_type::TupleType;
 
-impl EquivalentRelations {
-  pub fn new() -> Self {
-    Self {
-      eq_map: HashMap::new(),
-      sets: Vec::new(),
+  #[test]
+  fn deduplication_keeps_the_first_temp_in_each_group_and_rewrites_consumers() {
+    let mut stratum = Stratum {
+      is_recursive: false,
+      relations: Default::default(),
+      updates: vec![],
+    };
+    for (name, dataflow) in [
+      ("#temp#3", Dataflow::relation("left")),
+      ("#temp#5", Dataflow::relation("right")),
+      ("#temp#1", Dataflow::relation("left")),
+      ("#temp#2", Dataflow::relation("right")),
+      ("#temp#4", Dataflow::relation("left")),
+      ("visible", Dataflow::relation("left")),
+      (
+        "result",
+        Dataflow::relation("#temp#1")
+          .join(Dataflow::relation("#temp#2"))
+          .join(Dataflow::relation("#temp#4")),
+      ),
+    ] {
+      stratum.relations.insert(
+        name.to_owned(),
+        Relation::hidden_relation(name.to_owned(), TupleType::unit()),
+      );
+      stratum.updates.push(Update {
+        target: name.to_owned(),
+        dataflow,
+      });
     }
-  }
 
-  pub fn add_equivalence(&mut self, r1: &str, r2: &str) {
-    match (self.eq_map.get(r1).copied(), self.eq_map.get(r2).copied()) {
-      (Some(eq_set_id_1), Some(eq_set_id_2)) if eq_set_id_1 != eq_set_id_2 => {
-        // We drain the content of the second set
-        let relations = self.sets[eq_set_id_2].drain().collect::<Vec<_>>();
-
-        // We rewire their equivalence set to the first set
-        for relation in &relations {
-          self.eq_map.insert(relation.clone(), eq_set_id_1);
-        }
-
-        // We extend the first equivalence set with everything in the second
-        self.sets[eq_set_id_1].extend(relations);
-      }
-      (Some(_), Some(_)) => {}
-      (Some(eq_set_id), None) => {
-        self.eq_map.insert(r2.to_string(), eq_set_id);
-        self.sets[eq_set_id].insert(r2.to_string());
-      }
-      (None, Some(eq_set_id)) => {
-        self.eq_map.insert(r1.to_string(), eq_set_id);
-        self.sets[eq_set_id].insert(r1.to_string());
-      }
-      (None, None) => {
-        let eq_set_id = self.sets.len();
-        self.sets.push(HashSet::from([r1.to_string(), r2.to_string()]));
-        self.eq_map.insert(r1.to_string(), eq_set_id);
-        self.eq_map.insert(r2.to_string(), eq_set_id);
-      }
-    }
+    assert!(deduplicate_within_stratum(&mut stratum));
+    assert_eq!(
+      stratum.relations.keys().map(String::as_str).collect::<Vec<_>>(),
+      ["#temp#3", "#temp#5", "result", "visible"]
+    );
+    assert_eq!(
+      stratum
+        .updates
+        .iter()
+        .map(|update| update.target.as_str())
+        .collect::<Vec<_>>(),
+      ["#temp#3", "#temp#5", "visible", "result"]
+    );
+    assert_eq!(
+      stratum.updates.last().unwrap().dataflow,
+      Dataflow::relation("#temp#3")
+        .join(Dataflow::relation("#temp#5"))
+        .join(Dataflow::relation("#temp#3"))
+    );
+    assert!(!deduplicate_within_stratum(&mut stratum));
   }
 }
