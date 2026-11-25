@@ -222,22 +222,12 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
         self.create_relation(relation);
       }
 
-      // Check if we need to load the relation facts
-      if !relation.facts.is_empty() {
-        // Create the relation if not
-        let edb_relation = self.extensional_relations.get_mut(&relation.predicate).unwrap(); // unwrap is okay since the relation is definitely created
-
-        // Check if we have internalized
-        if edb_relation.internalized_program_facts
-          && edb_relation.has_program_facts()
-          && edb_relation.num_program_facts() < relation.facts.len()
-        // TODO: why?
-        {
-          return Err(DatabaseError::NewProgramFacts {
-            relation: relation.predicate.clone(),
-          });
-        }
-        edb_relation.add_program_facts(relation.facts.iter().map(|f| (f.tag.clone(), f.tuple.clone())));
+      if let Some(edb_relation) = self.extensional_relations.get_mut(&relation.predicate)
+        && !edb_relation.set_program_facts(&relation.facts)
+      {
+        return Err(DatabaseError::NewProgramFacts {
+          relation: relation.predicate.clone(),
+        });
       }
 
       // Check if we need to load external facts (from files or databases)

@@ -229,6 +229,30 @@ pub enum Dataflow {
 }
 
 impl Dataflow {
+  pub(crate) fn children(&self) -> impl Iterator<Item = &Self> {
+    let children = match self {
+      Self::Project(d, _)
+      | Self::Filter(d, _)
+      | Self::Find(d, _)
+      | Self::Sorted(d)
+      | Self::JoinIndexedVec(d, _)
+      | Self::OverwriteOne(d)
+      | Self::ForeignPredicateConstraint(d, _, _)
+      | Self::ForeignPredicateJoin(d, _, _) => [Some(d.as_ref()), None],
+      Self::Union(l, r)
+      | Self::Join(l, r)
+      | Self::Intersect(l, r)
+      | Self::Product(l, r)
+      | Self::Antijoin(l, r)
+      | Self::Difference(l, r)
+      | Self::Exclusion(l, r) => [Some(l.as_ref()), Some(r.as_ref())],
+      Self::Unit(_) | Self::UntaggedVec(_) | Self::Relation(_) | Self::Reduce(_) | Self::ForeignPredicateGround(..) => {
+        [None, None]
+      }
+    };
+    children.into_iter().flatten()
+  }
+
   /// Create a new unit dataflow given a tuple type
   pub fn unit(tuple_type: TupleType) -> Self {
     Self::Unit(tuple_type)

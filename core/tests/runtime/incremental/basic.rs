@@ -40,6 +40,136 @@ fn incr_exec_1() {
 }
 
 #[test]
+fn incremental_execution_reuses_unaffected_results_and_recomputes_changed_inputs() {
+  let program = compile_string_to_ram(
+    r"
+    rel left = {1}
+    rel right = {1, 2}
+    rel other = {9}
+    rel joined(x) = left(x) /\ right(x)
+    rel stable(x) = other(x)
+    query joined
+    query stable
+    "
+    .to_owned(),
+  )
+  .unwrap();
+  let mut exec = dynamic::DynamicExecutionContext::<_, RcFamily>::new_with_program_and_options(
+    program.clone(),
+    dynamic::ExecutionOptions {
+      incremental_maintain: true,
+      ..Default::default()
+    },
+  );
+  let runtime = env::RuntimeEnvironment::default();
+  let ctx = natural::NaturalProvenance;
+
+  exec.incremental_execute(program.clone(), &runtime, &ctx).unwrap();
+  exec.recover("stable", &runtime, &ctx);
+  let stable = exec.relation("stable").unwrap();
+  exec.recover("right", &runtime, &ctx);
+
+  exec.add_facts("left", vec![(None, (2_i32,).into())]).unwrap();
+  exec.incremental_execute(program, &runtime, &ctx).unwrap();
+
+  exec.recover("stable", &runtime, &ctx);
+  assert!(Rc::ptr_eq(&stable, &exec.relation("stable").unwrap()));
+  exec.recover("joined", &runtime, &ctx);
+  let joined = exec.relation("joined").unwrap();
+  assert_eq!(
+    joined
+      .iter()
+      .map(|(tag, tuple)| (*tag, tuple[0].as_i32()))
+      .collect::<Vec<_>>(),
+    [(1, 1), (1, 2)]
+  );
+}
+
+#[test]
+fn incremental_execution_does_not_reuse_results_from_a_limited_run() {
+  let program = compile_string_to_ram(
+    r"
+    rel edge = {(1, 2), (2, 3)}
+    rel path(a, c) = edge(a, c) \/ path(a, b) /\ edge(b, c)
+    query path
+    "
+    .to_owned(),
+  )
+  .unwrap();
+  let mut exec = dynamic::DynamicExecutionContext::<_, RcFamily>::new_with_options(dynamic::ExecutionOptions {
+    incremental_maintain: true,
+    ..Default::default()
+  });
+  let ctx = unit::UnitProvenance;
+  let mut runtime = env::RuntimeEnvironment::default();
+
+  runtime.set_iter_limit(0);
+  exec.incremental_execute(program.clone(), &runtime, &ctx).unwrap();
+  exec.recover("path", &runtime, &ctx);
+  assert!(!exec
+    .relation("path")
+    .unwrap()
+    .iter()
+    .any(|(_, tuple)| tuple[0].as_i32() == 1 && tuple[1].as_i32() == 3));
+
+  runtime.remove_iter_limit();
+  exec.incremental_execute(program, &runtime, &ctx).unwrap();
+  exec.recover("path", &runtime, &ctx);
+  assert!(exec
+    .relation("path")
+    .unwrap()
+    .iter()
+    .any(|(_, tuple)| tuple[0].as_i32() == 1 && tuple[1].as_i32() == 3));
+}
+
+#[test]
+fn incremental_execution_resamples_unchanged_programs() {
+  let program = compile_string_to_ram(
+    "rel numbers = {0, 1, 2, 3}\nrel sampled(x) = x := uniform<1>(x: numbers(x))\nquery sampled".to_owned(),
+  )
+  .unwrap();
+  let mut exec = dynamic::DynamicExecutionContext::<_, RcFamily>::new_with_options(dynamic::ExecutionOptions {
+    incremental_maintain: true,
+    ..Default::default()
+  });
+  let ctx = unit::UnitProvenance;
+  let runtime = env::RuntimeEnvironment::default();
+
+  exec.incremental_execute(program.clone(), &runtime, &ctx).unwrap();
+  exec.recover("sampled", &runtime, &ctx);
+  let first = exec.relation("sampled").unwrap();
+
+  exec.incremental_execute(program, &runtime, &ctx).unwrap();
+  exec.recover("sampled", &runtime, &ctx);
+  assert!(!Rc::ptr_eq(&first, &exec.relation("sampled").unwrap()));
+}
+
+#[test]
+fn rejected_program_fact_replacement_keeps_the_previous_result() {
+  let compile = |value| {
+    compile_string_to_ram(format!(
+      "rel source = {{{value}}}\nrel result(x) = source(x)\nquery result"
+    ))
+    .unwrap()
+  };
+  let original = compile(1);
+  let mut exec = dynamic::DynamicExecutionContext::<_, RcFamily>::new_with_options(dynamic::ExecutionOptions {
+    incremental_maintain: true,
+    ..Default::default()
+  });
+  let ctx = unit::UnitProvenance;
+  let runtime = env::RuntimeEnvironment::default();
+
+  exec.incremental_execute(original.clone(), &runtime, &ctx).unwrap();
+  exec.recover("result", &runtime, &ctx);
+  let result = exec.relation("result").unwrap();
+
+  assert!(exec.incremental_execute(compile(2), &runtime, &ctx).is_err());
+  exec.incremental_execute(original, &runtime, &ctx).unwrap();
+  assert!(Rc::ptr_eq(&result, &exec.relation("result").unwrap()));
+}
+
+#[test]
 fn monitored_incremental_execution_reports_strata_in_order() {
   #[derive(Clone, Default)]
   struct StrataMonitor(Rc<RefCell<Vec<usize>>>);
