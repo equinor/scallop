@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs;
 use std::path::PathBuf;
 
@@ -23,9 +24,13 @@ pub trait Source: std::fmt::Debug + 'static {
 
   fn name(&self) -> Option<&str>;
 
-  fn line(&self, line_num: usize) -> &str;
+  fn diagnostic_name(&self) -> Option<Cow<'_, str>> {
+    self.name().map(Cow::Borrowed)
+  }
 
-  fn line_name(&self, line_num: usize) -> String;
+  fn first_line_number(&self) -> usize {
+    1
+  }
 
   fn num_rows(&self) -> usize;
 

@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use super::*;
 
+#[derive(Clone)]
 pub struct Sources {
   pub sources: Vec<Rc<dyn Source>>,
 }
@@ -25,14 +26,6 @@ impl Sources {
 impl Default for Sources {
   fn default() -> Self {
     Self::new()
-  }
-}
-
-impl Clone for Sources {
-  fn clone(&self) -> Self {
-    Self {
-      sources: self.sources.iter().map(Rc::clone).collect(),
-    }
   }
 }
 

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::*;
 
 #[derive(Clone, Debug)]
@@ -21,12 +23,8 @@ impl Source for ReplSource {
     None
   }
 
-  fn line(&self, _: usize) -> &str {
-    &self.content
-  }
-
-  fn line_name(&self, _: usize) -> String {
-    format!("REPL:{}", self.id)
+  fn diagnostic_name(&self) -> Option<Cow<'_, str>> {
+    Some(format!("REPL:{}", self.id).into())
   }
 
   fn num_rows(&self) -> usize {

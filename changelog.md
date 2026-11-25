@@ -1,9 +1,12 @@
 # Unreleased
 
+- Compiler diagnostics now show source spans in Rust-style snippets, including syntax errors from REPL and in-memory input. REPL snippets use a `REPL:<id>` header, and Rust macro snippets retain their original line numbers.
+
 - Weighted model counting now uses RSDD. Probabilities and gradients can differ in their last floating-point digits because the diagram changes the order of arithmetic.
 
 Rust API migration:
 - The standalone `sdd` crate has been removed. Custom provenance implementations can use `scallop_core::runtime::provenance::{AsBooleanFormula, BooleanFormula, Semiring}` for weighted model counting, or RSDD directly for diagram construction.
+- Use `NodeLocation::report` or `report_warning` instead of supplying a caret color. Custom `Source` implementations can supply `diagnostic_name` and `first_line_number` instead of `line` and `line_name`.
 - `ForeignFunction::infer_return_type` overrides now take `&[Value]` instead of `&Vec<Value>`.
 - Use `TensorValue::checked_add`, `checked_sub`, and `checked_mul` for shape-checked arithmetic. Incompatible shapes still return `None`.
 - Use a struct literal in place of `compiler::back::Reduce::new`. For a front-end `Reduce` with a source span, use `_Reduce::new(...).with_span(start, end)` instead of `Reduce::new_with_span`.
