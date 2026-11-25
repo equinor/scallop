@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use csv::StringRecord;
+
 use crate::common::input_file::InputFile;
 use crate::runtime::error::IOError;
 
@@ -24,7 +26,7 @@ impl InputFileContent {
 #[derive(Debug, Clone)]
 pub struct CSVFileContent {
   fields: Vec<String>,
-  rows: Vec<Vec<String>>,
+  rows: Vec<StringRecord>,
 }
 
 impl CSVFileContent {
@@ -52,14 +54,10 @@ impl CSVFileContent {
       vec![]
     };
 
-    // Generate rows
-    let mut rows = Vec::new();
-    for result in rdr.records() {
-      let record = result.map_err(|e| IOError::CannotParseCSV {
-        error: format!("{}", e),
-      })?;
-      rows.push(record.iter().map(|s| s.to_string()).collect());
-    }
+    let rows = rdr
+      .into_records()
+      .map(|record| record.map_err(|e| IOError::CannotParseCSV { error: e.to_string() }))
+      .collect::<Result<_, _>>()?;
 
     Ok(Self { fields, rows })
   }
@@ -88,7 +86,7 @@ impl CSVFileContent {
     self.fields.iter()
   }
 
-  pub fn get_rows(&self) -> impl Iterator<Item = &Vec<String>> {
+  pub fn get_rows(&self) -> impl Iterator<Item = &StringRecord> {
     self.rows.iter()
   }
 }

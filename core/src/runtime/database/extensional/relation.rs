@@ -371,7 +371,7 @@ fn load_from_csv_with_keys_and_fields(
     // TODO: this could generate multiple facts with the duplicated same tag
     // Get the tag
     let tag = if has_probability {
-      let s = row.first().ok_or(IOError::IndexOutOfBounds { index: 0 })?;
+      let s = row.get(0).ok_or(IOError::IndexOutOfBounds { index: 0 })?;
       s.parse::<DynamicInputTag>()
         .map_err(|_| IOError::CannotParseProbability { value: s.to_string() })?
     } else {
@@ -462,7 +462,7 @@ fn load_from_csv_with_keys(
     // TODO: this could generate multiple facts with the duplicated same tag
     // Get the tag
     let tag = if has_probability {
-      let s = row.first().ok_or(IOError::IndexOutOfBounds { index: 0 })?;
+      let s = row.get(0).ok_or(IOError::IndexOutOfBounds { index: 0 })?;
       s.parse::<DynamicInputTag>()
         .map_err(|_| IOError::CannotParseProbability { value: s.to_string() })?
     } else {
@@ -529,7 +529,7 @@ fn load_from_csv_with_fields(
   for row in loaded_file_content.get_rows() {
     // Get the tag
     let tag = if has_probability {
-      let s = row.first().ok_or(IOError::IndexOutOfBounds { index: 0 })?;
+      let s = row.get(0).ok_or(IOError::IndexOutOfBounds { index: 0 })?;
       s.parse::<DynamicInputTag>()
         .map_err(|_| IOError::CannotParseProbability { value: s.to_string() })?
     } else {
@@ -575,7 +575,7 @@ fn load_from_csv_raw(
 
     // Get the tag
     let tag = if has_probability {
-      let s = row.first().ok_or(IOError::IndexOutOfBounds { index: 0 })?;
+      let s = row.get(0).ok_or(IOError::IndexOutOfBounds { index: 0 })?;
       s.parse::<DynamicInputTag>()
         .map_err(|_| IOError::CannotParseProbability { value: s.to_string() })?
     } else {
