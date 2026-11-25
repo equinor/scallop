@@ -39,3 +39,12 @@ fn owned_collection_iteration_preserves_tuple_order() {
   }
   assert_eq!(tuples, vec![(0, 1), (2, 3)]);
 }
+
+#[test]
+fn merge_combines_tags_when_first_tuples_match() {
+  let ctx = natural::NaturalProvenance;
+  let left = StaticCollection::from_vec(vec![StaticElement::new(1_i32, 2), StaticElement::new(2, 7)], &ctx);
+  let right = StaticCollection::from_vec(vec![StaticElement::new(1_i32, 3), StaticElement::new(3, 9)], &ctx);
+  let result: Vec<(i32, usize)> = left.merge(right, &ctx).into_iter().map(Into::into).collect();
+  assert_eq!(result, [(1, 5), (2, 7), (3, 9)]);
+}

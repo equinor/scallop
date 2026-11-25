@@ -37,7 +37,7 @@ impl FrontContext {
         // Make sure that the predicate is not a temporary relation we've created
         if r.predicate.contains('#') {
           None
-        } else if self.analysis.borrow().hidden_analysis.contains(&r.predicate) {
+        } else if self.analysis.hidden_analysis.contains(&r.predicate) {
           Some((r.predicate.clone(), OutputOption::Hidden))
         } else {
           Some((r.predicate.clone(), OutputOption::default()))
@@ -66,7 +66,7 @@ impl FrontContext {
       .filter_map(|item| match item {
         front::Item::QueryDecl(q) => {
           let name = q.query().create_relation_name().clone();
-          if let Some(file) = self.analysis.borrow().output_files_analysis.output_file(&name) {
+          if let Some(file) = self.analysis.output_files_analysis.output_file(&name) {
             Some((name, OutputOption::File(file.clone())))
           } else {
             Some((name, OutputOption::default()))
@@ -80,7 +80,6 @@ impl FrontContext {
   fn to_back_relations(&self) -> Vec<back::Relation> {
     self
       .analysis
-      .borrow()
       .type_inference
       .inferred_relation_types
       .iter()
@@ -233,7 +232,7 @@ impl FrontContext {
     rule_attrs: Vec<back::Attribute>,
     temp_relations: &mut Vec<back::Relation>,
   ) -> Vec<back::Rule> {
-    let analysis = self.analysis.borrow();
+    let analysis = &self.analysis;
 
     // Basic information
     let pred = head.predicate();
@@ -254,7 +253,7 @@ impl FrontContext {
     let head = back::Head::atom(pred.name().clone(), args);
 
     // Get the back rules
-    let boundness_analysis = &self.analysis.borrow().boundness_analysis;
+    let boundness_analysis = &self.analysis.boundness_analysis;
     let rule_ctx = boundness_analysis.get_rule_context(rule_loc).unwrap();
     self.formula_to_back_rules(
       &mut RuleLowering {
@@ -277,7 +276,7 @@ impl FrontContext {
     rule_attrs: Vec<back::Attribute>,
     temp_relations: &mut Vec<back::Relation>,
   ) -> Vec<back::Rule> {
-    let analysis = self.analysis.borrow();
+    let analysis = &self.analysis;
 
     // Basic information
     let pred = head_atoms[0].predicate();
@@ -307,7 +306,7 @@ impl FrontContext {
     let head = back::Head::Disjunction(back_head_atoms);
 
     // Get the back rules
-    let boundness_analysis = &self.analysis.borrow().boundness_analysis;
+    let boundness_analysis = &self.analysis.boundness_analysis;
     let rule_ctx = boundness_analysis.get_rule_context(rule_loc).unwrap();
     self.formula_to_back_rules(
       &mut RuleLowering {

@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use super::tuple::*;
 
 pub trait Tuples<'a> {
@@ -23,82 +25,18 @@ where
   }
 
   fn minimum(self) -> Vec<&'a Tuple> {
-    let mut result = vec![];
-    let mut min_value = None;
-    for v in self {
-      if let Some(m) = min_value {
-        if v == m {
-          result.push(v);
-        } else if v < m {
-          min_value = Some(v);
-          result.clear();
-          result.push(v);
-        }
-      } else {
-        min_value = Some(v);
-        result.push(v);
-      }
-    }
-    result
+    self.min_set()
   }
 
   fn arg_minimum(self, num_args: usize) -> Vec<&'a Tuple> {
-    let mut result = vec![];
-    let mut min_value: Option<&[Tuple]> = None;
-    for v in self {
-      if let Some(m) = &min_value {
-        if v[num_args..] == m[..] {
-          result.push(v);
-        } else if &v[num_args..] < m {
-          min_value = Some(&v[num_args..]);
-          result.clear();
-          result.push(v);
-        }
-      } else {
-        min_value = Some(&v[num_args..]);
-        result.push(v);
-      }
-    }
-    result
+    self.min_set_by_key(|v| &v[num_args..])
   }
 
   fn maximum(self) -> Vec<&'a Tuple> {
-    let mut result = vec![];
-    let mut min_value = None;
-    for v in self {
-      if let Some(m) = min_value {
-        if v == m {
-          result.push(v);
-        } else if v > m {
-          min_value = Some(v);
-          result.clear();
-          result.push(v);
-        }
-      } else {
-        min_value = Some(v);
-        result.push(v);
-      }
-    }
-    result
+    self.max_set()
   }
 
   fn arg_maximum(self, num_args: usize) -> Vec<&'a Tuple> {
-    let mut result = vec![];
-    let mut max_value: Option<&[Tuple]> = None;
-    for v in self {
-      if let Some(m) = &max_value {
-        if v[num_args..] == m[..] {
-          result.push(v);
-        } else if v[num_args..] > m[..] {
-          max_value = Some(&v[num_args..]);
-          result.clear();
-          result.push(v);
-        }
-      } else {
-        max_value = Some(&v[num_args..]);
-        result.push(v);
-      }
-    }
-    result
+    self.max_set_by_key(|v| &v[num_args..])
   }
 }

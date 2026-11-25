@@ -118,8 +118,8 @@ impl StringJoinAggregator {
     }
 
     let mut results = vec![];
-    let group_sizes = groups.iter().map(|(_, vs, _)| vs.len()).collect::<Vec<_>>();
-    for selected_indices in utils::cartesian(group_sizes) {
+    let group_sizes = groups.iter().map(|(_, vs, _)| vs.len());
+    for selected_indices in utils::cartesian_indices(group_sizes) {
       let strings: Vec<_> = selected_indices
         .iter()
         .enumerate()

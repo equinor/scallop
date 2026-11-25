@@ -46,29 +46,13 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticCollection<Tup, Prov> {
 
   pub fn from_vec(mut elements: Vec<StaticElement<Tup, Prov>>, ctx: &Prov) -> Self {
     elements.sort();
-
-    let mut index = 0;
-    let mut to_keep = 0;
-    if elements.len() > 1 {
-      let mut last_index = index;
-      to_keep += 1;
-      index += 1;
-      while index < elements.len() {
-        if elements[index].tuple == elements[last_index].tuple {
-          let new_tag = ctx.add(&elements[last_index].tag, &elements[index].tag);
-          elements[last_index].tag = new_tag;
-        } else {
-          if to_keep < index {
-            elements.swap(to_keep, index);
-          }
-          last_index = to_keep;
-          to_keep += 1;
-        }
-        index += 1;
+    elements.dedup_by(|later, kept| {
+      if later.tuple != kept.tuple {
+        return false;
       }
-      elements.truncate(to_keep);
-    }
-
+      kept.tag = ctx.add(&kept.tag, &later.tag);
+      true
+    });
     Self { elements }
   }
 
@@ -169,7 +153,8 @@ impl<Tup: StaticTupleTrait, Prov: Provenance> StaticCollection<Tup, Prov> {
 
     elements.push(elements1.next().unwrap());
     if elements.first() == elements2.peek() {
-      elements2.next();
+      let e2 = elements2.next().unwrap();
+      elements[0].tag = ctx.add(&elements[0].tag, &e2.tag);
     }
 
     for mut elem in elements1 {
