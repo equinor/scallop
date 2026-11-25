@@ -76,37 +76,17 @@ impl FrontCompileErrorTrait for ParserError {
   }
 
   fn report(&self, sources: &Sources) -> String {
-    if let Some(source_name) = &self.source_name {
-      let begin = format!("Syntax error in {}: {}", source_name, self.message);
-
-      // First compute offset span
-      let offset_span = if let Some((l, r)) = self.location_span {
-        Some((l, r))
-      } else {
-        self.location_point.map(|p| (p, p + 1))
-      };
-
-      // Turn offset span into locations
-      if let Some(offset_span) = offset_span {
-        let source = &sources[self.source_id];
-        let annotator = LocationSpanAnnotator {
-          row_offset_length: (0..source.num_rows()).map(|i| source.row_offset_length(i)).collect(),
-        };
-        let ast_loc = NodeLocation {
-          offset_span: Span::new(offset_span.0, offset_span.1),
-          loc_span: Some(Span::new(
-            annotator.row_col_of_offset(&offset_span.0),
-            annotator.row_col_of_offset(&offset_span.1),
-          )),
-          id: None,
-          source_id: self.source_id,
-        };
-        format!("{}\n{}", begin, ast_loc.report(sources))
-      } else {
-        format!("Syntax error: {}", self.message)
-      }
+    let span = self
+      .location_span
+      .or_else(|| self.location_point.map(|p| (p, p.saturating_add(1))));
+    if let Some((start, end)) = span
+      && self.source_id < sources.sources.len()
+    {
+      let mut location = NodeLocation::from_span(start, end);
+      location.source_id = self.source_id;
+      format!("{self}\n{}", location.report(sources))
     } else {
-      format!("Syntax error: {}", self.message)
+      self.to_string()
     }
   }
 }

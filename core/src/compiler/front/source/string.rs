@@ -25,15 +25,6 @@ impl Source for StringSource {
     None
   }
 
-  fn line(&self, line_num: usize) -> &str {
-    let (off, len) = &self.line_offset_len[line_num];
-    &self.string[*off..off + len]
-  }
-
-  fn line_name(&self, line_num: usize) -> String {
-    format!("{}", line_num + 1)
-  }
-
   fn num_rows(&self) -> usize {
     self.line_offset_len.len()
   }

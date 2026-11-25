@@ -1,5 +1,67 @@
 use scallop_core::compiler::front::ast::*;
 use scallop_core::compiler::front::parser::*;
+use scallop_core::compiler::front::{
+  FileSource, FrontContext, LocationSpanAnnotator, ReplSource, RustMacroSource, Sources, StringSource,
+};
+
+#[test]
+fn diagnostic_snippets_preserve_source_origins_and_utf8_columns() {
+  let text = "skip\n\u{03bb}\u{754c} unexpected";
+  let mut sources = Sources::new();
+  let file = sources.add(FileSource {
+    file_name: "example.scl".into(),
+    file_content: text.into(),
+    line_offset_len: vec![(0, 4), (5, text.len() - 5)],
+  });
+  let repl = sources.add(ReplSource::new(42, text.into()));
+  let rust_macro = sources.add(RustMacroSource {
+    first_line_num: 40,
+    source_lines: text.lines().map(str::to_owned).collect(),
+    source: text.into(),
+  });
+  let mut location = NodeLocation::from_span("skip\n\u{03bb}".len(), "skip\n\u{03bb}\u{754c}".len());
+  location.source_id = file;
+  let report = location.report(&sources);
+  assert!(report.contains("example.scl:2:2"), "{report}");
+  assert!(report.contains("^^"), "{report}");
+
+  location.source_id = repl;
+  let report = location.report_warning(&sources);
+  assert!(report.contains("REPL:42:2:2"), "{report}");
+
+  location.source_id = rust_macro;
+  let report = location.report(&sources);
+  assert!(report.contains("41 |"), "{report}");
+}
+
+#[test]
+fn diagnostic_snippets_can_mark_end_of_input() {
+  let report = FrontContext::new()
+    .compile_source(ReplSource::new(42, "rel x =".into()))
+    .unwrap_err()
+    .to_string();
+  assert!(
+    report.contains("REPL:42:1:8") && report.contains("rel x =") && report.contains('^'),
+    "{report}"
+  );
+}
+
+#[test]
+fn source_offset_lookup_preserves_byte_columns_and_duplicate_starts() {
+  let source = StringSource::new("\u{03bb}x\nsecond".into());
+  let annotator = LocationSpanAnnotator::new(&source);
+  assert_eq!(annotator.row_col_of_offset(&2), CharLocation { row: 0, col: 2 });
+  assert_eq!(annotator.row_col_of_offset(&4), CharLocation { row: 1, col: 0 });
+
+  let macro_offsets = LocationSpanAnnotator {
+    row_offset_length: vec![(0, 0), (0, 0), (0, 3), (4, 6)],
+  };
+  assert_eq!(macro_offsets.row_col_of_offset(&0), CharLocation { row: 2, col: 0 });
+  let empty = LocationSpanAnnotator {
+    row_offset_length: vec![],
+  };
+  assert_eq!(empty.row_col_of_offset(&0), CharLocation { row: 0, col: 0 });
+}
 
 #[test]
 fn parse_type_decl() {

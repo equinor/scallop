@@ -30,12 +30,8 @@ impl Source for RustMacroSource {
     None
   }
 
-  fn line(&self, line_num: usize) -> &str {
-    &self.source_lines[line_num - self.first_line_num]
-  }
-
-  fn line_name(&self, line_num: usize) -> String {
-    format!("{}", line_num)
+  fn first_line_number(&self) -> usize {
+    self.first_line_num.max(1)
   }
 
   fn num_rows(&self) -> usize {

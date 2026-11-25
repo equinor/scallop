@@ -1,4 +1,4 @@
-use colored::*;
+use annotate_snippets::{renderer::DecorStyle, AnnotationKind, Group, Level, Renderer, Snippet};
 
 use super::super::*;
 use super::*;
@@ -85,76 +85,34 @@ impl NodeLocation {
   }
 
   pub fn report(&self, src: &Sources) -> String {
-    self.report_with_marker_color(src, Color::Red)
+    self.render_snippet(src, Level::ERROR)
   }
 
   pub fn report_warning(&self, src: &Sources) -> String {
-    self.report_with_marker_color(src, Color::Yellow)
+    self.render_snippet(src, Level::WARNING)
   }
 
-  pub fn report_with_marker_color(&self, src: &Sources, color: Color) -> String {
-    let arrow = "-->".yellow().bold();
-    let bar = "|".yellow().bold();
-
-    // Print the title
-    let s = &src.sources[self.source_id];
-    let mut result = if let Some(name) = s.name() {
-      format!(" {} {}:\n", arrow, name)
-    } else {
-      String::new()
-    };
-
-    // Gather the lines to print
-    let lines = match &self.loc_span {
-      Some(span) => (span.start.row..=span.end.row)
-        .map(|line_num| {
-          let line = s.line(line_num);
-          let (prefix_len, highlight_len) = {
-            if line_num == span.start.row && line_num == span.end.row {
-              (span.start.col, span.end.col - span.start.col)
-            } else if line_num == span.start.row {
-              (span.start.col, line.len() - span.start.col)
-            } else if line_num == span.end.row {
-              (0, span.end.col)
-            } else {
-              (0, 0)
-            }
-          };
-          let highlight = highlight_str(prefix_len, highlight_len);
-          (s.line_name(line_num), line, highlight)
-        })
-        .collect(),
-      None => {
-        let prefix_len = self.offset_span.start;
-        let highlight_len = self.offset_span.end - self.offset_span.start;
-        let highlight = highlight_str(prefix_len, highlight_len);
-        vec![(s.line_name(0), s.line(0), highlight)]
-      }
-    };
-
-    // Calculate padding size
-    const PADDING: usize = 2;
-    let max_padding_length = lines.iter().map(|(n, _, _)| n.len()).max().unwrap();
-    let padding_length = PADDING + max_padding_length;
-    let whole_padding_str = (0..padding_length).map(|_| " ").collect::<String>();
-
-    // Print each line
-    for (line_num, line, highlight) in lines {
-      let padding_len = padding_length - line_num.len();
-      let padding_str = (0..padding_len).map(|_| " ").collect::<String>();
-      result += &format!("{}{} {} {}\n", padding_str, line_num.yellow().bold(), bar, line);
-      result += &format!("{} {} {}", whole_padding_str, bar, highlight.color(color));
+  fn render_snippet(&self, src: &Sources, level: Level<'_>) -> String {
+    let source = &src[self.source_id];
+    let content = source.content();
+    let start = content.floor_char_boundary(self.offset_span.start.min(content.len()));
+    let end = content.ceil_char_boundary(self.offset_span.end.clamp(start, content.len()));
+    let mut snippet = Snippet::source(content)
+      .line_start(source.first_line_number())
+      .annotation(AnnotationKind::Primary.span(start..end));
+    if let Some(name) = source.diagnostic_name() {
+      snippet = snippet.path(name);
     }
-
-    // Return
-    result
+    let renderer = if colored::control::SHOULD_COLORIZE.should_colorize() {
+      Renderer::styled()
+    } else {
+      Renderer::plain()
+    };
+    renderer
+      .decor_style(DecorStyle::Ascii)
+      .render(&[Group::with_level(level).element(snippet)])
+      .to_string()
   }
-}
-
-fn highlight_str(prefix_len: usize, highlight_len: usize) -> String {
-  let prefix = (0..prefix_len).map(|_| " ").collect::<String>();
-  let main = (0..highlight_len).map(|_| "^").collect::<String>();
-  format!("{}{}", prefix, main)
 }
 
 impl std::fmt::Debug for NodeLocation {

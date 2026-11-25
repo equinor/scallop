@@ -60,23 +60,22 @@ pub struct LocationSpanAnnotator {
 }
 
 impl LocationSpanAnnotator {
-  pub fn new<S: Source>(source: &S) -> Self {
+  pub fn new<S: Source + ?Sized>(source: &S) -> Self {
     Self {
       row_offset_length: (0..source.num_rows()).map(|i| source.row_offset_length(i)).collect(),
     }
   }
 
   pub fn row_col_of_offset(&self, offset: &usize) -> CharLocation {
-    let num_rows = self.row_offset_length.len();
-    for (i, (curr_offset, _)) in self.row_offset_length.iter().enumerate() {
-      if curr_offset <= offset && (i == num_rows - 1 || offset < &self.row_offset_length[i + 1].0) {
-        return CharLocation {
-          row: i,
-          col: offset - curr_offset,
-        };
-      }
+    let after = self.row_offset_length.partition_point(|(start, _)| start <= offset);
+    if after == 0 {
+      return CharLocation { row: 0, col: 0 };
     }
-    CharLocation { row: 0, col: 0 }
+    let row = after - 1;
+    CharLocation {
+      row,
+      col: offset - self.row_offset_length[row].0,
+    }
   }
 }
 
