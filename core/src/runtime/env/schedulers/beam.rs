@@ -1,11 +1,9 @@
 //! Beam Search Scheduling
-use std::collections::*;
-
 use crate::runtime::dynamic::*;
 use crate::runtime::provenance::*;
-use crate::runtime::utils::*;
+use crate::runtime::utils::gallop_index;
 
-use super::utils::compute_stable_retain;
+use super::utils::reconcile_delta;
 
 /// Invariant: waitlist is sorted by weight from small to large
 pub fn schedule_beam<'a, Prov: Provenance>(
@@ -15,31 +13,7 @@ pub fn schedule_beam<'a, Prov: Provenance>(
   ctx: &'a Prov,
   beam_size: usize,
 ) {
-  // First go over the to_add set
-  if !to_add.is_empty() {
-    let mut to_remove_to_add_indices = HashSet::new();
-    for stable_batch in stable.iter_mut() {
-      let mut index = 0;
-
-      // Go over the stable batch and retain the related elements
-      if to_add.len() > 4 * stable_batch.len() {
-        stable_batch.elements.retain_mut(|stable_elem| {
-          index = gallop_index(to_add, index, |y| y < stable_elem);
-          compute_stable_retain(index, to_add, stable_elem, &mut to_remove_to_add_indices, ctx)
-        });
-      } else {
-        stable_batch.elements.retain_mut(|stable_elem| {
-          while index < to_add.len() && &to_add[index] < stable_elem {
-            index += 1;
-          }
-          compute_stable_retain(index, to_add, stable_elem, &mut to_remove_to_add_indices, ctx)
-        });
-      }
-    }
-
-    // Remove the elements in `to_add` that we deem not needed
-    to_add.retain(|i, _| !to_remove_to_add_indices.contains(&i));
-  }
+  reconcile_delta(to_add, stable, ctx);
 
   if to_add.len() > beam_size {
     let mut sorted_delta = rank_delta(to_add, ctx);

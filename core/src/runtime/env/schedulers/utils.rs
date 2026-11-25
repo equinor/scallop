@@ -1,40 +1,126 @@
-use std::collections::*;
-
 use crate::runtime::dynamic::*;
 use crate::runtime::provenance::*;
+use crate::runtime::utils::gallop_index;
 
-pub fn compute_stable_retain<Prov: Provenance>(
-  index: usize,
-  to_add: &mut DynamicSortedCollection<Prov>,
-  stable_elem: &mut DynamicElement<Prov>,
-  to_remove_to_add_indices: &mut HashSet<usize>,
+pub(super) fn reconcile_delta<Prov: Provenance>(
+  delta: &mut DynamicSortedCollection<Prov>,
+  stable: &mut [DynamicSortedCollection<Prov>],
   ctx: &Prov,
-) -> bool {
-  // If going over to_add, then the stable element does not exist in to_add. Therefore we retain the stable element
-  if index >= to_add.len() {
-    return true;
+) {
+  let delta_len = delta.len();
+  if delta_len == 0 {
+    return;
   }
 
-  // Otherwise, we can safely access the index in to_add collection
-  let to_add_elem = &mut to_add[index];
-  if to_add_elem.tuple != stable_elem.tuple {
-    // If the two elements are not equal, we retain the element in stable batch
-    true
-  } else {
-    // If the two elements are equal, we will keep the element in stable if it is saturated
-    if compute_saturation_and_update_tag(to_add_elem, stable_elem, ctx) {
-      to_remove_to_add_indices.insert(index);
-      true
-    } else {
-      false
+  let mut saturated = Vec::new();
+  let mut remove_from_batch = Vec::new();
+  // Defer removing saturated delta rows: every batch must still see them in the original order.
+  let mut mark_saturated = |index| {
+    if saturated.is_empty() {
+      saturated.resize(delta_len, false);
     }
+    saturated[index] = true;
+  };
+  for batch in stable {
+    let rows = &mut batch.elements;
+    let (Some(first), Some(last)) = (rows.first(), rows.last()) else {
+      continue;
+    };
+    if last < &delta[0] || &delta[delta_len - 1] < first {
+      continue;
+    }
+    let mut index = gallop_index(delta, 0, |row| row < first);
+
+    if rows.len() / 4 >= delta_len {
+      let mut stable_index = 0;
+      for (delta_index, candidate) in delta.elements.iter_mut().enumerate().skip(index) {
+        stable_index = gallop_index(rows, stable_index, |row| row < candidate);
+        let Some(old) = rows.get_mut(stable_index) else {
+          break;
+        };
+        if old.tuple == candidate.tuple {
+          if compute_saturation_and_update_tag(candidate, old, ctx) {
+            mark_saturated(delta_index);
+          } else {
+            remove_from_batch.push(stable_index);
+          }
+          stable_index += 1;
+        }
+      }
+
+      match remove_from_batch.as_slice() {
+        [] => {}
+        &[only] => {
+          rows.remove(only);
+        }
+        &[first, .., last] => {
+          let mut removals = remove_from_batch.iter().copied().peekable();
+          let mut index = first;
+          rows
+            .extract_if(first..=last, |_| {
+              let remove = removals.next_if_eq(&index).is_some();
+              index += 1;
+              remove
+            })
+            .for_each(drop);
+        }
+      }
+      remove_from_batch.clear();
+    } else {
+      let seek_delta = delta_len > rows.len().saturating_mul(4);
+      rows.retain_mut(|old| {
+        if seek_delta {
+          index = gallop_index(delta, index, |row| row < old);
+        } else {
+          while index < delta_len && &delta[index] < old {
+            index += 1;
+          }
+        }
+        if index == delta_len || delta[index].tuple != old.tuple {
+          return true;
+        }
+        if compute_saturation_and_update_tag(&mut delta[index], old, ctx) {
+          mark_saturated(index);
+          true
+        } else {
+          false
+        }
+      });
+    }
+  }
+  if !saturated.is_empty() {
+    delta.retain(|index, _| !saturated[index]);
+  }
+}
+
+pub(super) fn schedule_waitlist_row<Prov: Provenance>(
+  delta: &mut DynamicSortedCollection<Prov>,
+  waitlist: &mut Vec<DynamicElement<Prov>>,
+  stable: &mut [DynamicSortedCollection<Prov>],
+  ctx: &Prov,
+) {
+  'next: while let Some(mut pending) = waitlist.pop() {
+    for batch in stable.iter_mut() {
+      let index = gallop_index(batch, 0, |row| row < &pending);
+      if let Some(old) = batch.elements.get_mut(index)
+        && old.tuple == pending.tuple
+      {
+        if compute_saturation_and_update_tag(&mut pending, old, ctx) {
+          continue 'next;
+        }
+        batch.elements.remove(index);
+        break;
+      }
+    }
+    delta.insert_unchecked(pending);
+    return;
   }
 }
 
 /// Compute whether the tag is saturated given a new and old version of the same element.
 ///
 /// Note: Assume that the two elements are of the same tuple
-pub fn compute_saturation_and_update_tag<Prov: Provenance>(
+fn compute_saturation_and_update_tag<Prov: Provenance>(
   to_add_elem: &mut DynamicElement<Prov>,
   stable_elem: &mut DynamicElement<Prov>,
   ctx: &Prov,

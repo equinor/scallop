@@ -6,6 +6,72 @@ use scallop_core::{
 };
 
 #[test]
+fn recursive_delta_seeks_preserve_saturation_and_batch_order() {
+  type Prov = provenance::diff_max_mult_prob::DiffMaxMultProbProvenance<(), RcFamily>;
+  let ctx = Prov::default();
+  let row = |tuple: i32, id, weight| DynamicElement::new(tuple, provenance::DualNumber2::new(id, weight));
+  let mut stable = [
+    DynamicSortedCollection::empty(),
+    DynamicSortedCollection::from_vec_unchecked(vec![row(-2, 0, 0.5)]),
+    DynamicSortedCollection::from_vec_unchecked((0..128).step_by(2).map(|key| row(key, 0, 0.5)).collect()),
+    DynamicSortedCollection::from_vec_unchecked(vec![row(20, 0, 0.25), row(40, 0, 0.75), row(43, 0, 0.5)]),
+    DynamicSortedCollection::from_vec_unchecked(vec![row(75, 0, 0.25)]),
+  ];
+  let mut delta = DynamicSortedCollection::from_vec_unchecked(vec![
+    row(-1, 1, 0.5),
+    row(20, 2, 0.5),
+    row(40, 3, 0.75),
+    row(42, 4, 0.75),
+    row(75, 5, 0.5),
+    row(100, 6, 0.75),
+    row(200, 7, 0.5),
+  ]);
+  Scheduler::LFP.schedule(&mut delta, &mut Vec::new(), &mut stable, &ctx);
+
+  let keys =
+    |rows: &DynamicSortedCollection<Prov>| rows.elements.iter().map(|row| row.tuple.as_i32()).collect::<Vec<_>>();
+  assert_eq!(keys(&delta), [-1, 42, 75, 100, 200]);
+  assert!(delta
+    .elements
+    .iter()
+    .map(|row| row.tag.gradient.indices[0])
+    .eq([1, 4, 5, 6, 7]));
+  assert_eq!(keys(&stable[1]), [-2]);
+  assert!(keys(&stable[2])
+    .into_iter()
+    .eq((0..128).step_by(2).filter(|key| ![40, 42, 100].contains(key))));
+  assert_eq!(stable[2][10].tag.gradient.indices[0], 2);
+  assert_eq!(keys(&stable[3]), [40, 43]);
+  assert_eq!(stable[3][0].tag.gradient.indices[0], 3);
+  assert!(stable[4].is_empty());
+}
+
+#[test]
+fn recursive_waitlist_skips_saturated_rows_before_replaying_one() {
+  let ctx = provenance::min_max_prob::MinMaxProbProvenance::new();
+  for scheduler in [Scheduler::DFS, Scheduler::AStar] {
+    let mut stable = [DynamicSortedCollection::from_vec_unchecked(vec![
+      DynamicElement::new(1i32, 0.9),
+      DynamicElement::new(2i32, 0.2),
+    ])];
+    let mut delta = DynamicSortedCollection::empty();
+    let mut waitlist = vec![
+      DynamicElement::new(3i32, 0.1),
+      DynamicElement::new(2i32, 0.5),
+      DynamicElement::new(1i32, 0.8),
+    ];
+    scheduler.schedule(&mut delta, &mut waitlist, &mut stable, &ctx);
+
+    assert_eq!(delta.len(), 1);
+    assert_eq!((delta[0].tuple.as_i32(), delta[0].tag), (2, 0.5));
+    assert_eq!(stable[0].len(), 1);
+    assert_eq!((stable[0][0].tuple.as_i32(), stable[0][0].tag), (1, 0.9));
+    assert_eq!(waitlist.len(), 1);
+    assert_eq!(waitlist[0].tuple.as_i32(), 3);
+  }
+}
+
+#[test]
 fn prob_edge_path_with_goal_and_a_star_search() {
   expect_interpret_within_iter_limit_with_ctx_and_runtime_options::<
     provenance::min_max_prob::MinMaxProbProvenance,
