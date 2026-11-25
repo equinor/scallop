@@ -2,13 +2,12 @@ from typing import List, Optional
 from collections.abc import Iterator
 from functools import lru_cache
 import logging
-import os
 import torch
 from PIL import Image
 from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
 import scallopy
-from scallopy.utils.image import box_slices
+from scallopy.utils.image import box_slices, save_debug_image
 from scallop_gpu import get_device
 
 FA_NAME = "owl_vit"
@@ -225,7 +224,7 @@ def owl_vit(
           cropped_image = img[rows, columns, :]
           result_tuple.append(cropped_image)
           if dump_image:
-            save_temporary_image(id(img), segment_id, field, cropped_image)
+            save_debug_image(DUMP_IMAGE_PATH, id(img), segment_id, field, cropped_image)
 
       if debug:
         print((final_score, tuple(result_tuple)))
@@ -233,17 +232,3 @@ def owl_vit(
       yield (final_score, tuple(result_tuple))
 
   return owl_vit_search
-
-
-def save_temporary_image(img_id, i, kind, img_tensor):
-  from PIL import Image
-
-  # First get the directory
-  directory = os.path.join(DUMP_IMAGE_PATH, f"{img_id}")
-  if not os.path.exists(directory):
-    os.makedirs(directory)
-
-  # Dump the image
-  file_name = os.path.join(directory, f"{kind}-{i}.jpg")
-  img = Image.fromarray(img_tensor.numpy())
-  img.save(file_name)

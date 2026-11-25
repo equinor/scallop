@@ -1,11 +1,10 @@
 from typing import List, Optional
-import os
 
 import numpy as np
-from PIL import Image
 from torch import Tensor
 
 import scallopy
+from scallopy.utils.image import save_debug_image
 
 from . import ScallopFaceDetectionPlugin
 
@@ -130,7 +129,7 @@ def get_face_detection(plugin: ScallopFaceDetectionPlugin):
             cropped_img = img[y1:y2, x1:x2, :]
             result_tuple.append(cropped_img)
             if dump_image:
-              save_temporary_image(id(img), i, field, cropped_img)
+              save_debug_image(plugin.dump_image_path(), id(img), i, field, cropped_img)
           elif field == "bbox-x":
             result_tuple.append(x1)
           elif field == "bbox-y":
@@ -150,16 +149,5 @@ def get_face_detection(plugin: ScallopFaceDetectionPlugin):
     # Remove the item and register a foreign predicate
     return do_face_detect
 
-
-  def save_temporary_image(img_id, i, kind, img_tensor):
-      # First get the directory
-      directory = os.path.join(plugin.dump_image_path(), str(img_id))
-      if not os.path.exists(directory):
-          os.makedirs(directory)
-
-      # Dump the image
-      file_name = os.path.join(directory, f"{kind}-{i}.jpg")
-      img = Image.fromarray(img_tensor.numpy())
-      img.save(file_name)
 
   return face_detection
