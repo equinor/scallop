@@ -1,29 +1,20 @@
 use super::super::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum AttributeError {
+  #[error("Duplicated attribute definitions for `@{name}`")]
   DuplicatedAttributeProcessor { name: String },
+  #[error("Unknown attribute `@{name}`")]
   UnknownAttribute { name: String },
+  #[error("Attribute `@{name}` is reserved in Scallop")]
   ReservedAttribute { name: String },
+  #[error("{msg}")]
   Custom { msg: String },
 }
 
 impl AttributeError {
   pub fn new_custom(msg: String) -> Self {
     Self::Custom { msg }
-  }
-}
-
-impl std::fmt::Display for AttributeError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::DuplicatedAttributeProcessor { name } => {
-        f.write_fmt(format_args!("Duplicated attribute definitions for `@{}`", name))
-      }
-      Self::UnknownAttribute { name } => f.write_fmt(format_args!("Unknown attribute `@{}`", name)),
-      Self::ReservedAttribute { name } => f.write_fmt(format_args!("Attribute `@{}` is reserved in Scallop", name)),
-      Self::Custom { msg } => f.write_str(msg),
-    }
   }
 }
 

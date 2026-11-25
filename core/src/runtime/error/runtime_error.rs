@@ -4,35 +4,17 @@ use crate::common::foreign_predicate::ForeignPredicateError;
 use crate::compiler::front::attribute::AttributeError;
 use crate::runtime::database::DatabaseError;
 
-#[derive(Clone, Debug)]
+/// A runtime failure whose underlying error is available through [`std::error::Error::source`].
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum RuntimeError {
-  IO(IOError),
-  ForeignFunction(ForeignFunctionError),
-  ForeignPredicate(ForeignPredicateError),
-  ForeignAttribute(AttributeError),
-  Database(DatabaseError),
-}
-
-impl std::fmt::Display for RuntimeError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::IO(e) => e.fmt(f),
-      Self::ForeignFunction(e) => e.fmt(f),
-      Self::ForeignPredicate(e) => e.fmt(f),
-      Self::ForeignAttribute(a) => a.fmt(f),
-      Self::Database(e) => e.fmt(f),
-    }
-  }
-}
-
-impl From<IOError> for RuntimeError {
-  fn from(e: IOError) -> Self {
-    Self::IO(e)
-  }
-}
-
-impl From<DatabaseError> for RuntimeError {
-  fn from(e: DatabaseError) -> Self {
-    Self::Database(e)
-  }
+  #[error("{0}")]
+  IO(#[from] IOError),
+  #[error("{0}")]
+  ForeignFunction(#[source] ForeignFunctionError),
+  #[error("{0}")]
+  ForeignPredicate(#[source] ForeignPredicateError),
+  #[error("{0}")]
+  ForeignAttribute(#[source] AttributeError),
+  #[error("{0}")]
+  Database(#[from] DatabaseError),
 }

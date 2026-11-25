@@ -114,31 +114,18 @@ pub enum ArgumentKind {
   Variable,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum ForeignFunctionError {
+  #[error("Foreign function `{name}` already exists")]
   AlreadyExisted { name: String },
+  #[error("Generic type #{id} is unused")]
   UnusedGenericType { id: usize },
+  #[error("The returned generic type #{id} is unbounded by input")]
   UnboundedReturnGenericType { id: usize },
+  #[error("Returning type family `{family}` is disallowed")]
   UnboundedReturnTypeFamily { family: TypeFamily },
+  #[error("Conflicting definition for foreign function `${name}`")]
   ConflictDefinition { name: String },
-}
-
-impl std::fmt::Display for ForeignFunctionError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::AlreadyExisted { name } => f.write_fmt(format_args!("Foreign function `{}` already exists", name)),
-      Self::UnusedGenericType { id } => f.write_fmt(format_args!("Generic type #{} is unused", id)),
-      Self::UnboundedReturnGenericType { id } => {
-        f.write_fmt(format_args!("The returned generic type #{} is unbounded by input", id))
-      }
-      Self::UnboundedReturnTypeFamily { family } => {
-        f.write_fmt(format_args!("Returning type family `{}` is disallowed", family))
-      }
-      Self::ConflictDefinition { name } => {
-        f.write_fmt(format_args!("Conflicting definition for foreign function `${}`", name))
-      }
-    }
-  }
 }
 
 /// The trait for defining a foreign function
