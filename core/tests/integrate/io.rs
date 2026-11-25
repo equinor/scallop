@@ -163,6 +163,20 @@ fn io_fields_use_the_last_duplicate_header() {
 }
 
 #[test]
+fn io_reads_quoted_utf8_fields() {
+  expect_interpret_result(
+    &format!(
+      r#"
+        @file("{}/res/testing/csv/quoted_utf8.csv", fields=["text", "id"])
+        type selected(text: String, id: i32)
+      "#,
+      CARGO_MANIFEST_DIR,
+    ),
+    ("selected", vec![("caf\u{e9}, \"open\"".to_string(), 7i32)]),
+  );
+}
+
+#[test]
 fn io_enrollment() {
   expect_interpret_result(
     &format!(
