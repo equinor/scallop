@@ -286,7 +286,8 @@ class InternalScallopForwardFunction(torch_importer.Module):
     Invoke the forward function with the given facts
 
     The `facts` and `disjunctions` need to be batched; and we assume the batch size
-    to be B
+    to be B. For built-in differentiable provenances, input tensor tags must
+    have the same dtype within a call.
 
     `output_relations` can be one of the following format
     - None, if outputs are provided when constructing the ForwardFunction
@@ -454,11 +455,27 @@ class InternalScallopForwardFunction(torch_importer.Module):
     process them into a unified form.
     """
     processed_inputs = {}
+    check_dtype = self.ctx.provenance == "diffminmaxprob" or self._has_output_hook()
+    tensor_type = torch_importer.torch.Tensor if check_dtype else None
+    supports_disjunctions = check_dtype and self.ctx.supports_disjunctions()
+    dtype = None
     for (rela, rela_facts) in all_input_facts.items():
       processed_inputs[rela] = []
       for task_id in range(batch_size):
         ds = all_disjunctions[rela][task_id] if all_disjunctions is not None and rela in all_disjunctions else None
         facts = self._process_input_facts(rela, rela_facts[task_id], ds)
+        if tensor_type is not None:
+          for tag, _ in facts:
+            if supports_disjunctions and isinstance(tag, tuple):
+              tag = tag[0]
+            if isinstance(tag, tensor_type):
+              if dtype is None:
+                dtype = tag.dtype
+              elif tag.dtype != dtype:
+                raise TypeError(
+                  f"Expected forward input tags with dtype {dtype}, got {tag.dtype} "
+                  f"in relation {rela!r} at batch index {task_id}"
+                )
         processed_inputs[rela].append(facts)
     return processed_inputs
 
@@ -819,13 +836,22 @@ class InternalScallopForwardFunction(torch_importer.Module):
     if num_inputs == 0:
       return output_tensor
 
-    def pad_input(l):
-      preproc_l = [self._torch_tensor_apply(torch_importer.torch.tensor(0.0)) if e is None else e for e in l]
-      pad_zeros = [self._torch_tensor_apply(torch_importer.torch.tensor(0.0))] * (num_inputs - len(l)) if len(l) < num_inputs else []
-      return preproc_l + pad_zeros
-
-    # mat_i: Input matrix
-    mat_i = torch_importer.torch.stack([torch_importer.torch.stack(pad_input(l)) for l in input_tags])
+    torch = torch_importer.torch
+    flat_tags = [tag for tags in input_tags for tag in tags]
+    reference = None
+    for tag in flat_tags:
+      if tag is None:
+        continue
+      if not isinstance(tag, torch.Tensor):
+        raise TypeError(f"Expected a tensor proof tag, got {type(tag).__name__}")
+      if reference is None:
+        reference = tag
+      elif tag.dtype != reference.dtype:
+        raise TypeError(f"Expected proof tags with dtype {reference.dtype}, got {tag.dtype}")
+    zero = reference.new_zeros(()) if reference is not None else self._torch_tensor_apply(torch.tensor(0.0))
+    packed = torch.stack([zero if tag is None else tag for tag in flat_tags])
+    rows = packed.split([len(tags) for tags in input_tags])
+    mat_i = torch.nn.utils.rnn.pad_sequence(rows, batch_first=True)
 
     # Check whether we want to use sparse jacobian
     if self.sparse_jacobian:
