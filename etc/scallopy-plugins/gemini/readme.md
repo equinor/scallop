@@ -30,6 +30,9 @@ The Scallop Gemini plugin provides the following constructs:
 
 ### Foreign Attribute `@gemini_extract_info`
 
+This attribute uses structured JSON output based on the relation's output fields.
+If you override the default Gemini model, choose one that supports structured output.
+
 ### Foreign Attribute `@gemini_encoder`
 
 Text-only features do not require PyTorch. For embeddings, use a Scallopy

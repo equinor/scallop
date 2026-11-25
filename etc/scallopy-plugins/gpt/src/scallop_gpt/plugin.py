@@ -10,6 +10,9 @@ import scallopy
 from scallopy.torch_importer import has_pytorch
 
 
+DEFAULT_GPT_MODEL = "gpt-5.4-mini"
+
+
 def message_text(message: ChatCompletionMessage) -> str:
   if message.content is None:
     raise ValueError("OpenAI returned a message without text content")
@@ -32,15 +35,14 @@ class ScallopGPTPlugin(scallopy.Plugin):
     self._temperature = 0.0
 
     # The GPT model to use
-    self._default_model = "gpt-3.5-turbo"
-    self._model = self._default_model
+    self._model = DEFAULT_GPT_MODEL
 
     # Whether the warning has already being printed
     self._warning_printed = False
 
   def setup_argparse(self, parser: ArgumentParser):
     parser.add_argument("--num-allowed-openai-request", type=int, default=100, help="Limit on the number of openai calls")
-    parser.add_argument("--openai-gpt-model", type=str, default=self._default_model, help="The GPT model we use")
+    parser.add_argument("--openai-gpt-model", type=str, default=DEFAULT_GPT_MODEL, help="The GPT model we use")
     parser.add_argument("--openai-gpt-temperature", type=float, default=0, help="The temperature for the GPT model")
 
   def configure(self, args: Dict = {}, unknown_args: List = []):

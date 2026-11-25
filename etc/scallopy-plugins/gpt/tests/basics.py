@@ -23,7 +23,7 @@ class TestBasics(unittest.TestCase):
     plugin = scallop_gpt.ScallopGPTPlugin()
     with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}), \
          patch("scallop_gpt.plugin.OpenAI") as create_client:
-      plugin.configure({"openai_gpt_model": "test-model", "openai_gpt_temperature": 0.25})
+      plugin.configure({"openai_gpt_temperature": 0.25})
     self.client = create_client.return_value
     self.complete = self.client.chat.completions.create
     plugin.load_into_ctx(self.ctx)
@@ -31,15 +31,15 @@ class TestBasics(unittest.TestCase):
   def test_ff_gpt(self):
     self.complete.return_value = completion(" test answer ")
     self.ctx.add_program("""
-      rel questions = {(1, "test question")}
+      rel questions = {(1, "test question"), (2, "test question")}
       rel answer(id, $gpt(x)) = questions(id, x)
       query answer
     """)
     self.ctx.run()
 
-    self.assertEqual(list(self.ctx.relation("answer")), [(1, "test answer")])
+    self.assertCountEqual(self.ctx.relation("answer"), [(1, "test answer"), (2, "test answer")])
     self.complete.assert_called_once_with(
-      model="test-model",
+      model="gpt-5.4-mini",
       messages=[{"role": "user", "content": "test question"}],
       temperature=0.25,
     )
@@ -68,10 +68,10 @@ class TestBasics(unittest.TestCase):
 
     self.assertEqual(list(self.ctx.relation("answers")), [("test answer",)])
 
-  def test_gpt_extract_info(self):
+  def test_gpt_extract_info_legacy_model_uses_json_mode(self):
     self.complete.side_effect = [completion("test reasoning"), completion('{"answer": "test answer"}')]
     self.ctx.add_program("""
-      @gpt_extract_info(prompts=["Extract the answer"], cot=[true])
+      @gpt_extract_info(prompts=["Extract the answer"], cot=[true], model="gpt-3.5-turbo")
       type extract(bound question: String, answer: String)
       rel questions = {("test question")}
       rel answers(a) = questions(q), extract(q, a)
@@ -81,7 +81,36 @@ class TestBasics(unittest.TestCase):
 
     self.assertEqual(list(self.ctx.relation("answers")), [("test answer",)])
     self.assertEqual(self.complete.call_count, 2)
+    self.assertEqual(self.complete.call_args.kwargs["model"], "gpt-3.5-turbo")
     self.assertEqual(self.complete.call_args.kwargs["response_format"], {"type": "json_object"})
+
+  def test_gpt_extract_info_uses_schemas_and_separate_declaration_caches(self):
+    def respond(**kwargs):
+      properties = kwargs["response_format"]["json_schema"]["schema"]["properties"]["rows"]["items"]["properties"]
+      if "answer" in properties:
+        self.assertEqual(properties, {"answer": {"type": "string"}})
+        return completion('{"rows": [{"answer": "test answer"}]}')
+      self.assertEqual(properties, {"count": {"type": "integer"}})
+      return completion('{"rows": [{"count": 2}]}')
+
+    self.complete.side_effect = respond
+    self.ctx.add_program("""
+      @gpt_extract_info(prompts=["Extract the answer"])
+      type extract_answer(bound question: String, answer: String)
+      @gpt_extract_info(prompts=["Extract the count"])
+      type extract_count(bound question: String, count: i32)
+      rel questions = {(1, "test question"), (2, "test question")}
+      rel answers(id, a, n) = questions(id, q), extract_answer(q, a), extract_count(q, n)
+      query answers
+    """)
+    self.ctx.run()
+
+    self.assertCountEqual(self.ctx.relation("answers"), [(1, "test answer", 2), (2, "test answer", 2)])
+    self.assertEqual(self.complete.call_count, 2)
+    for request in self.complete.call_args_list:
+      self.assertEqual(request.kwargs["model"], "gpt-5.4-mini")
+      self.assertEqual(request.kwargs["response_format"]["type"], "json_schema")
+      self.assertIs(request.kwargs["response_format"]["json_schema"]["strict"], True)
 
   @unittest.skipUnless(scallopy.torch_tensor_enabled() and scallopy.torch_importer.has_pytorch(), "requires Scallopy tensor support and PyTorch")
   def test_encoder(self):

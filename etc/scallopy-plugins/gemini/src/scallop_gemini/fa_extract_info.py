@@ -1,8 +1,10 @@
+from functools import cache
 from typing import Callable, List, Optional, Tuple
 import re
 import json
 from google.genai import types
 import scallopy
+from scallopy.utils.relation_schema import relation_rows_schema
 
 from . import ScallopGeminiPlugin
 from ._response import response_text
@@ -12,7 +14,6 @@ ERR_HEAD = f"[@{FA_NAME}]"
 
 
 def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
-  _RESPONSE_STORAGE = {}
   SYS_PROMPT = "You are a helpful assistant and diligent programmer. Please answer everything in JSON format."
   COT_PROMPT = "Please give your reasoning step by step before giving the output."
 
@@ -82,18 +83,8 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
       output_arg_types=arg_types[num_bounded:],
       tag_type=None)
     def invoke_gemini_and_get_result(*args):
-      response = gemini_invoker(*args)
-      if response is not None:
-        if name in response:
-          if type(response[name]) == list:
-            for response_json in response[name]:
-              response_tuple = []
-              for (arg_name, arg_type) in zip(arg_names[num_bounded:], arg_types[num_bounded:]):
-                if arg_name in response_json:
-                  response_tuple.append(arg_type.parse_value(response_json[arg_name]))
-                else:
-                  continue
-              yield tuple(response_tuple)
+      for row in gemini_invoker(*args)[name]:
+        yield tuple(ty.parse_value(row[arg]) for arg, ty in zip(arg_names[num_bounded:], arg_types[num_bounded:]))
 
     return invoke_gemini_and_get_result
 
@@ -111,6 +102,7 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
     def format_input(args):
       return ''.join([f"{arg_name}: {arg_value}\n" for (arg_name, arg_value) in zip(input_arg_names, args)])
     
+    @cache
     def invoke_gemini(*args):
       # Get the model to use
       if model is None: local_model = plugin.model()
@@ -121,11 +113,6 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
       if cot is None: cot_arr = [False] * len(relation_type_infos)
       else: cot_arr = cot
 
-      # Check memoization
-      memoization_key = tuple(args)
-      if memoization_key in _RESPONSE_STORAGE:
-        return _RESPONSE_STORAGE[memoization_key]
-
       # Check whether we can call gemini
       plugin.assert_can_request()
       plugin.increment_num_performed_request()
@@ -135,27 +122,27 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
       result = {}
 
       # Debug
-      if debug: print(f"Processing question: {memoization_key}")
+      if debug: print(f"Processing question: {args}")
 
       # Current messages
       current_messages = SYS_PROMPT + header + "\n"
 
       # Add examples
       for (bound, output) in examples:
-        for (idx, ((_, arg_names, _, _, _), prompt, output_arg_values)) in enumerate(zip(relation_type_infos, prompts, output)):
+        for (idx, ((_, arg_names, arg_types, _, num_bounded), prompt, output_arg_values)) in enumerate(zip(relation_type_infos, prompts, output)):
           call_header = format_input(bound) if idx == 0 else ""
           current_messages += call_header + prompt + " "
 
-          rendered_facts = [
-            "".join(f"{arg_name}: {arg_value} " for arg_name, arg_value in zip(arg_names[len(args):], arg_values))
-            for arg_values in output_arg_values
+          rows = [
+            {name: ty.parse_value(value) for name, ty, value in zip(arg_names[num_bounded:], arg_types[num_bounded:], values)}
+            for values in output_arg_values
           ]
-          current_messages += "\n".join(rendered_facts) + "\n"
+          current_messages += json.dumps({"rows": rows}) + "\n"
         current_messages += "\n"
 
       # Make the subsequent calls to Gemini
       for (idx, (relation_type_info, prompt)) in enumerate(zip(relation_type_infos, prompts)):
-        (name, arg_names, _, _, num_bounded) = relation_type_info
+        (name, arg_names, arg_types, _, num_bounded) = relation_type_info
         call_header = format_input(args) if idx == 0 else ""
         cot_response_content = ""
         if cot_arr[idx]:
@@ -165,12 +152,10 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
             contents=current_messages + cot_message,
             config=types.GenerateContentConfig(
               temperature=plugin.temperature(),
-              top_k = 1,
-              top_p = 0.5,
+              top_k=1,
+              top_p=0.5,
             ),
           )
-
-
           cot_response_content = response_text(cot_response)
         current_message = call_header + cot_response_content + prompt
         
@@ -181,37 +166,18 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
           model=local_model,
           contents=current_messages,
           config=types.GenerateContentConfig(
-              temperature=plugin.temperature(),
-              top_k = 1,
-              top_p = 0.5,
+            temperature=plugin.temperature(),
+            top_k=1,
+            top_p=0.5,
+            response_mime_type="application/json",
+            response_json_schema=relation_rows_schema(arg_names[num_bounded:], arg_types[num_bounded:]),
           ),
         )
         curr_response_message = response_text(curr_response)
 
         if debug: print(f"> Obtained response: {curr_response_message}\n")
         current_messages += curr_response_message
-        
-        json_strings = [block.strip() for block in curr_response_message.strip().split('```') if block.strip()]
-        response_dict = {}
-        for json_str in json_strings: 
-          try: # Remove "json" if it exists at the start of the string 
-              if json_str.startswith("json"): json_str = json_str[4:].strip() # Remove the 'json' and any leading spaces
-              # Parse the cleaned JSON string
-              parsed_json = json.loads(json_str)
-
-              # Update the dictionary with keys and their corresponding values
-              response_dict.update(parsed_json)
-              
-          except json.JSONDecodeError:
-              pass
-        pred_args = arg_names[num_bounded:]
-
-        filtered_json = extract_key_groups(response_dict, pred_args)
-
-        result[name] = filtered_json
-        print(filtered_json, "\n")
-      # Do the memoization and return
-      _RESPONSE_STORAGE[memoization_key] = result
+        result[name] = json.loads(curr_response_message)["rows"]
       return result
 
     return invoke_gemini
@@ -231,33 +197,6 @@ def get_gemini_extract_info(plugin: ScallopGeminiPlugin):
 
     return (rel_decl.name.name, arg_names, arg_types, pattern, num_bounded)
 
-
-  def extract_key_groups(data, target_keys):
-    extracted_list = []
-    print(data)
-    def search(data):
-        if isinstance(data, dict):
-            # Check if all target keys are directly in this dict
-            if all(key in data for key in target_keys):
-                entry = {}
-                for key in target_keys:
-                    value = data[key]
-                    # Unwrap if the value is a dict with the target keys again
-                    if isinstance(value, dict) and all(k in value for k in target_keys):
-                        entry.update(value)
-                    else:
-                        entry[key] = value
-                extracted_list.append(entry)
-            else:
-                # Continue searching in nested structures
-                for value in data.values():
-                    search(value)
-        elif isinstance(data, list):
-            for item in data:
-                search(item)
-
-    search(data)
-    return extracted_list
 
   def get_boundness(adornment) -> str:
     return "b" if adornment and adornment.is_bound() else "f"
