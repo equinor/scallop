@@ -1,10 +1,8 @@
-use std::cmp::Ordering;
-
 use super::*;
 use crate::common::tuple::Tuple;
 use crate::runtime::monitor::Monitor;
 use crate::runtime::provenance::*;
-use crate::runtime::utils::gallop_index;
+use crate::runtime::utils::{gallop_index, merge_sorted_tagged};
 
 #[derive(Clone)]
 pub struct DynamicSortedCollection<Prov: Provenance> {
@@ -167,62 +165,9 @@ impl<Prov: Provenance> DynamicSortedCollection<Prov> {
   }
 
   pub fn merge(self, other: Self, ctx: &Prov) -> Self {
-    let Self {
-      elements: mut elements1,
-    } = self;
-    let Self {
-      elements: mut elements2,
-    } = other;
-
-    // If one of the element lists is zero-length, we don't need to do any work
-    if elements1.is_empty() {
-      return Self { elements: elements2 };
+    Self {
+      elements: merge_sorted_tagged(self.elements, other.elements, ctx),
     }
-
-    if elements2.is_empty() {
-      return Self { elements: elements1 };
-    }
-
-    // Make sure that elements1 starts with the lower element
-    // Will not panic since both collections must have at least 1 element at this point
-    if elements1[0] > elements2[0] {
-      std::mem::swap(&mut elements1, &mut elements2);
-    }
-
-    // Fast path for when all the new elements are after the exiting ones
-    if elements1[elements1.len() - 1] < elements2[0] {
-      elements1.extend(elements2);
-      return Self { elements: elements1 };
-    }
-
-    let mut elements = Vec::with_capacity(elements1.len() + elements2.len());
-    let mut elements1 = elements1.drain(..);
-    let mut elements2 = elements2.drain(..).peekable();
-
-    elements.push(elements1.next().unwrap());
-    if elements.first() == elements2.peek() {
-      let e2 = elements2.next().unwrap();
-      elements[0].tag = ctx.add(&elements[0].tag, &e2.tag);
-    }
-
-    for mut elem in elements1 {
-      while elements2.peek().map(|x| x.cmp(&elem)) == Some(Ordering::Less) {
-        elements.push(elements2.next().unwrap());
-      }
-      if elements2.peek().map(|x| x.cmp(&elem)) == Some(Ordering::Equal) {
-        // Merge the tags
-        let e2 = elements2.peek().unwrap();
-        elem.tag = ctx.add(&elem.tag, &e2.tag);
-
-        elements2.next();
-      }
-      elements.push(elem);
-    }
-
-    // Finish draining second list
-    elements.extend(elements2);
-
-    Self { elements }
   }
 }
 
