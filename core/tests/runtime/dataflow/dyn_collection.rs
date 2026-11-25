@@ -1,4 +1,6 @@
-use scallop_core::runtime::dynamic::{DynamicElement, DynamicSortedCollection};
+use scallop_core::common::tuple::Tuple;
+use scallop_core::common::value::Value;
+use scallop_core::runtime::dynamic::{DynamicElement, DynamicIndexedVecCollection, DynamicSortedCollection};
 use scallop_core::runtime::provenance::diff_max_mult_prob::DiffMaxMultProbProvenance;
 use scallop_core::runtime::provenance::natural::NaturalProvenance;
 use scallop_core::runtime::provenance::DualNumber2;
@@ -43,4 +45,30 @@ fn overlapping_merges_keep_the_tag_order_of_the_earlier_collection() {
     .map(|e| (e.tuple[0].as_i32(), e.tag.gradient.indices[0]))
     .collect();
   assert_eq!(result, [(1, 2), (2, 0), (3, 1), (4, 4)]);
+}
+
+#[test]
+fn indexed_storage_moves_fields_and_keeps_duplicate_key_semantics() {
+  let text_ptr = |tuple: &Tuple| {
+    let Some(Value::String(text)) = tuple.get_value() else {
+      panic!("expected an owned string");
+    };
+    text.as_ptr()
+  };
+  let entries = vec![
+    DynamicElement::new((0usize, String::from("first"), 1i32), 2),
+    DynamicElement::new((0usize, String::from("first"), 1i32), 3),
+    DynamicElement::new((2usize, String::from("old"), 2i32), 5),
+    DynamicElement::new((2usize, String::from("new"), 3i32), 7),
+  ];
+  let first_ptr = text_ptr(&entries[0].tuple[1]);
+  let new_ptr = text_ptr(&entries[3].tuple[1]);
+  let indexed = DynamicIndexedVecCollection::from_vec(entries, &NaturalProvenance);
+  let entries: Vec<_> = indexed.into_iter().collect();
+  assert!(entries.iter().map(|elem| (elem.tuple.clone(), elem.tag)).eq([
+    (Tuple::from((0usize, String::from("first"), 1i32)), 5),
+    (Tuple::from((2usize, String::from("new"), 3i32)), 7),
+  ]));
+  assert_eq!(text_ptr(&entries[0].tuple[1]), first_ptr);
+  assert_eq!(text_ptr(&entries[1].tuple[1]), new_ptr);
 }

@@ -9,44 +9,33 @@ pub struct DynamicFindDataflow<'a, Prov: Provenance> {
 
 impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicFindDataflow<'a, Prov> {
   fn iter_stable(&self) -> DynamicBatches<'a, Prov> {
-    DynamicBatches::new(DynamicFindBatches {
-      source: self.source.iter_stable(),
-      key: self.key.clone(),
-    })
+    self.apply(self.source.iter_stable())
   }
 
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
-    DynamicBatches::new(DynamicFindBatches {
-      source: self.source.iter_recent(),
-      key: self.key.clone(),
-    })
+    self.apply(self.source.iter_recent())
   }
 }
 
-#[derive(Clone)]
-pub struct DynamicFindBatches<'a, Prov: Provenance> {
-  pub source: DynamicBatches<'a, Prov>,
-  pub key: Tuple,
-}
-
-impl<'a, Prov: Provenance> Batches<'a, Prov> for DynamicFindBatches<'a, Prov> {
-  fn next_batch(&mut self) -> Option<DynamicBatch<'a, Prov>> {
-    self.source.next_batch().map(|mut b| {
-      let curr_elem = b.next_elem();
+impl<'a, Prov: Provenance> DynamicFindDataflow<'a, Prov> {
+  fn apply(&self, batches: DynamicBatches<'a, Prov>) -> DynamicBatches<'a, Prov> {
+    let key = self.key.clone();
+    batches.unary(move |mut batch: DynamicBatch<'a, Prov>| {
+      let curr_elem = batch.next_elem();
       DynamicBatch::new(DynamicFindBatch {
-        source: b,
+        source: batch,
         curr_elem,
-        key: self.key.clone(),
+        key: key.clone(),
       })
     })
   }
 }
 
 #[derive(Clone)]
-pub struct DynamicFindBatch<'a, Prov: Provenance> {
-  pub source: DynamicBatch<'a, Prov>,
-  pub curr_elem: Option<DynamicElement<Prov>>,
-  pub key: Tuple,
+struct DynamicFindBatch<'a, Prov: Provenance> {
+  source: DynamicBatch<'a, Prov>,
+  curr_elem: Option<DynamicElement<Prov>>,
+  key: Tuple,
 }
 
 impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicFindBatch<'a, Prov> {
