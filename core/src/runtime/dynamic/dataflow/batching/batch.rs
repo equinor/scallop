@@ -1,6 +1,7 @@
 use crate::common::tuple::Tuple;
 use crate::runtime::dynamic::*;
 use crate::runtime::provenance::*;
+use crate::runtime::utils::gallop_index;
 
 pub trait Batch<'a, Prov: Provenance>: 'a + dyn_clone::DynClone {
   /// Get the next element in the batch
@@ -11,6 +12,11 @@ pub trait Batch<'a, Prov: Provenance>: 'a + dyn_clone::DynClone {
     None
   }
 
+  /// Whether this batch yields tuples in nondecreasing order.
+  fn is_tuple_sorted(&self) -> bool {
+    false
+  }
+
   /// Step the batch iterator for `u` steps
   fn step(&mut self, u: usize) {
     for _ in 0..u {
@@ -18,17 +24,14 @@ pub trait Batch<'a, Prov: Provenance>: 'a + dyn_clone::DynClone {
     }
   }
 
-  /// Search the elements until (before) the `until` tuple is reached;
-  /// Should only have effect when the input is sorted.
-  #[allow(unused)]
-  fn search_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
+  /// On batches that support seeking, return the first unread tuple at or above the bound.
+  /// Other batches just advance one row.
+  fn search_until(&mut self, _until: &Tuple) -> Option<DynamicElement<Prov>> {
     self.next_elem()
   }
 
-  /// Search the elements (using the first part `[0]` of the tuple) until (before) the `until` tuple is reached;
-  /// Should only have effect when the input is sorted.
-  #[allow(unused)]
-  fn search_elem_0_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
+  /// Like `search_until`, but compare only the first tuple field.
+  fn search_elem_0_until(&mut self, _until: &Tuple) -> Option<DynamicElement<Prov>> {
     self.next_elem()
   }
 }
@@ -45,6 +48,10 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicBatch<'a, Prov> {
 
   fn remaining_slice(&self) -> Option<&[DynamicElement<Prov>]> {
     self.0.remaining_slice()
+  }
+
+  fn is_tuple_sorted(&self) -> bool {
+    self.0.is_tuple_sorted()
   }
 
   fn step(&mut self, u: usize) {
@@ -70,7 +77,10 @@ impl<'a, Prov: Provenance> DynamicBatch<'a, Prov> {
   }
 
   pub fn filter<F: Fn(&DynamicElement<Prov>) -> bool + Clone + 'a>(self, f: F) -> Self {
-    Self::from_iterator(Iterator::filter(self, f))
+    Self::new(FilterBatch {
+      source: self,
+      predicate: f,
+    })
   }
 
   pub fn collect_vec(&mut self) -> Vec<DynamicElement<Prov>> {
@@ -89,11 +99,31 @@ impl<'a, Prov: Provenance> Iterator for DynamicBatch<'a, Prov> {
 #[derive(Clone)]
 pub struct RefElementsBatch<'a, Prov: Provenance> {
   iter: std::slice::Iter<'a, DynamicElement<Prov>>,
+  sorted: bool,
 }
 
 impl<'a, Prov: Provenance> RefElementsBatch<'a, Prov> {
   pub fn new(elements: &'a DynamicElements<Prov>) -> Self {
-    Self { iter: elements.iter() }
+    Self {
+      iter: elements.iter(),
+      sorted: false,
+    }
+  }
+
+  pub(crate) fn new_sorted(elements: &'a DynamicSortedCollection<Prov>) -> Self {
+    Self {
+      iter: elements.elements.iter(),
+      sorted: true,
+    }
+  }
+
+  fn seek(&mut self, mut less: impl FnMut(&Tuple) -> bool) -> Option<DynamicElement<Prov>> {
+    if self.sorted {
+      let rows = self.iter.as_slice();
+      let start = gallop_index(rows, 0, |row| less(&row.tuple));
+      self.iter = rows[start..].iter();
+    }
+    self.next_elem()
   }
 }
 
@@ -104,6 +134,37 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for RefElementsBatch<'a, Prov> {
 
   fn remaining_slice(&self) -> Option<&[DynamicElement<Prov>]> {
     Some(self.iter.as_slice())
+  }
+
+  fn is_tuple_sorted(&self) -> bool {
+    self.sorted
+  }
+
+  fn search_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
+    self.seek(|tuple| tuple < until)
+  }
+
+  fn search_elem_0_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
+    self.seek(|tuple| &tuple[0] < until)
+  }
+}
+
+#[derive(Clone)]
+struct FilterBatch<'a, Prov: Provenance, F> {
+  source: DynamicBatch<'a, Prov>,
+  predicate: F,
+}
+
+impl<'a, Prov: Provenance, F> Batch<'a, Prov> for FilterBatch<'a, Prov, F>
+where
+  F: Fn(&DynamicElement<Prov>) -> bool + Clone + 'a,
+{
+  fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
+    self.source.find(&self.predicate)
+  }
+
+  fn is_tuple_sorted(&self) -> bool {
+    self.source.is_tuple_sorted()
   }
 }
 

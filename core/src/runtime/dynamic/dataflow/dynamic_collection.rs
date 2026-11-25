@@ -23,7 +23,7 @@ impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicStableCollectionDataflo
 
 fn collection_batches<'a, Prov: Provenance>(collection: &DynamicCollectionRef<'a, Prov>) -> DynamicBatches<'a, Prov> {
   match collection {
-    DynamicCollectionRef::Sorted(rows) => DynamicBatches::single(RefElementsBatch::new(&rows.elements)),
+    DynamicCollectionRef::Sorted(rows) => DynamicBatches::single(RefElementsBatch::new_sorted(rows)),
     DynamicCollectionRef::IndexedVec(_) => DynamicBatches::single(collection.iter()),
   }
 }
@@ -33,7 +33,7 @@ pub struct DynamicRecentSortedCollectionDataflow<'a, Prov: Provenance>(pub &'a D
 
 impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicRecentSortedCollectionDataflow<'a, Prov> {
   fn iter_recent(&self) -> DynamicBatches<'a, Prov> {
-    DynamicBatches::single(RefElementsBatch::new(&self.0.elements))
+    DynamicBatches::single(RefElementsBatch::new_sorted(self.0))
   }
 }
 
@@ -42,6 +42,6 @@ pub struct DynamicStableSortedCollectionDataflow<'a, Prov: Provenance>(pub &'a D
 
 impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicStableSortedCollectionDataflow<'a, Prov> {
   fn iter_stable(&self) -> DynamicBatches<'a, Prov> {
-    DynamicBatches::single(RefElementsBatch::new(&self.0.elements))
+    DynamicBatches::single(RefElementsBatch::new_sorted(self.0))
   }
 }

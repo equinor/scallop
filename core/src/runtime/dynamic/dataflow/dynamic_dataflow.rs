@@ -95,11 +95,7 @@ impl<'a, Prov: Provenance> DynamicDataflow<'a, Prov> {
   }
 
   pub fn project(self, expression: Expr, runtime: &'a RuntimeEnvironment) -> Self {
-    Self::new(DynamicProjectDataflow {
-      source: self,
-      expression,
-      runtime,
-    })
+    Self::new(DynamicProjectDataflow::new(self, expression, runtime))
   }
 
   pub fn filter(self, filter: Expr, runtime: &'a RuntimeEnvironment) -> Self {

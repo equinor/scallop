@@ -57,13 +57,13 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicFindBatch<'a, Prov> {
       let elem = self.curr_elem.as_ref()?;
       match elem.tuple[0].cmp(key) {
         Ordering::Less => self.curr_elem = self.source.search_elem_0_until(key),
-        Ordering::Equal => {
-          let result = elem.clone();
-          self.curr_elem = self.source.next_elem();
-          return Some(result);
-        }
+        Ordering::Equal => return std::mem::replace(&mut self.curr_elem, self.source.next_elem()),
         Ordering::Greater => return None,
       }
     }
+  }
+
+  fn is_tuple_sorted(&self) -> bool {
+    self.source.is_tuple_sorted()
   }
 }

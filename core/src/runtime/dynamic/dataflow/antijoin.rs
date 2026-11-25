@@ -68,6 +68,10 @@ impl<'a, Prov: Provenance> Clone for DynamicAntijoinBatch<'a, Prov> {
 }
 
 impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicAntijoinBatch<'a, Prov> {
+  fn is_tuple_sorted(&self) -> bool {
+    self.i1.is_tuple_sorted()
+  }
+
   fn next_elem(&mut self) -> Option<DynamicElement<Prov>> {
     use std::cmp::Ordering;
     while let Some(left) = &mut self.i1_curr {

@@ -1,6 +1,7 @@
 use std::cell::Ref;
 
 use crate::common::tuple::*;
+use crate::runtime::utils::gallop_index;
 
 use super::batching::*;
 use super::*;
@@ -88,26 +89,24 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicRelationStableBatch<'a, Pr
     Some(&rows[self.elem_id.min(rows.len())..])
   }
 
+  fn is_tuple_sorted(&self) -> bool {
+    true
+  }
+
   fn step(&mut self, u: usize) {
     self.elem_id += u;
   }
 
   fn search_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
     let col = &self.collections[self.rela_id];
-    if search_ahead_variable_helper(col, &mut self.elem_id, |t| t < until) {
-      self.next_elem()
-    } else {
-      None
-    }
+    self.elem_id = gallop_index(&col.elements, self.elem_id, |row| &row.tuple < until);
+    self.next_elem()
   }
 
   fn search_elem_0_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
     let col = &self.collections[self.rela_id];
-    if search_ahead_variable_helper(col, &mut self.elem_id, |t| &t[0] < until) {
-      self.next_elem()
-    } else {
-      None
-    }
+    self.elem_id = gallop_index(&col.elements, self.elem_id, |row| &row.tuple[0] < until);
+    self.next_elem()
   }
 }
 
@@ -141,54 +140,21 @@ impl<'a, Prov: Provenance> Batch<'a, Prov> for DynamicRelationRecentBatch<'a, Pr
     Some(&rows[self.elem_id.min(rows.len())..])
   }
 
+  fn is_tuple_sorted(&self) -> bool {
+    true
+  }
+
   fn step(&mut self, u: usize) {
     self.elem_id += u;
   }
 
   fn search_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
-    if search_ahead_variable_helper(&self.collection, &mut self.elem_id, |t| t < until) {
-      self.next_elem()
-    } else {
-      None
-    }
+    self.elem_id = gallop_index(&self.collection.elements, self.elem_id, |row| &row.tuple < until);
+    self.next_elem()
   }
 
   fn search_elem_0_until(&mut self, until: &Tuple) -> Option<DynamicElement<Prov>> {
-    if search_ahead_variable_helper(&self.collection, &mut self.elem_id, |t| &t[0] < until) {
-      self.next_elem()
-    } else {
-      None
-    }
-  }
-}
-
-fn search_ahead_variable_helper<Prov, F>(
-  collection: &DynamicSortedCollection<Prov>,
-  elem_id: &mut usize,
-  mut cmp: F,
-) -> bool
-where
-  Prov: Provenance,
-  F: FnMut(&Tuple) -> bool,
-{
-  assert!(*elem_id > 0);
-  let mut curr = *elem_id - 1;
-  if curr < collection.len() && cmp(&collection[curr].tuple) {
-    let mut step = 1;
-    while curr + step < collection.len() && cmp(&collection[curr + step].tuple) {
-      curr += step;
-      step <<= 1;
-    }
-    step >>= 1;
-    while step > 0 {
-      if curr + step < collection.len() && cmp(&collection[curr + step].tuple) {
-        curr += step;
-      }
-      step >>= 1;
-    }
-    *elem_id = curr + 1;
-    true
-  } else {
-    false
+    self.elem_id = gallop_index(&self.collection.elements, self.elem_id, |row| &row.tuple[0] < until);
+    self.next_elem()
   }
 }

@@ -66,6 +66,10 @@ impl<Prov: Provenance> DynamicSortedCollection<Prov> {
 
   pub fn from_vec(mut elements: Vec<DynamicElement<Prov>>, ctx: &Prov) -> Self {
     elements.sort();
+    Self::from_sorted_vec(elements, ctx)
+  }
+
+  pub(crate) fn from_sorted_vec(mut elements: Vec<DynamicElement<Prov>>, ctx: &Prov) -> Self {
     elements.dedup_by(|later, kept| {
       if later.tuple != kept.tuple {
         return false;
