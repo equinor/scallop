@@ -1,5 +1,7 @@
 use sprs::CsVec;
 
+use super::Semiring;
+
 #[derive(Clone, Debug)]
 pub struct DualNumber {
   pub real: f64,
@@ -32,7 +34,7 @@ impl DualNumberSemiring {
   }
 }
 
-impl sdd::Semiring for DualNumberSemiring {
+impl Semiring for DualNumberSemiring {
   type Element = DualNumber;
 
   fn zero(&self) -> Self::Element {

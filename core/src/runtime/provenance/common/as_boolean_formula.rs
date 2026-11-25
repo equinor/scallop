@@ -1,48 +1,35 @@
-use sdd::Semiring;
-
-use super::Disjunctions;
+use super::{BooleanFormula, Disjunctions, Literal, Semiring};
 
 pub trait AsBooleanFormula {
-  /// Implement as boolean formula
-  fn as_boolean_formula(&self) -> sdd::BooleanFormula;
+  fn as_boolean_formula(&self) -> BooleanFormula;
 
-  /// Can be used to build an SDD
+  /// Compute the weighted model count of the formula.
   fn wmc<S, V>(&self, s: &S, v: &V) -> S::Element
   where
     S: Semiring,
     V: Fn(&usize) -> S::Element,
   {
-    let formula = self.as_boolean_formula();
-    let sdd_config = sdd::bottom_up::SDDBuilderConfig::with_formula(&formula);
-    let sdd_builder = sdd::bottom_up::SDDBuilder::with_config(sdd_config);
-    let sdd = sdd_builder.build(&formula);
-    sdd.eval_t(v, s)
+    self.as_boolean_formula().wmc(s, v)
   }
 
-  /// Can be used to build an SDD
+  /// Count assignments satisfying the formula or violating any exactly-one constraint.
   fn wmc_with_disjunctions<S, V>(&self, s: &S, v: &V, disj: &Disjunctions) -> S::Element
   where
     S: Semiring,
     V: Fn(&usize) -> S::Element,
   {
-    let formula = self.as_boolean_formula();
-
-    // Adding disjunction as part of formula
-    let formula_with_disj = sdd::bf_disjunction(std::iter::once(formula).chain(disj.disjunctions.iter().map(|disj| {
-      sdd::bf_conjunction(disj.facts.iter().map(|to_be_neg_fact_id| {
-        sdd::bf_disjunction(disj.facts.iter().map(|fact_id| {
-          if fact_id == to_be_neg_fact_id {
-            sdd::bf_neg(*fact_id)
+    let violations = disj.disjunctions.iter().map(|group| {
+      BooleanFormula::conjunction(group.facts.iter().map(|negated| {
+        BooleanFormula::disjunction(group.facts.iter().map(|fact| {
+          let literal = if fact == negated {
+            Literal::Neg(*fact)
           } else {
-            sdd::bf_pos(*fact_id)
-          }
+            Literal::Pos(*fact)
+          };
+          BooleanFormula::Literal(literal)
         }))
       }))
-    })));
-
-    let sdd_config = sdd::bottom_up::SDDBuilderConfig::with_formula(&formula_with_disj);
-    let sdd_builder = sdd::bottom_up::SDDBuilder::with_config(sdd_config);
-    let sdd = sdd_builder.build(&formula_with_disj);
-    sdd.eval_t(v, s)
+    });
+    BooleanFormula::disjunction(std::iter::once(self.as_boolean_formula()).chain(violations)).wmc(s, v)
   }
 }

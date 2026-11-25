@@ -1,4 +1,4 @@
-use super::as_boolean_formula::*;
+use super::{AsBooleanFormula, BooleanFormula};
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum Literal {
@@ -30,11 +30,8 @@ impl Literal {
 }
 
 impl AsBooleanFormula for Literal {
-  fn as_boolean_formula(&self) -> sdd::BooleanFormula {
-    match self {
-      Self::Pos(i) => sdd::bf_pos(*i),
-      Self::Neg(i) => sdd::bf_neg(*i),
-    }
+  fn as_boolean_formula(&self) -> BooleanFormula {
+    BooleanFormula::Literal(self.clone())
   }
 }
 

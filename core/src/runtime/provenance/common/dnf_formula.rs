@@ -103,12 +103,12 @@ impl std::fmt::Display for DNFFormula {
 }
 
 impl AsBooleanFormula for DNFFormula {
-  fn as_boolean_formula(&self) -> sdd::BooleanFormula {
-    sdd::bf_disjunction(
+  fn as_boolean_formula(&self) -> BooleanFormula {
+    BooleanFormula::disjunction(
       self
         .clauses
         .iter()
-        .map(|c| sdd::bf_conjunction(c.literals.iter().map(|l| l.as_boolean_formula()))),
+        .map(|c| BooleanFormula::conjunction(c.literals.iter().map(|l| l.as_boolean_formula()))),
     )
   }
 }
