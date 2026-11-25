@@ -1,7 +1,5 @@
 use std::collections::*;
 
-use crate::utils::*;
-
 use super::super::*;
 use super::*;
 
@@ -76,7 +74,12 @@ impl PostProcessingContext {
       }
     }
 
-    items.retain_with_index(|id, _| !to_remove_item_index.contains(&id));
+    let mut index = 0;
+    items.retain(|_| {
+      let keep = !to_remove_item_index.contains(&index);
+      index += 1;
+      keep
+    });
     items.extend(new_items);
 
     Ok(())

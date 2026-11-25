@@ -1,3 +1,5 @@
+use itertools::{EitherOrBoth, Itertools};
+
 use super::super::*;
 
 /// The DualNumber that contains the real and gradient, where the gradient
@@ -156,42 +158,21 @@ impl<'a> std::ops::Add<&'a Gradient> for Gradient {
     let mut new_indices = Vec::with_capacity(new_capacity);
     let mut new_values = Vec::with_capacity(new_capacity);
 
-    // Iterate through linearly; making sure that the list is sorted
-    let mut i = 0;
-    let mut j = 0;
-    loop {
-      let i_in_range = i < self.indices.len();
-      let j_in_range = j < rhs.indices.len();
-      let both_in_range = i_in_range && j_in_range;
-      if both_in_range {
-        if self.indices[i] == rhs.indices[j] {
-          new_indices.push(self.indices[i]);
-          new_values.push(self.values[i] + rhs.values[j]);
-          i += 1;
-          j += 1;
-        } else if self.indices[i] < rhs.indices[j] {
-          new_indices.push(self.indices[i]);
-          new_values.push(self.values[i]);
-          i += 1;
-        } else {
-          new_indices.push(rhs.indices[j]);
-          new_values.push(rhs.values[j]);
-          j += 1;
-        }
-      } else if i_in_range {
-        new_indices.push(self.indices[i]);
-        new_values.push(self.values[i]);
-        i += 1;
-      } else if j_in_range {
-        new_indices.push(rhs.indices[j]);
-        new_values.push(rhs.values[j]);
-        j += 1;
-      } else {
-        break;
-      }
+    let left = self
+      .indices
+      .into_iter()
+      .enumerate()
+      .map(|(i, index)| (index, self.values[i]));
+    let right = rhs.indices.iter().enumerate().map(|(i, &index)| (index, rhs.values[i]));
+    for pair in left.merge_join_by(right, |(left, _), (right, _)| left.cmp(right)) {
+      let (index, value) = match pair {
+        EitherOrBoth::Left(entry) | EitherOrBoth::Right(entry) => entry,
+        EitherOrBoth::Both((index, left), (_, right)) => (index, left + right),
+      };
+      new_indices.push(index);
+      new_values.push(value);
     }
 
-    // Construct the output
     Self::Output {
       indices: new_indices,
       values: new_values,
@@ -207,5 +188,20 @@ impl std::ops::Neg for &Gradient {
       indices: self.indices.clone(),
       values: self.values.iter().map(|v| -v).collect(),
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::DualNumber2;
+
+  #[test]
+  fn product_merges_overlapping_and_disjoint_sparse_gradient_entries() {
+    let first = &DualNumber2::new(1, 0.125) + &DualNumber2::new(42, 0.25);
+    let second = &DualNumber2::new(42, 0.375) + &DualNumber2::new(usize::MAX, 0.125);
+    let result = &first * &second;
+    assert_eq!(result.real, 0.1875);
+    assert_eq!(result.gradient.indices, [1, 42, usize::MAX]);
+    assert_eq!(result.gradient.values, [0.5, 0.875, 0.375]);
   }
 }

@@ -1,6 +1,7 @@
 use std::collections::*;
 use std::fs;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use super::analysis::*;
 use super::analyzers::*;
@@ -12,7 +13,6 @@ use crate::common::foreign_function::*;
 use crate::common::foreign_predicate::*;
 use crate::common::tuple_type::*;
 use crate::common::value_type::*;
-use crate::utils::CopyOnWrite;
 
 #[derive(Clone, Debug, Copy)]
 pub struct SourceId(usize);
@@ -43,8 +43,8 @@ pub struct FrontContext {
   /// Node ID annotator for giving AST node IDs.
   pub node_id_annotator: NodeIdAnnotator,
 
-  /// Front analysis which is Cow-ed, containing all the analyzed
-  pub analysis: CopyOnWrite<Analysis>,
+  /// Front analysis, shared until a context needs to update it.
+  pub analysis: Rc<Analysis>,
 }
 
 impl FrontContext {
@@ -63,7 +63,7 @@ impl FrontContext {
       attribute_processor_registry: attribute_registry,
       imported_files: HashSet::new(),
       node_id_annotator: NodeIdAnnotator::new(),
-      analysis: CopyOnWrite::new(analysis),
+      analysis: Rc::new(analysis),
     }
   }
 
@@ -95,12 +95,10 @@ impl FrontContext {
     self.foreign_function_registry.register(f)?;
 
     // If succeeded, we add it to the type inference module
-    self.analysis.modify(|analysis| {
-      analysis
-        .type_inference
-        .foreign_function_type_registry
-        .add_function_type(func_name, func_type)
-    })?;
+    Rc::make_mut(&mut self.analysis)
+      .type_inference
+      .foreign_function_type_registry
+      .add_function_type(func_name, func_type)?;
 
     Ok(())
   }
@@ -118,19 +116,13 @@ impl FrontContext {
     self.foreign_predicate_registry.register(f.clone())?;
 
     // If succeeded, we add it to the type inference module
-    self.analysis.modify(|analysis| {
-      // Update the type inference module
-      analysis
-        .type_inference
-        .foreign_predicate_type_registry
-        .add_foreign_predicate(&f);
-
-      // Update the head analysis module
-      analysis.head_relation_analysis.add_foreign_predicate(&f);
-
-      // Update the boundness analysis module
-      analysis.boundness_analysis.add_foreign_predicate(&f);
-    });
+    let analysis = Rc::make_mut(&mut self.analysis);
+    analysis
+      .type_inference
+      .foreign_predicate_type_registry
+      .add_foreign_predicate(&f);
+    analysis.head_relation_analysis.add_foreign_predicate(&f);
+    analysis.boundness_analysis.add_foreign_predicate(&f);
 
     Ok(())
   }
@@ -283,34 +275,24 @@ impl FrontContext {
     };
 
     // Front pre-transformaion analysis
-    dup_ctx.analysis.modify(|analysis| {
-      analysis.perform_pre_transformation_analysis(&ast);
-      analysis.dump_errors(&mut error_ctx);
-    });
+    let analysis = Rc::make_mut(&mut dup_ctx.analysis);
+    analysis.perform_pre_transformation_analysis(&ast);
+    analysis.dump_errors(&mut error_ctx);
     if error_ctx.has_error() {
       return Err(error_ctx);
     }
 
     // Front transformation; add new items into ast and re-annotate the ast
-    dup_ctx.analysis.modify_without_copy(|analysis| {
-      apply_transformations(&mut ast, analysis);
-    });
+    apply_transformations(&mut ast, analysis);
     ast.walk_mut(&mut dup_ctx.node_id_annotator);
 
     // Clone the foreign registries (TODO: add other registries)
     let mut cloned_fp_registry = dup_ctx.foreign_predicate_registry.clone();
 
     // Front analysis
-    dup_ctx.analysis.modify(|analysis| {
-      // First do main traversal of analyzers
-      analysis.process_items(&ast);
-
-      // Do the post-traversal analysis (TODO: add other registries when they are required)
-      analysis.post_analysis(&mut cloned_fp_registry);
-
-      // Dump the errors to error context
-      analysis.dump_errors(&mut error_ctx);
-    });
+    analysis.process_items(&ast);
+    analysis.post_analysis(&mut cloned_fp_registry);
+    analysis.dump_errors(&mut error_ctx);
     if error_ctx.has_error() {
       return Err(error_ctx);
     }
@@ -389,11 +371,11 @@ impl FrontContext {
   }
 
   pub fn type_inference(&self) -> &TypeInference {
-    &self.analysis.borrow().type_inference
+    &self.analysis.type_inference
   }
 
   pub fn hidden_relation_analysis(&self) -> &HiddenRelationAnalysis {
-    &self.analysis.borrow().hidden_analysis
+    &self.analysis.hidden_analysis
   }
 
   pub fn items_of_source_id(&self, source_id: SourceId) -> impl Iterator<Item = &Item> {

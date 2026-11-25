@@ -1,10 +1,10 @@
 use colored::*;
 use petgraph::{
   graph::{EdgeIndex, Graph, NodeIndex},
-  visit::*,
-  EdgeDirection::{Incoming, Outgoing},
+  visit::EdgeRef,
 };
 use std::collections::*;
+use std::sync::OnceLock;
 
 use crate::compiler::back::attributes::GoalAttribute;
 
@@ -40,7 +40,7 @@ impl DependencyGraphEdge {
 pub struct DependencyGraph {
   graph: Graph<String, DependencyGraphEdge>,
   predicate_to_node_id: HashMap<String, NodeIndex>,
-  sccs: Vec<Vec<NodeIndex>>,
+  sccs: OnceLock<Vec<Vec<NodeIndex>>>,
 }
 
 impl DependencyGraph {
@@ -49,7 +49,7 @@ impl DependencyGraph {
     Self {
       graph: Graph::new(),
       predicate_to_node_id: HashMap::new(),
-      sccs: Vec::new(),
+      sccs: OnceLock::new(),
     }
   }
 
@@ -58,6 +58,7 @@ impl DependencyGraph {
     if let Some(ni) = self.predicate_to_node_id.get(predicate) {
       *ni
     } else {
+      self.sccs.take();
       let node_id = self.graph.add_node(predicate.clone());
       self.predicate_to_node_id.insert(predicate.clone(), node_id);
       node_id
@@ -73,6 +74,7 @@ impl DependencyGraph {
   pub fn add_dependency(&mut self, src: &String, dst: &String, edge: DependencyGraphEdge) -> EdgeIndex {
     let src_id = self.predicate_to_node_id[src];
     let dst_id = self.predicate_to_node_id[dst];
+    self.sccs.take();
     self.graph.add_edge(src_id, dst_id, edge)
   }
 
@@ -93,12 +95,16 @@ impl DependencyGraph {
   }
 
   pub fn compute_scc(&mut self) {
-    self.sccs = petgraph::algo::kosaraju_scc(&self.graph);
+    self.sccs();
+  }
+
+  fn sccs(&self) -> &[Vec<NodeIndex>] {
+    self.sccs.get_or_init(|| petgraph::algo::kosaraju_scc(&self.graph))
   }
 
   pub fn stratify(&self) -> Result<Vec<Stratum>, SCCError> {
-    // First check if it is possible to stratify
-    for scc in &self.sccs {
+    let sccs = self.sccs();
+    for scc in sccs {
       for node_id in scc {
         for edge in self.graph.edges(*node_id) {
           if edge.weight().needs_stratification() && scc.contains(&edge.target()) {
@@ -112,64 +118,16 @@ impl DependencyGraph {
       }
     }
 
-    // Then create strata for each, using topological sorting
-    let scc_graph = petgraph::algo::condensation(self.graph.clone(), true);
-
-    // Initialize the empty (sorted) list of stratass
-    let mut visited = HashSet::new();
-    let mut stratas = Vec::new();
-
-    // Compute the nodes without incoming edges
-    let source_nodes = scc_graph
-      .node_indices()
-      .filter(|n| scc_graph.edges(*n).next().is_none())
-      .collect::<Vec<_>>();
-
-    // Add source nodes into visited
-    visited.extend(source_nodes.clone());
-
-    // Add sccs with no incoming edges into the fringe
-    let mut fringe = source_nodes.into_iter().collect::<VecDeque<_>>();
-
-    // Iterate until fringe is empty
-    while !fringe.is_empty() {
-      // First get the current scc to process
-      let scc = fringe.pop_front().unwrap();
-      let scc_predicates = scc_graph[scc].clone();
-      let scc_is_recursive = self.has_cycle(&scc_graph[scc]);
-
-      // Push an initial strata
-      stratas.push(Stratum {
-        predicates: scc_predicates,
-        is_recursive: scc_is_recursive,
-      });
-
-      // Finally add the connected component to the end
-      for edge in scc_graph.edges_directed(scc, Incoming) {
-        let next_node = edge.source();
-        if !visited.contains(&next_node)
-          && scc_graph
-            .edges_directed(next_node, Outgoing)
-            .all(|e| visited.contains(&e.target()))
-        {
-          visited.insert(edge.source());
-          fringe.push_back(edge.source());
-        }
-      }
-    }
-
-    Ok(stratas)
-  }
-
-  fn has_cycle(&self, domain: &[String]) -> bool {
-    if domain.is_empty() {
-      false
-    } else if domain.len() == 1 {
-      let node_id = self.predicate_to_node_id[&domain[0]];
-      self.graph.contains_edge(node_id, node_id)
-    } else {
-      true
-    }
+    // Kosaraju returns SCCs in reverse topological order, so dependencies come first.
+    Ok(
+      sccs
+        .iter()
+        .map(|scc| Stratum {
+          predicates: scc.iter().map(|&node| self.graph[node].clone()).collect(),
+          is_recursive: scc.len() > 1 || self.graph.contains_edge(scc[0], scc[0]),
+        })
+        .collect(),
+    )
   }
 }
 
@@ -197,7 +155,8 @@ pub enum SCCError {
 
 impl std::fmt::Debug for DependencyGraph {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    for (i, scc) in self.sccs.iter().enumerate() {
+    let sccs = self.sccs.get().map_or(&[][..], Vec::as_slice);
+    for (i, scc) in sccs.iter().enumerate() {
       f.write_fmt(format_args!("SCC#{}: {{", i))?;
       f.write_str(
         &scc
@@ -207,7 +166,7 @@ impl std::fmt::Debug for DependencyGraph {
           .join(", "),
       )?;
       f.write_str("}")?;
-      if i < self.sccs.len() - 1 {
+      if i < sccs.len() - 1 {
         f.write_str(", ")?;
       }
     }
@@ -301,5 +260,35 @@ impl Program {
 
     // Return the graph
     graph
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn stratification_recomputes_modified_components() {
+    let mut graph = DependencyGraph::new();
+    let consumer = "consumer".to_owned();
+    let dependency = "dependency".to_owned();
+    graph.add_predicate(&consumer);
+    graph.add_predicate(&dependency);
+    graph.add_dependency(&consumer, &dependency, DependencyGraphEdge::Positive);
+    graph.add_dependency(&consumer, &consumer, DependencyGraphEdge::Positive);
+
+    graph.compute_scc();
+    let strata = graph.stratify().unwrap();
+    assert_eq!(strata[0].predicates, ["dependency"]);
+    assert!(!strata[0].is_recursive);
+    assert_eq!(strata[1].predicates, ["consumer"]);
+    assert!(strata[1].is_recursive);
+
+    graph.add_dependency(&dependency, &consumer, DependencyGraphEdge::Negative);
+    assert!(matches!(
+      graph.stratify(),
+      Err(SCCError::CannotStratify { pred_1, pred_2, edge: DependencyGraphEdge::Negative })
+        if pred_1 == dependency && pred_2 == consumer
+    ));
   }
 }

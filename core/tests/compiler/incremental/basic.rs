@@ -1,7 +1,24 @@
 use scallop_core::common::input_tag::DynamicInputTag;
 use scallop_core::common::output_option::{OutputCSVFile, OutputFile, OutputOption};
 use scallop_core::common::tuple::Tuple;
+use scallop_core::compiler::front::FrontContext;
 use scallop_core::compiler::{compile_string_to_ram, ram};
+
+#[test]
+fn front_context_compilation_is_isolated_and_transactional() {
+  let mut original = FrontContext::new();
+  original.compile_string("rel base = {1}".into()).unwrap();
+
+  let mut fork = original.clone();
+  fork.compile_string("rel added(x) = base(x)".into()).unwrap();
+  assert!(fork.type_inference().has_relation("added"));
+  assert!(!original.type_inference().has_relation("added"));
+
+  let invalid = "type pending(x: i32)\nrel pending = {\"not an integer\"}";
+  assert!(fork.compile_string(invalid.into()).is_err());
+  assert!(!fork.type_inference().has_relation("pending"));
+  fork.compile_string("rel pending(x) = added(x)".into()).unwrap();
+}
 
 #[test]
 fn incr_1() {

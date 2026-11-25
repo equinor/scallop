@@ -10,6 +10,7 @@ Rust API migration:
 - The standalone `sdd` crate has been removed. Custom provenance implementations can use `scallop_core::runtime::provenance::{AsBooleanFormula, BooleanFormula, Semiring}` for weighted model counting, or RSDD directly for diagram construction.
 - Use `NodeLocation::report` or `report_warning` instead of supplying a caret color. Custom `Source` implementations can supply `diagnostic_name` and `first_line_number` instead of `line` and `line_name`.
 - `ForeignFunction::infer_return_type` overrides now take `&[Value]` instead of `&Vec<Value>`.
+- `FrontContext::analysis` is now an `Rc<Analysis>`. Read it through dereferencing and use `Rc::make_mut` to update it.
 - Use `TensorValue::checked_add`, `checked_sub`, and `checked_mul` for shape-checked arithmetic. Incompatible shapes still return `None`.
 - Use a struct literal in place of `compiler::back::Reduce::new`. For a front-end `Reduce` with a source span, use `_Reduce::new(...).with_span(start, end)` instead of `Reduce::new_with_span`.
 - Construct reduce query-plan nodes with `HighRamNode::reduce`. The `HighRamNode::Reduce` variant now contains a `Box<Reduce>`; front-end AST constructors and accessors are unchanged except for the `Reduce` constructor noted above.

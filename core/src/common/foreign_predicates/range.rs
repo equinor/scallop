@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use super::*;
 
 /// Range foreign predicate
@@ -20,45 +22,14 @@ impl RangeBBF {
     Self { ty }
   }
 
-  /// Compute the numbers between
-  fn range<T: Integer>(begin: &Value, end: &Value) -> impl Iterator<Item = T> + use<T>
-  where
-    Value: TryInto<T>,
-  {
-    pub struct StepIterator<T: Integer> {
-      curr: T,
-      end: T,
-    }
-
-    impl<T: Integer> Iterator for StepIterator<T> {
-      type Item = T;
-
-      fn next(&mut self) -> Option<Self::Item> {
-        if self.curr >= self.end {
-          None
-        } else {
-          let result = Some(self.curr);
-          self.curr = self.curr + T::one();
-          result
-        }
-      }
-    }
-
-    // Cast value into integer type
-    let begin: T = begin.clone().try_into().unwrap_or(T::zero());
-    let end: T = end.clone().try_into().unwrap_or(T::zero());
-
-    // Finally generate the list
-    StepIterator { curr: begin, end }
-  }
-
   fn dyn_range<T: Integer + Into<Value>>(begin: &Value, end: &Value) -> Vec<(DynamicInputTag, Vec<Value>)>
   where
     Value: TryInto<T>,
+    Range<T>: Iterator<Item = T>,
   {
-    Self::range::<T>(begin, end)
-      .map(|i| (DynamicInputTag::None, vec![i.into()]))
-      .collect()
+    let begin = begin.clone().try_into().unwrap_or_else(|_| T::zero());
+    let end = end.clone().try_into().unwrap_or_else(|_| T::zero());
+    (begin..end).map(|i| (DynamicInputTag::None, vec![i.into()])).collect()
   }
 }
 

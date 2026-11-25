@@ -68,29 +68,13 @@ impl<Prov: Provenance> DynamicSortedCollection<Prov> {
 
   pub fn from_vec(mut elements: Vec<DynamicElement<Prov>>, ctx: &Prov) -> Self {
     elements.sort();
-
-    let mut index = 0;
-    let mut to_keep = 0;
-    if elements.len() > 1 {
-      let mut last_index = index;
-      to_keep += 1;
-      index += 1;
-      while index < elements.len() {
-        if elements[index].tuple == elements[last_index].tuple {
-          let new_tag = ctx.add(&elements[last_index].tag, &elements[index].tag);
-          elements[last_index].tag = new_tag;
-        } else {
-          if to_keep < index {
-            elements.swap(to_keep, index);
-          }
-          last_index = to_keep;
-          to_keep += 1;
-        }
-        index += 1;
+    elements.dedup_by(|later, kept| {
+      if later.tuple != kept.tuple {
+        return false;
       }
-      elements.truncate(to_keep);
-    }
-
+      kept.tag = ctx.add(&kept.tag, &later.tag);
+      true
+    });
     Self { elements }
   }
 
@@ -116,46 +100,18 @@ impl<Prov: Provenance> DynamicSortedCollection<Prov> {
 
   /// Retain only the elements which the `retain_fn` returns true.
   ///
-  /// Note that retain_fn takes in both element index and the tagged-element itself.
+  /// The predicate receives each tagged element and its original index.
   /// This is an O(n) algorithm that preserves the ordering.
   pub fn retain<F>(&mut self, mut retain_fn: F)
   where
     F: FnMut(usize, &DynamicElement<Prov>) -> bool,
   {
-    // Keep track of the number of items that we have kept, essentially the number of elements
-    // for which the retain_fn returns true
-    let mut num_to_keep = 0;
-
-    // Keep track of the index of element that can be removed.
-    // This index will be later filled with elements to be kept
-    let mut maybe_last_empty_id: Option<usize> = None;
-
-    // Iterate from the front to the back
-    for i in 0..self.elements.len() {
-      // Check if we want to keep element i
-      if retain_fn(i, &self.elements[i]) {
-        num_to_keep += 1;
-
-        // If there is a prior element that can be removed, then we swap it with this element
-        // We ensure that the current element is the first to-keep element encountered after
-        // that to-remove element.
-        if let Some(last_empty_id) = maybe_last_empty_id {
-          self.elements.swap(i, last_empty_id);
-
-          // Then the next slot will be empty as well
-          maybe_last_empty_id = Some(last_empty_id + 1);
-        }
-      } else {
-        // If there is an element to be removed, we note that index down and allow further to-keep
-        // element to be swapped into this slot. We only do this upon first encounter.
-        if maybe_last_empty_id.is_none() {
-          maybe_last_empty_id = Some(i);
-        }
-      }
-    }
-
-    // Finally, truncate the elements array
-    self.elements.truncate(num_to_keep);
+    let mut index = 0;
+    self.elements.retain(|element| {
+      let keep = retain_fn(index, element);
+      index += 1;
+      keep
+    });
   }
 
   pub fn apply_recover_fn<F, S>(self, mut f: F) -> impl Iterator<Item = (S, Tuple)>
