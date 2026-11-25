@@ -4,6 +4,37 @@ import scallopy
 import torch
 
 class TestForward(unittest.TestCase):
+  def test_removed_jit_options_explain_the_migration(self):
+    ctx = scallopy.Context(provenance="diffminmaxprob")
+    message = "Native JIT was removed.*RAM interpreter"
+    with self.assertRaisesRegex(ValueError, message):
+      ctx.forward_function(jit=True)
+    with self.assertRaisesRegex(ValueError, message):
+      ctx.forward_function(jit_name="saved")
+    with self.assertRaisesRegex(ValueError, message):
+      ctx.forward_function(recompile=True)
+    with self.assertRaisesRegex(ValueError, message):
+      scallopy.Module(jit=True)
+    with self.assertRaisesRegex(ValueError, message):
+      scallopy.Module(jit_recompile=True)
+
+  def test_digit_sum_values_and_gradients_across_dispatch_modes(self):
+    ctx = scallopy.Context(provenance="diffminmaxprob")
+    ctx.add_relation("left", int, range(2))
+    ctx.add_relation("right", int, range(2))
+    ctx.add_rule("sum_2(a + b) = left(a) and right(b)")
+
+    for dispatch in ("single", "serial", "parallel"):
+      with self.subTest(dispatch=dispatch):
+        forward = ctx.forward_function("sum_2", range(3), dispatch=dispatch)
+        left = torch.tensor([[0.8, 0.3]], requires_grad=True)
+        right = torch.tensor([[0.6, 0.2]], requires_grad=True)
+        result = forward(left=left, right=right)
+        torch.testing.assert_close(result, torch.tensor([[0.6, 0.3, 0.2]]))
+        left_grad, right_grad = torch.autograd.grad(result.sum(), (left, right))
+        torch.testing.assert_close(left_grad, torch.tensor([[0.0, 1.0]]))
+        torch.testing.assert_close(right_grad, torch.tensor([[1.0, 1.0]]))
+
   def test_rejects_mixed_tensor_and_list_tag_dtypes(self):
     for provenance in ("diffminmaxprob", "difftopkproofs"):
       with self.subTest(provenance=provenance):
@@ -180,61 +211,6 @@ class TestDigitForward(unittest.TestCase):
     self.assertEqual(sum_2_tensor.shape, (16, 19))
     self.assertEqual(mult_2.shape, (16, 100))
 
-
-# class TestDigitForwardWithJIT(unittest.TestCase):
-#   def setUp(self):
-#     self.ctx = scallopy.ScallopContext(provenance="diffminmaxprob")
-#     self.ctx.add_relation("digit_1", int, list(range(10)))
-#     self.ctx.add_relation("digit_2", int, list(range(10)))
-#     self.ctx.add_rule("sum_2(a + b) = digit_1(a) and digit_2(b)")
-#     self.ctx.add_rule("mult_2(a * b) = digit_1(a) and digit_2(b)")
-
-#   @unittest.expectedFailure
-#   def test_unknown_relation(self):
-#     self.ctx.forward_function("add_3", list(range(28)))
-
-#   @unittest.expectedFailure
-#   def test_no_ouputs(self):
-#     self.ctx.forward_function(output_mappings={}, jit=True)
-
-#   def test_normal(self):
-#     forward = self.ctx.forward_function("sum_2", list(range(19)), jit=True, jit_name="digit")
-#     digit_1, digit_2 = torch.randn((16, 10)), torch.randn((16, 10))
-#     result = forward(digit_1=digit_1, digit_2=digit_2)
-#     self.assertEqual(result.shape, (16, 19))
-
-#   def test_normal_single_dispatch(self):
-#     forward = self.ctx.forward_function("sum_2", list(range(19)), jit=True, jit_name="digit", dispatch="single")
-#     digit_1, digit_2 = torch.randn((16, 10)), torch.randn((16, 10))
-#     result = forward(digit_1=digit_1, digit_2=digit_2)
-#     self.assertEqual(result.shape, (16, 19))
-
-#   def test_normal_non_parallel_dispatch(self):
-#     forward = self.ctx.forward_function("sum_2", list(range(19)), jit=True, jit_name="digit", dispatch="serial")
-#     digit_1, digit_2 = torch.randn((16, 10)), torch.randn((16, 10))
-#     result = forward(digit_1=digit_1, digit_2=digit_2)
-#     self.assertEqual(result.shape, (16, 19))
-
-#   def test_multi_result_normal(self):
-#     forward = self.ctx.forward_function(output_mappings={"sum_2": list(range(19)), "mult_2": list(range(100))}, jit=True, jit_name="digit_multi_result")
-#     digit_1, digit_2 = torch.randn((16, 10)), torch.randn((16, 10))
-#     result = forward(digit_1=digit_1, digit_2=digit_2)
-#     self.assertEqual(result["sum_2"].shape, (16, 19))
-#     self.assertEqual(result["mult_2"].shape, (16, 100))
-
-#   def test_multi_result_single_dispatch(self):
-#     forward = self.ctx.forward_function(output_mappings={"sum_2": list(range(19)), "mult_2": list(range(100))}, jit=True, jit_name="digit_multi_result", dispatch="single")
-#     digit_1, digit_2 = torch.randn((16, 10)), torch.randn((16, 10))
-#     result = forward(digit_1=digit_1, digit_2=digit_2)
-#     self.assertEqual(result["sum_2"].shape, (16, 19))
-#     self.assertEqual(result["mult_2"].shape, (16, 100))
-
-#   def test_multi_result_non_parallel_dispatch(self):
-#     forward = self.ctx.forward_function(output_mappings={"sum_2": list(range(19)), "mult_2": list(range(100))}, jit=True, jit_name="digit_multi_result", dispatch="serial")
-#     digit_1, digit_2 = torch.randn((16, 10)), torch.randn((16, 10))
-#     result = forward(digit_1=digit_1, digit_2=digit_2)
-#     self.assertEqual(result["sum_2"].shape, (16, 19))
-#     self.assertEqual(result["mult_2"].shape, (16, 100))
 
 
 class TestDirectForward(unittest.TestCase):

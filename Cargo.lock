@@ -1372,7 +1372,6 @@ dependencies = [
  "rayon",
  "scallop-core",
  "scallopy-interop",
- "sclc-core",
  "serde",
 ]
 

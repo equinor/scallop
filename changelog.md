@@ -1,5 +1,6 @@
 # Unreleased
 
+- Scallopy's optional native JIT has been removed. Python callers should omit `jit=True`, `jit_name`, and `recompile` (`jit_recompile` on `ScallopForwardFunction`). The Rust extension, `ctx.compile()`, and parallel batch execution remain available.
 - Compiler diagnostics now show source spans in Rust-style snippets, including syntax errors from REPL and in-memory input. REPL snippets use a `REPL:<id>` header, and Rust macro snippets retain their original line numbers.
 
 - Weighted model counting now uses RSDD. Probabilities and gradients can differ in their last floating-point digits because the diagram changes the order of arithmetic.

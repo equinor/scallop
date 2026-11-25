@@ -119,7 +119,7 @@ class MNISTSum2Net(nn.Module):
     self.scl_ctx.add_rule("sum_2(a + b) :- digit_1(a), digit_2(b)")
 
     # The `sum_2` logical reasoning module
-    self.sum_2 = self.scl_ctx.forward_function("sum_2", output_mapping=[(i,) for i in range(19)], jit=args.jit, dispatch=args.dispatch)
+    self.sum_2 = self.scl_ctx.forward_function("sum_2", output_mapping=[(i,) for i in range(19)], dispatch=args.dispatch)
 
   def forward(self, x: Tuple[torch.Tensor, torch.Tensor]):
     (a_imgs, b_imgs) = x
@@ -204,7 +204,6 @@ if __name__ == "__main__":
   parser.add_argument("--seed", type=int, default=1234)
   parser.add_argument("--provenance", type=str, default="difftopkproofs")
   parser.add_argument("--top-k", type=int, default=3)
-  parser.add_argument("--jit", action="store_true")
   parser.add_argument("--dispatch", type=str, default="parallel")
   args = parser.parse_args()
 
