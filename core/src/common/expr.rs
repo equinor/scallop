@@ -94,6 +94,26 @@ impl Expr {
     })
   }
 
+  pub(crate) fn is_order_preserving_projection(&self) -> bool {
+    fn check(expr: &Expr, next: &mut Option<usize>) -> bool {
+      match expr {
+        Expr::Tuple(fields) => fields.iter().all(|field| check(field, next)),
+        Expr::Access(path) if path.is_empty() && *next == Some(0) => {
+          *next = None;
+          true
+        }
+        Expr::Access(path) if path.len() == 1 && *next == Some(path.indices[0] as usize) => {
+          *next = next.map(|index| index + 1);
+          true
+        }
+        _ => false,
+      }
+    }
+
+    // Nesting the output does not change the lexicographic order of a prefix of whole input fields.
+    check(self, &mut Some(0))
+  }
+
   pub fn compose(&self, other: &Expr) -> Self {
     match (self, other) {
       (Self::Constant(c), _) => Self::Constant(c.clone()),
