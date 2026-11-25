@@ -1,5 +1,7 @@
 use std::collections::*;
 
+use itertools::{Either, Itertools};
+
 use crate::common::input_tag::*;
 use crate::common::tuple::*;
 use crate::common::tuple_type::*;
@@ -233,19 +235,31 @@ impl<Prov: Provenance> ExtensionalDatabase<Prov> {
   }
 
   pub fn internalize(&mut self, env: &RuntimeEnvironment, ctx: &Prov) {
-    for relation in self.extensional_relations.values_mut() {
+    for (_, relation) in self.relations_in_tagging_order(ctx) {
       relation.internalize(env, ctx);
     }
     self.internalized = true
   }
 
   pub fn internalize_with_monitor<M: Monitor<Prov>>(&mut self, env: &RuntimeEnvironment, ctx: &Prov, m: &M) {
-    for (name, relation) in &mut self.extensional_relations {
+    for (name, relation) in self.relations_in_tagging_order(ctx) {
       m.observe_loading_relation(name);
       m.observe_loading_relation_from_edb(name);
       relation.internalize_with_monitor(env, ctx, m);
     }
     self.internalized = true
+  }
+
+  fn relations_in_tagging_order(
+    &mut self,
+    ctx: &Prov,
+  ) -> impl Iterator<Item = (&String, &mut ExtensionalRelation<Prov>)> {
+    let relations = self.extensional_relations.iter_mut();
+    if ctx.requires_stable_input_order() {
+      Either::Left(relations.sorted_unstable_by_key(|(name, _)| *name))
+    } else {
+      Either::Right(relations)
+    }
   }
 
   fn check_tuples_type<'a, I>(&self, relation: &str, iter: I) -> Result<(), DatabaseError>

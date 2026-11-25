@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::collections::*;
 
 use itertools::Itertools;
@@ -5,7 +6,6 @@ use ordered_float::OrderedFloat;
 use rand::distr::weighted::WeightedIndex;
 use rand::prelude::*;
 
-use super::top_k_aggregation::ByPriority;
 use super::{Clause, DNFFormula, Literal};
 
 pub trait DNFContextTrait {
@@ -32,8 +32,20 @@ pub trait DNFContextTrait {
   }
 
   fn retain_top_k(&self, clauses: &mut Vec<Clause>, k: usize) {
-    clauses.sort_by_cached_key(|p| OrderedFloat(-self.clause_probability(p)));
-    clauses.truncate(k);
+    if k == 0 {
+      clauses.clear();
+      return;
+    }
+    let mut ranked = clauses
+      .drain(..)
+      .map(|clause| (OrderedFloat(-self.clause_probability(&clause)), clause))
+      .collect::<Vec<_>>();
+    if k < ranked.len() {
+      ranked.select_nth_unstable(k);
+      ranked.truncate(k);
+    }
+    ranked.sort_unstable();
+    clauses.extend(ranked.into_iter().map(|(_, clause)| clause));
   }
 
   fn sample_k_clauses<R: Rng + ?Sized>(&self, clauses: Vec<Clause>, k: usize, sampler: &mut R) -> Vec<Clause> {
@@ -67,11 +79,12 @@ pub trait DNFContextTrait {
     // Create a list of cnf clauses
     let cnf_clauses = f
       .iter()
+      .sorted_unstable()
       .map(|clause| {
         clause
           .literals
           .iter()
-          .sorted_by_cached_key(|x| OrderedFloat(-self.literal_probability(x)))
+          .sorted_by_cached_key(|&literal| (OrderedFloat(-self.literal_probability(literal)), literal))
           .collect::<Vec<_>>()
       })
       .collect::<Vec<_>>();
@@ -90,13 +103,13 @@ pub trait DNFContextTrait {
           }
         })
         .collect::<Option<Vec<_>>>()?;
-      literals.sort_by_key(|l| l.fact_id() * 2 + if l.sign() { 0 } else { 1 });
+      literals.sort_unstable_by_key(|l| (l.fact_id(), !l.sign()));
       literals.dedup();
 
       // Get the result
       let clause = Clause::new(literals);
       let prob = self.clause_probability(&clause);
-      Some(ByPriority::max(prob, (indices, clause)))
+      Some(Reverse((OrderedFloat(-prob), clause, indices)))
     };
 
     // A closure for getting the next elements of an element
@@ -137,8 +150,7 @@ pub trait DNFContextTrait {
 
       // Enter the main loop
       while result_clauses.len() < k {
-        if let Some(elem) = heap.pop() {
-          let (indices, clause) = elem.value;
+        if let Some(Reverse((_, clause, indices))) = heap.pop() {
           if !visited.contains(&indices) {
             visited.insert(indices.clone());
 

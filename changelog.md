@@ -4,6 +4,7 @@
 - Compiler diagnostics now show source spans in Rust-style snippets, including syntax errors from REPL and in-memory input. REPL snippets use a `REPL:<id>` header.
 
 - Weighted model counting always compiles a decision diagram. It uses OxiDD on native targets and RSDD on WebAssembly, where OxiDD cannot start its manager threads. Probabilities and gradients can differ in their last floating-point digits because the diagram changes the order of arithmetic.
+- Differentiable min/max combines equal-score tags by a stable derivative order and propagates changes to the winning gradient. Top-k proofs (including differentiable and debug modes) break equal-weight candidate ties by their literals. These modes assign input fact IDs in predicate order, preserving input order within each relation. Top-k still prunes intermediate results, so moving a pruning point can change the result.
 - `DateTime` text uses UTC ISO 8601, e.g. `2021-01-01T00:00:01.1Z`, including in `$format` and Scallopy results. The old `2021-01-01 00:00:01.100 UTC` spelling still parses.
 - `Duration` text uses hours and minutes where appropriate (`PT90S` becomes `PT1M30S`, and `P0D` becomes `PT0S`). The calendar prefix for durations containing months is unchanged, and the previous spelling still parses.
 

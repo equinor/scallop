@@ -16,6 +16,11 @@ pub trait Provenance: Clone + 'static {
   /// The name of the provenance
   fn name(&self) -> String;
 
+  /// Whether to visit extensional relations in predicate order when assigning input fact IDs.
+  fn requires_stable_input_order(&self) -> bool {
+    false
+  }
+
   /// Converting input tag to internal tag
   fn tagging_fn(&self, ext_tag: Self::InputTag) -> Self::Tag;
 
