@@ -1,4 +1,6 @@
+use scallop_core::common::adt_variant_registry::ADTVariantRegistry;
 use scallop_core::common::value::Value;
+use scallop_core::common::value_type::ValueType;
 use scallop_core::integrate::*;
 use scallop_core::runtime::provenance::*;
 use scallop_core::testing::*;
@@ -77,6 +79,26 @@ fn adt_entity_type_error_1() {
     "#,
     |e| e.contains("cannot unify types"),
   )
+}
+
+#[test]
+fn runtime_adt_errors_retain_diagnostic_messages() {
+  let mut registry = ADTVariantRegistry::new();
+  registry.add(
+    "Const".into(),
+    "expr_const".into(),
+    vec![ValueType::Entity, ValueType::I32],
+  );
+  let cases = [
+    ("Missing(1)", "Unknown variant `Missing`"),
+    ("Const()", "Arity mismatch for variant `Const`, expected 1, found 0"),
+    ("Const(\"wrong\")", "Cannot unify type"),
+  ];
+  for (input, message) in cases {
+    let error = registry.parse(input).unwrap_err();
+    let error: &dyn std::error::Error = &error;
+    assert_eq!(error.to_string(), message);
+  }
 }
 
 #[test]

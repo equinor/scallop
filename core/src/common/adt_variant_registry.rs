@@ -135,34 +135,20 @@ pub struct ADTParseResult {
   pub facts: Vec<(String, Value, Vec<Value>)>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum ADTEntityError {
+  #[error("{0}")]
   Parsing(parser::ParserError),
+  #[error("Invalid Expression")]
   InvalidExpr,
+  #[error("Cannot unify type")]
   CannotUnifyType,
+  #[error("Unknown variant `{0}`")]
   UnknownVariant(String),
+  #[error("Arity mismatch for variant `{variant}`, expected {expected}, found {actual}")]
   ArityMismatch {
     variant: String,
     expected: usize,
     actual: usize,
   },
-}
-
-impl std::fmt::Display for ADTEntityError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::Parsing(p) => p.fmt(f),
-      Self::InvalidExpr => f.write_str("Invalid Expression"),
-      Self::CannotUnifyType => f.write_str("Cannot unify type"),
-      Self::UnknownVariant(v) => f.write_fmt(format_args!("Unknown variant `{}`", v)),
-      Self::ArityMismatch {
-        variant,
-        expected,
-        actual,
-      } => f.write_fmt(format_args!(
-        "Arity mismatch for variant `{}`, expected {}, found {}",
-        variant, expected, actual
-      )),
-    }
-  }
 }

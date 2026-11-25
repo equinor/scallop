@@ -1,4 +1,4 @@
-use pyo3::{exceptions::PyException, prelude::*, IntoPyObjectExt};
+use pyo3::{exceptions::PyException, PyErr};
 
 use scallop_core::integrate::IntegrateError;
 use scallop_core::runtime::error::RuntimeError;
@@ -63,11 +63,7 @@ impl std::convert::From<BindingError> for PyErr {
   fn from(err: BindingError) -> PyErr {
     match err {
       BindingError::PyErr(e) => e,
-      err => {
-        let err_str = format!("{}", err);
-        let py_err_str: Py<PyAny> = Python::attach(|py| err_str.into_py_any(py).unwrap());
-        PyException::new_err(py_err_str)
-      }
+      err => PyException::new_err(err.to_string()),
     }
   }
 }
