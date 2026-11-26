@@ -162,7 +162,7 @@ impl PythonProvenance for top_bottom_k_clauses::TopBottomKClausesProvenance<ArcF
   }
 }
 
-fn extract_diff_probability(tag: &Bound<'_, PyAny>) -> PyResult<f64> {
+pub(crate) fn extract_diff_probability(tag: &Bound<'_, PyAny>) -> PyResult<f64> {
   if !tag.is_instance_of::<PyFloat>() && !tag.is_instance_of::<PyInt>() {
     let modules = tag.py().import("sys")?.getattr("modules")?;
     if let Some(torch) = modules.cast::<PyDict>()?.get_item("torch")?

@@ -1,10 +1,20 @@
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 from .attribute import ForeignAttributeProcessor
 from .function import ForeignFunction
 from .input_output import CSVFileOptions
+from .modes import BoundsStop
 from .predicate import ForeignPredicate
 from .provenance import ScallopProvenance
+from .torch_importer import Tensor
+
+_BoundsInterval = Tuple[float, float, int, BoundsStop]
+_BoundsResult = Tuple[
+  _BoundsInterval,
+  Optional[float],
+  List[Tuple[Tensor, float, float, Optional[float]]],
+  Optional[List[Tuple[int, int, float]]],
+]
 
 
 def torch_tensor_enabled() -> bool:
@@ -12,6 +22,10 @@ def torch_tensor_enabled() -> bool:
   Returns a boolean indicating whether this version of `scallopy`
   is compiled with torch tensor enabled.
   """
+
+
+class InternalBoundsSession:
+  def advance(self, max_facts: int, timeout: Optional[float] = None) -> _BoundsInterval: ...
 
 
 class InternalScallopContext:
@@ -62,6 +76,59 @@ class InternalScallopContext:
 
   def run_with_debug_tag(self) -> None: ...
 
+  def evaluate_bounds(
+    self,
+    relation: str,
+    tuple: Tuple[Any, ...],
+    tolerance: Optional[float],
+    max_facts: int,
+    normalize_disjunctions: bool = False,
+    fact_order: Literal["input", "weight", "required", "lookahead"] = "input",
+    checkpoint_schedule: Literal["doubling", "adaptive"] = "doubling",
+    *,
+    second_order: bool = False,
+    gradient_targets: Optional[List[Tuple[Tensor, float]]] = None,
+  ) -> _BoundsResult: ...
+
+  def start_bounds(
+    self,
+    relation: str,
+    tuple: Tuple[Any, ...],
+    tolerance: float,
+    normalize_disjunctions: bool,
+    fact_order: Literal["input", "weight", "required", "lookahead"],
+    checkpoint_schedule: Literal["doubling", "adaptive"],
+  ) -> InternalBoundsSession: ...
+
+  def evaluate_relation_bounds(
+    self,
+    relation: str,
+    tolerance: float,
+    max_facts: int,
+    normalize_disjunctions: bool,
+    fact_order: Literal["input", "weight"],
+    checkpoint_schedule: Literal["doubling", "adaptive"],
+  ) -> List[Tuple[Tuple[Any, ...], _BoundsInterval]]: ...
+
+  def evaluate_relation_bounds_with_gradients(
+    self,
+    relation: str,
+    max_facts: int,
+    normalize_disjunctions: bool,
+    fact_order: Literal["input", "weight"],
+  ) -> List[Tuple[Tuple[Any, ...], _BoundsResult]]: ...
+
+  def evaluate_bounds_batch(
+    self,
+    queries: List[Tuple[str, Tuple[Any, ...]]],
+    inputs: Dict[str, List[List[Tuple[Any, ...]]]],
+    tolerance: Optional[float],
+    max_facts: int,
+    normalize_disjunctions: bool,
+    fact_order: Literal["input", "weight", "required", "lookahead"],
+    checkpoint_schedule: Literal["doubling", "adaptive"],
+  ) -> List[_BoundsResult]: ...
+
   def run_batch(
     self,
     output_relations: List[List[str]],
@@ -77,6 +144,8 @@ class InternalScallopContext:
   ) -> str: ...
 
   def add_facts(self, relation: str, elems: List[Tuple]) -> None: ...
+
+  def add_joint_choice(self, outcomes: List[Tuple[Union[float, Tensor], Dict[str, List[Any]]]]) -> None: ...
 
   def check_tuple(self, relation: str, tup: Tuple) -> bool: ...
 
