@@ -192,7 +192,7 @@ impl Dataflow {
         f.write_fmt(format_args!("OverwriteOne\n{}", padding))?;
         d.pretty_print(f, next_indent, indent_size)
       }
-      Self::Exclusion(d1, d2) => {
+      Self::Exclusion(d1, d2, _) => {
         f.write_fmt(format_args!("Exclusion\n{}", padding))?;
         d1.pretty_print(f, next_indent, indent_size)?;
         f.write_fmt(format_args!("\n{}", padding))?;

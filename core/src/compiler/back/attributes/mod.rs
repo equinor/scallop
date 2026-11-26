@@ -17,3 +17,15 @@ pub use scheduler::*;
 pub use storage::*;
 
 use super::*;
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisjunctiveHeadOrigin {
+  pub rule: usize,
+  pub variable_positions: Vec<usize>,
+}
+
+impl AttributeTrait for DisjunctiveHeadOrigin {
+  fn name(&self) -> String {
+    "disjunctive_head_origin".to_string()
+  }
+}

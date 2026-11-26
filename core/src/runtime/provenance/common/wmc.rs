@@ -38,6 +38,8 @@ where
 #[cfg(target_family = "wasm")]
 use rsdd_backend as default_backend;
 
+pub(crate) use default_backend::{with_prepared_events, PreparedWmc};
+
 /// Adapter for a weighted model counting engine. No decision-diagram types are shared with Scallop.
 ///
 /// Pass an implementation to `new_with_wmc_backend` on a proof-based provenance, or use

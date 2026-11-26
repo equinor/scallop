@@ -41,3 +41,4 @@ pub use output_diff_prob_with_proofs::*;
 pub use real::*;
 pub use top_k_aggregation::*;
 pub use wmc::{count, DefaultWmcBackend, IndependentFacts, WmcBackend, WmcModel};
+pub(crate) use wmc::{with_prepared_events, PreparedWmc};

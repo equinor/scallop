@@ -59,7 +59,7 @@ fn project_cascade_on_dataflow(d0: &mut Dataflow) -> bool {
     Dataflow::Find(d, _) => project_cascade_on_dataflow(d),
     Dataflow::Sorted(d) => project_cascade_on_dataflow(d),
     Dataflow::OverwriteOne(d) => project_cascade_on_dataflow(d),
-    Dataflow::Exclusion(d, _) => project_cascade_on_dataflow(d),
+    Dataflow::Exclusion(d, _, _) => project_cascade_on_dataflow(d),
     Dataflow::ForeignPredicateConstraint(d, _, _) => project_cascade_on_dataflow(d),
     Dataflow::ForeignPredicateJoin(d, _, _) => project_cascade_on_dataflow(d),
     Dataflow::ForeignPredicateGround(_, _)

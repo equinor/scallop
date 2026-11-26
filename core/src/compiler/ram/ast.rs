@@ -192,6 +192,13 @@ pub struct Update {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RuleChoice {
+  pub rule: usize,
+  pub variable_positions: Vec<usize>,
+  pub head: Expr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Dataflow {
   // Base relation
   Unit(TupleType),
@@ -220,7 +227,7 @@ pub enum Dataflow {
 
   // Tag operations
   OverwriteOne(Box<Dataflow>),
-  Exclusion(Box<Dataflow>, Box<Dataflow>),
+  Exclusion(Box<Dataflow>, Box<Dataflow>, Option<RuleChoice>),
 
   // Foreign predicates
   ForeignPredicateGround(String, Vec<Value>),
@@ -245,7 +252,7 @@ impl Dataflow {
       | Self::Product(l, r)
       | Self::Antijoin(l, r)
       | Self::Difference(l, r)
-      | Self::Exclusion(l, r) => [Some(l.as_ref()), Some(r.as_ref())],
+      | Self::Exclusion(l, r, _) => [Some(l.as_ref()), Some(r.as_ref())],
       Self::Unit(_) | Self::UntaggedVec(_) | Self::Relation(_) | Self::Reduce(_) | Self::ForeignPredicateGround(..) => {
         [None, None]
       }
@@ -311,7 +318,11 @@ impl Dataflow {
   }
 
   pub fn exclusion(self, right: Vec<Tuple>) -> Self {
-    Self::Exclusion(Box::new(self), Box::new(Self::UntaggedVec(right)))
+    self.exclusion_with_rule_choice(right, None)
+  }
+
+  pub(crate) fn exclusion_with_rule_choice(self, right: Vec<Tuple>, choice: Option<RuleChoice>) -> Self {
+    Self::Exclusion(Box::new(self), Box::new(Self::UntaggedVec(right)), choice)
   }
 
   pub fn foreign_predicate_constraint(self, predicate: String, args: Vec<Expr>) -> Self {
@@ -356,7 +367,7 @@ impl Dataflow {
       | Self::OverwriteOne(d)
       | Self::ForeignPredicateConstraint(d, _, _)
       | Self::ForeignPredicateJoin(d, _, _)
-      | Self::Exclusion(d, _) => d.source_relations(),
+      | Self::Exclusion(d, _, _) => d.source_relations(),
       Self::JoinIndexedVec(d, s) => std::iter::once(s).chain(d.source_relations()).collect(),
       Self::Reduce(r) => std::iter::once(r.source_relation()).collect(),
       Self::Relation(r) => std::iter::once(r).collect(),
@@ -385,7 +396,7 @@ impl Dataflow {
       | Self::OverwriteOne(d)
       | Self::ForeignPredicateConstraint(d, _, _)
       | Self::ForeignPredicateJoin(d, _, _)
-      | Self::Exclusion(d, _) => {
+      | Self::Exclusion(d, _, _) => {
         has_update |= d.substitute_relation(source, target);
         has_update
       }

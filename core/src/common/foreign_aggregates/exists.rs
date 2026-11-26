@@ -58,6 +58,15 @@ impl ExistsAggregator {
 }
 
 impl<Prov: Provenance> Aggregator<Prov> for ExistsAggregator {
+  default fn aggregate_implicit_group(
+    &self,
+    prov: &Prov,
+    env: &RuntimeEnvironment,
+    batch: DynamicElements<Prov>,
+  ) -> DynamicElements<Prov> {
+    self.aggregate(prov, env, batch)
+  }
+
   default fn aggregate(
     &self,
     prov: &Prov,
