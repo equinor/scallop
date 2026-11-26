@@ -203,15 +203,23 @@ impl Collection {
 
   fn __iter__(slf: PyRef<Self>) -> CollectionIterator {
     CollectionIterator {
+      include_tag: !slf.collection.has_empty_tag(),
       env: slf.env.clone(),
       collection: slf.collection.clone(),
       current_index: 0,
     }
   }
+
+  fn iter_tagged(slf: PyRef<Self>) -> CollectionIterator {
+    let mut iter = Self::__iter__(slf);
+    iter.include_tag = true;
+    iter
+  }
 }
 
 #[pyclass(unsendable, name = "InternalScallopCollectionIterator")]
 pub struct CollectionIterator {
+  include_tag: bool,
   env: PythonRuntimeEnvironment,
   collection: CollectionEnum<ArcFamily>,
   current_index: usize,
@@ -227,7 +235,7 @@ impl CollectionIterator {
     while slf.current_index < slf.collection.len() {
       let i = slf.current_index;
       slf.current_index += 1;
-      if slf.collection.has_empty_tag() {
+      if !slf.include_tag {
         if let Some(tuple) = to_python_tuple(slf.collection.ith_tuple(i), &slf.env) {
           return Some(tuple);
         }

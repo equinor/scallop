@@ -146,6 +146,8 @@ class InternalScallopCollection:
     Iterate through the tuples of the collection
     """
 
+  def iter_tagged(self) -> InternalScallopCollectionIterator: ...
+
 
 class InternalScallopCollectionIterator:
   """

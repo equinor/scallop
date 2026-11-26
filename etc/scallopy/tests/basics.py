@@ -1,6 +1,7 @@
 import subprocess
 import sys
 from textwrap import dedent
+from typing import assert_type
 import unittest
 
 import scallopy
@@ -30,6 +31,10 @@ class BasicTests(unittest.TestCase):
             ctx.add_program("rel numbers = {1, 2}")
             ctx.run()
             assert list(ctx.relation("numbers")) == [(1,), (2,)]
+            typed = scallopy.Context.from_mode(scallopy.modes.unit)
+            typed.add_program("rel numbers = {1, 2}")
+            typed.run()
+            assert list(typed.relation_rows("numbers")) == [scallopy.Row((1,), None), scallopy.Row((2,), None)]
             assert not attempts, "ordinary Scallop use tried to load Torch"
 
             if missing_module == "torch":
@@ -76,6 +81,72 @@ class BasicTests(unittest.TestCase):
     ctx.add_facts("row", [fact])
     ctx.run()
     self.assertEqual(list(ctx.relation("row")), [fact])
+
+  def test_typed_probability_rows_and_legacy_results(self):
+    ctx = scallopy.Context.from_mode(scallopy.modes.top_k_proofs(k=1))
+    ctx.add_relation("weighted", (int, int))
+    ctx.add_relation("deterministic", int, non_probabilistic=True)
+    with self.assertRaisesRegex(ValueError, "requires tagged facts"):
+      ctx.add_untagged_facts("weighted", [(1, 2)])
+    ctx.add_facts("weighted", [(0.8, (1, 2)), (0.5, (1, 3))])
+    ctx.add_untagged_facts("deterministic", [3])
+    ctx.add_rule("result(x) = weighted(x, y), deterministic(y)")
+    ctx.run()
+
+    (row,) = ctx.relation_rows("result")
+    assert_type(row.value, float)
+    self.assertEqual(row, scallopy.Row((1,), 0.5))
+    self.assertEqual(list(ctx.relation("result")), [(0.5, (1,))])
+    (cloned_row,) = ctx.clone().relation_rows("result")
+    assert_type(cloned_row.value, float)
+    self.assertEqual(cloned_row, row)
+
+  def test_typed_proof_rows_preserve_legacy_untagged_iteration(self):
+    ctx = scallopy.Context.from_mode(scallopy.modes.proofs)
+    ctx.add_relation("choice", int)
+    ctx.add_facts("choice", [1, 2], disjunctions=[[0, 1]])
+    ctx.run()
+
+    first, second = ctx.relation_rows("choice")
+    assert_type(first.value, list[list[int]])
+    self.assertEqual((first.tuple, second.tuple), ((1,), (2,)))
+    ((first_id,),), ((second_id,),) = first.value, second.value
+    self.assertNotEqual(first_id, second_id)
+    self.assertEqual(list(ctx.relation("choice")), [(1,), (2,)])
+
+  def test_typed_debug_rows_preserve_proofs_and_autograd(self):
+    import torch
+
+    ctx = scallopy.Context.from_mode(scallopy.modes.diff_top_k_proofs_debug())
+    ctx.add_relation("input", int)
+    score = torch.tensor(0.7, requires_grad=True)
+    ctx.add_facts("input", [((score, 1), 2)])
+    ctx.add_rule("result(x) = input(x)")
+    ctx.run()
+
+    (row,) = ctx.relation_rows("result")
+    result_score, proofs = row.value
+    assert_type(result_score, torch.Tensor)
+    assert_type(proofs, list[list[tuple[bool, int]]])
+    self.assertEqual(row.tuple, (2,))
+    self.assertAlmostEqual(result_score.item(), 0.7)
+    self.assertEqual(proofs, [[(True, 1)]])
+    result_score.backward()
+    self.assertIsNotNone(score.grad)
+    torch.testing.assert_close(score.grad, torch.tensor(1.0))
+
+  def test_typed_custom_rows_keep_custom_output(self):
+    class DictOutput(scallopy.ScallopProvenance):
+      def recover_fn(self, internal_tag):
+        return {"value": internal_tag}
+
+    ctx = scallopy.Context.from_mode(scallopy.modes.custom(DictOutput()), no_stdlib=True)
+    ctx.add_relation("input", int)
+    ctx.add_facts("input", [("tag", 1)])
+    ctx.run()
+
+    self.assertEqual(list(ctx.relation_rows("input")), [scallopy.Row((1,), {"value": "tag"})])
+    self.assertEqual(list(ctx.relation("input")), [({"value": "tag"}, (1,))])
 
   def test_edge_path(self):
     ctx = scallopy.ScallopContext()

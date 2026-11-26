@@ -59,6 +59,40 @@ In this case, you can supply this as additional arguments when creating the cont
 ctx = scallopy.ScallopContext(provenance="topkproofs", k=5) # top-k-proofs provenance with k = 5
 ```
 
+### Typed modes and result rows
+
+Use `ScallopContext.from_mode()` to have a type checker infer the accepted fact
+format and the result value type from the chosen provenance. `run()` is
+unchanged. Use `relation_rows()` to get named `tuple` and `value` fields rather
+than unpacking the legacy shape returned by `relation()`:
+
+```py
+ctx = scallopy.ScallopContext.from_mode(scallopy.modes.top_k_proofs(k=5))
+ctx.add_relation("digit", int)
+ctx.add_facts("digit", [(0.8, (2,)), (0.2, (3,))])
+ctx.run()
+
+for row in ctx.relation_rows("digit"):
+  print(row.tuple, row.value)  # tuple and float
+```
+
+In a context that normally takes tagged facts, use `add_untagged_facts()` for
+relations declared with `non_probabilistic=True`. The relation schema still
+determines the allowed contents of each fact tuple at runtime.
+
+| Mode | `row.value` |
+|---|---|
+| `modes.unit` | `None` |
+| `modes.proofs` | A list of proofs, each represented by a list of fact IDs |
+| `modes.tropical` | `int` |
+| `modes.top_k_proofs(...)` | A `float` score based on the retained proofs, not necessarily the full query probability |
+| `modes.diff_top_k_proofs(...)` | A PyTorch tensor that supports backpropagation |
+| `modes.diff_top_k_proofs_debug(...)` | A pair containing a PyTorch tensor and its proof details |
+
+Existing string-based contexts and `relation()` still work unchanged. In
+particular, `relation()` under the `proofs` provenance still yields only the
+tuples; use `relation_rows()` to read their proofs.
+
 ## Adding Program
 
 Given that a context has been configured and initialized, we can set it up the quickest by loading a program into the context.
