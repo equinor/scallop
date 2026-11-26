@@ -154,6 +154,8 @@ class InternalScallopCollectionIterator:
 
   def __iter__(self) -> InternalScallopCollectionIterator: ...
 
+  def iter_tagged(self) -> InternalScallopCollectionIterator: ...
+
   def __next__(self) -> Tuple[Any, ...]:
     """
     Get the next tuple in the collection

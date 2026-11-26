@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple, TypeVar, Union, TYPE_CHECKING
+from typing import Any, Dict, Generic, Iterator, List, Literal, Mapping, Optional, Sequence, Tuple, TypeVar, Union, TYPE_CHECKING, cast, overload
 from copy import deepcopy
 
 # Try import torch; if not there, delegate to something else
@@ -7,7 +7,8 @@ from . import torch_importer
 
 # Import internals
 from .scallopy import InternalScallopContext
-from .collection import ScallopCollection
+from .collection import Row, ScallopCollection
+from .modes import ProvenanceMode, _Fact
 from .provenance import ScallopProvenance, DiffAddMultProb2Semiring, DiffNandMultProb2Semiring, DiffMaxMultProb2Semiring
 from .input_output import CSVFileOptions
 from .input_mapping import InputMapping
@@ -20,8 +21,14 @@ from .stdlib import STDLIB
 if TYPE_CHECKING:
   from .forward import InternalScallopForwardFunction, _OutputMapping
 
+_FactT = TypeVar("_FactT")
+_ValueT = TypeVar("_ValueT")
+_ModeFactT = TypeVar("_ModeFactT")
+_ModeValueT = TypeVar("_ModeValueT")
+
+
 # Main context
-class ScallopContext:
+class ScallopContext(Generic[_FactT, _ValueT]):
   """
   A Scallop execution context that fosters all compilation and execution.
 
@@ -65,7 +72,7 @@ class ScallopContext:
     wmc_with_disjunctions: bool = False,
     train_k: Optional[int] = None,
     test_k: Optional[int] = None,
-    fork_from: Optional[ScallopContext] = None,
+    fork_from: Optional[ScallopContext[_FactT, _ValueT]] = None,
     no_stdlib: bool = False,
     monitors: List[str] = [],
   ):
@@ -140,6 +147,27 @@ class ScallopContext:
       self._monitors = deepcopy(fork_from._monitors)
       self._internal = fork_from._internal.clone()
 
+  @staticmethod
+  def from_mode(
+    mode: ProvenanceMode[_ModeFactT, _ModeValueT],
+    *,
+    train_k: Optional[int] = None,
+    test_k: Optional[int] = None,
+    no_stdlib: bool = False,
+    monitors: Sequence[str] = (),
+  ) -> ScallopContext[_ModeFactT, _ModeValueT]:
+    """Create a context whose fact and result types are inferred from the mode."""
+    return ScallopContext(
+      provenance=mode._name,
+      custom_provenance=mode._custom,
+      k=mode._k,
+      wmc_with_disjunctions=mode._wmc_with_disjunctions,
+      train_k=train_k,
+      test_k=test_k,
+      no_stdlib=no_stdlib,
+      monitors=list(monitors),
+    )
+
   def __getstate__(self):
     """
     Serialize into pickle state
@@ -166,13 +194,31 @@ class ScallopContext:
       function = getattr(self, history_action.func_name)
       function(*history_action.pos_args, **history_action.kw_args)
 
+  @overload
+  def clone(
+    self,
+    provenance: None = None,
+    k: Optional[int] = None,
+    wmc_with_disjunctions: Optional[bool] = None,
+    monitors: Optional[List[str]] = None,
+  ) -> ScallopContext[_FactT, _ValueT]: ...
+
+  @overload
+  def clone(
+    self,
+    provenance: Optional[str],
+    k: Optional[int] = None,
+    wmc_with_disjunctions: Optional[bool] = None,
+    monitors: Optional[List[str]] = None,
+  ) -> ScallopContext[Any, Any]: ...
+
   def clone(
     self,
     provenance: Optional[str] = None,
     k: Optional[int] = None,
     wmc_with_disjunctions: Optional[bool] = None,
     monitors: Optional[List[str]] = None,
-  ) -> ScallopContext:
+  ) -> ScallopContext[Any, Any]:
     """
     Clone the current context. This is useful for incremental execution:
 
@@ -517,7 +563,7 @@ class ScallopContext:
   def add_facts(
     self,
     relation: str,
-    elems: List[Any],
+    elems: Sequence[_FactT],
     disjunctions: Optional[List[List[int]]] = None,
   ) -> None:
     """
@@ -555,10 +601,21 @@ class ScallopContext:
 
     self._internal.add_facts(relation, self._prepare_facts(relation, elems, disjunctions))
 
+  def add_untagged_facts(
+    self,
+    relation: str,
+    elems: Sequence[_Fact],
+    disjunctions: Optional[List[List[int]]] = None,
+  ) -> None:
+    """Add untagged facts to a relation that accepts them."""
+    if self.requires_tag() and not self.relation_is_non_probabilistic(relation):
+      raise ValueError(f"Relation {relation!r} requires tagged facts; use add_facts instead")
+    self.add_facts(relation, cast(Sequence[_FactT], elems), disjunctions)
+
   def _prepare_facts(
     self,
     relation: str,
-    elems: List[Any],
+    elems: Sequence[Any],
     disjunctions: Optional[List[List[int]]] = None,
   ) -> List[Tuple[Any, ...]]:
     # First normalize the probability format
@@ -628,6 +685,10 @@ class ScallopContext:
     """
     int_col = self._internal.relation(relation)
     return ScallopCollection(self.provenance, int_col)
+
+  def relation_rows(self, relation: str) -> Iterator[Row[_ValueT]]:
+    """Iterate through computed tuples and their recovered provenance values."""
+    return self.relation(relation)._rows()
 
   def has_relation(self, relation: str) -> bool:
     """
@@ -781,7 +842,7 @@ class ScallopContext:
 
   def _process_disjunctive_elements(
     self,
-    elems: List[Tuple[Any, ...]],
+    elems: Sequence[Tuple[Any, ...]],
     disjunctions: Optional[List[List[int]]],
   ) -> List[Tuple[Any, ...]]:
     processed_elems = [e for e in elems]
