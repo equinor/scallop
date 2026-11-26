@@ -53,6 +53,15 @@ impl CountAggregator {
 }
 
 impl<Prov: Provenance> Aggregator<Prov> for CountAggregator {
+  default fn aggregate_implicit_group(
+    &self,
+    prov: &Prov,
+    env: &RuntimeEnvironment,
+    batch: DynamicElements<Prov>,
+  ) -> DynamicElements<Prov> {
+    self.aggregate(prov, env, batch)
+  }
+
   default fn aggregate(
     &self,
     prov: &Prov,

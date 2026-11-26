@@ -7,6 +7,8 @@ use crate::runtime::database::DatabaseError;
 /// A runtime failure whose underlying error is available through [`std::error::Error::source`].
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum RuntimeError {
+  #[error("execution interrupted")]
+  Interrupted,
   #[error("{0}")]
   IO(#[from] IOError),
   #[error("{0}")]
@@ -17,4 +19,12 @@ pub enum RuntimeError {
   ForeignAttribute(#[source] AttributeError),
   #[error("{0}")]
   Database(#[from] DatabaseError),
+}
+
+pub(crate) fn check_interruption(interrupted: Option<&dyn Fn() -> bool>) -> Result<(), RuntimeError> {
+  if interrupted.is_some_and(|interrupted| interrupted()) {
+    Err(RuntimeError::Interrupted)
+  } else {
+    Ok(())
+  }
 }

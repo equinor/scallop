@@ -1,4 +1,5 @@
 pub mod add_mult_prob;
+pub mod anytime_bounds;
 pub mod min_max_prob;
 pub mod prob_proofs;
 pub mod sample_k_proofs;

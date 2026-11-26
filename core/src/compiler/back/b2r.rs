@@ -198,7 +198,7 @@ impl Program {
         let prefer_in_place = rule.attributes.get::<NoTemporaryRelationAttribute>().is_some();
         let ctx = QueryPlanContext::from_rule(stratum, &self.predicate_registry, rule);
         let plan = ctx.query_plan();
-        updates.push(self.plan_to_ram_update(&mut b2r_context, &rule.head, &plan, prefer_in_place));
+        updates.push(self.plan_to_ram_update(&mut b2r_context, rule, &plan, prefer_in_place));
       }
     }
 
@@ -347,7 +347,8 @@ impl Program {
     }
   }
 
-  fn plan_to_ram_update(&self, ctx: &mut B2RContext, head: &Head, plan: &Plan, prefer_in_place: bool) -> ram::Update {
+  fn plan_to_ram_update(&self, ctx: &mut B2RContext, rule: &Rule, plan: &Plan, prefer_in_place: bool) -> ram::Update {
+    let head = &rule.head;
     // Check if the dataflow needs projection and update the dataflow
     let dataflow = match head {
       Head::Atom(head_atom) => {
@@ -393,9 +394,6 @@ impl Program {
             })
             .collect();
 
-          // Disjunction dataflow
-          let disj_dataflow = sub_dataflow.exclusion(constants);
-
           // Projection
           let (mut var_counter, mut const_counter) = (0, 0);
           let projection: Expr = head_atoms[0]
@@ -415,8 +413,17 @@ impl Program {
             })
             .collect();
 
-          // Wrap the disjunction dataflow with a projection
-          disj_dataflow.project(projection)
+          let choice = rule
+            .attributes
+            .get::<DisjunctiveHeadOrigin>()
+            .map(|origin| ram::RuleChoice {
+              rule: origin.rule,
+              variable_positions: origin.variable_positions.clone(),
+              head: projection.clone(),
+            });
+          sub_dataflow
+            .exclusion_with_rule_choice(constants, choice)
+            .project(projection)
         } else {
           unimplemented!("Disjunction with more than one pattern is not supported yet.")
         }

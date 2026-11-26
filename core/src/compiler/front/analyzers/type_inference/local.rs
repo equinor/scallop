@@ -328,6 +328,15 @@ impl NodeVisitor<Variable> for LocalTypeInferenceContext {
   }
 }
 
+impl NodeVisitor<VariableBinding> for LocalTypeInferenceContext {
+  fn visit(&mut self, binding: &VariableBinding) {
+    self.unifications.push(Unification::OfVariable(
+      binding.location().clone(),
+      binding.variable_name().clone(),
+    ));
+  }
+}
+
 impl NodeVisitor<Constant> for LocalTypeInferenceContext {
   fn visit(&mut self, c: &Constant) {
     let type_set = TypeSet::from_constant(c);

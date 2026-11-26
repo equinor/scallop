@@ -12,17 +12,40 @@ pub(super) fn wmc<S: Semiring>(
   semiring: &S,
   weight: &impl Fn(&usize) -> S::Element,
 ) -> S::Element {
+  with_prepared(formula, |prepared| prepared.count(semiring, weight))
+}
+
+pub(crate) fn with_prepared_events<T>(
+  lower: &BooleanFormula,
+  upper: Option<&BooleanFormula>,
+  evaluate: impl FnOnce(&PreparedWmc<'_>, Option<&PreparedWmc<'_>>) -> T,
+) -> T {
+  with_prepared(lower, |lower| match upper {
+    Some(upper) => with_prepared(upper, |upper| evaluate(&lower, Some(&upper))),
+    None => evaluate(&lower, None),
+  })
+}
+
+pub(crate) struct PreparedWmc<'a> {
+  root: SddPtr<'a>,
+  facts: &'a [usize],
+}
+
+impl PreparedWmc<'_> {
+  pub(crate) fn count<S: Semiring>(&self, semiring: &S, weight: &impl Fn(&usize) -> S::Element) -> S::Element {
+    evaluate(self.root, self.facts, semiring, weight, &mut HashMap::new())
+  }
+}
+
+fn with_prepared<T>(formula: &BooleanFormula, evaluate: impl FnOnce(PreparedWmc<'_>) -> T) -> T {
   let facts = formula.fact_ids();
   // An SDD vtree needs a leaf even for a constant formula.
   let labels: Vec<_> = (0..facts.len().max(1)).map(VarLabel::new_usize).collect();
   let builder = CompressionSddBuilder::new(VTree::even_split(&labels, labels.len().ilog2() as usize));
-  evaluate(
-    compile(formula, &builder, &facts),
-    &facts,
-    semiring,
-    weight,
-    &mut HashMap::new(),
-  )
+  evaluate(PreparedWmc {
+    root: compile(formula, &builder, &facts),
+    facts: &facts,
+  })
 }
 
 fn compile<'a>(formula: &BooleanFormula, builder: &'a CompressionSddBuilder<'a>, facts: &[usize]) -> SddPtr<'a> {
