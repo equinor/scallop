@@ -516,6 +516,10 @@ impl Default for AggregateRegistry {
 
 pub trait Aggregator<P: Provenance>: dyn_clone::DynClone + 'static {
   fn aggregate(&self, p: &P, env: &RuntimeEnvironment, elems: DynamicElements<P>) -> DynamicElements<P>;
+
+  fn aggregate_implicit_group(&self, p: &P, env: &RuntimeEnvironment, elems: DynamicElements<P>) -> DynamicElements<P> {
+    self.aggregate(p, env, elems)
+  }
 }
 
 dyn_clone::clone_trait_object!(<P> Aggregator<P> where P: Provenance);
@@ -531,5 +535,14 @@ impl<Prov: Provenance> DynamicAggregator<Prov> {
     elems: DynamicElements<Prov>,
   ) -> DynamicElements<Prov> {
     self.0.aggregate(prov, env, elems)
+  }
+
+  pub fn aggregate_implicit_group(
+    &self,
+    prov: &Prov,
+    env: &RuntimeEnvironment,
+    elems: DynamicElements<Prov>,
+  ) -> DynamicElements<Prov> {
+    self.0.aggregate_implicit_group(prov, env, elems)
   }
 }

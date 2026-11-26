@@ -280,7 +280,7 @@ impl FrontContext {
 
     // Basic information
     let pred = head_atoms[0].predicate();
-    let attributes = back::Attributes::from(rule_attrs);
+    let mut attributes = back::Attributes::from(rule_attrs);
 
     // Collect information for flattening
     let mut flatten_expr = FlattenExprContext::new(&analysis.type_inference, &self.foreign_predicate_registry);
@@ -296,14 +296,27 @@ impl FrontContext {
       .collect::<Vec<_>>();
 
     // Create the head that will be shared across all back rules
-    let back_head_atoms = head_atoms
+    let back_head_atoms: Vec<_> = head_atoms
       .iter()
       .map(|a| {
         let args = a.iter_args().map(|a| flatten_expr.get_expr_term(a)).collect();
         back::Atom::new(a.predicate().name().clone(), args)
       })
       .collect();
+    let variable_positions = back_head_atoms[0]
+      .args
+      .iter()
+      .enumerate()
+      .filter_map(|(index, term)| matches!(term, back::Term::Variable(_)).then_some(index))
+      .collect();
     let head = back::Head::Disjunction(back_head_atoms);
+    // Constant propagation can erase original differences between head patterns.
+    if !head.has_multiple_patterns() {
+      attributes.insert(back::attributes::DisjunctiveHeadOrigin {
+        rule: rule_loc.id.expect("source rules have location IDs"),
+        variable_positions,
+      });
+    }
 
     // Get the back rules
     let boundness_analysis = &self.analysis.boundness_analysis;

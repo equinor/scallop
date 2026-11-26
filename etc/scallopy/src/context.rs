@@ -1,5 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::time::{Duration, Instant};
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::*;
 
@@ -28,6 +30,24 @@ use super::tensor::*;
 use super::tuple::*;
 
 type AF = ArcFamily;
+type WeightedContext = IntegrateContext<top_k_proofs::TopKProofsProvenance<AF>, AF>;
+type DiffWeightedContext = IntegrateContext<diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, AF>, AF>;
+type PyBoundsInterval = (f64, f64, usize, &'static str);
+type PyGradientBound = (Py<PyAny>, f64, f64, Option<f64>);
+type PyBoundsResult = (
+  PyBoundsInterval,
+  Option<f64>,
+  Vec<PyGradientBound>,
+  Option<Vec<(usize, usize, f64)>>,
+);
+type BoundsFact = (Option<InputExclusiveDiffProb<ExtTag>>, Tuple);
+type PyJointOutcome<'py> = (Bound<'py, PyAny>, BTreeMap<String, Vec<Bound<'py, PyAny>>>);
+
+#[derive(Clone)]
+pub struct JointOutcome {
+  weight: InputExclusiveDiffProb<ExtTag>,
+  rows: Vec<(String, Tuple)>,
+}
 
 #[derive(Clone)]
 pub enum ContextEnum {
@@ -39,8 +59,10 @@ pub enum ContextEnum {
   // Probabilistic
   MinMaxProb(IntegrateContext<min_max_prob::MinMaxProbProvenance, AF>),
   AddMultProb(IntegrateContext<add_mult_prob::AddMultProbProvenance, AF>),
-  TopKProofs(IntegrateContext<top_k_proofs::TopKProofsProvenance<AF>, AF>),
+  TopKProofs(WeightedContext),
   TopBottomKClauses(IntegrateContext<top_bottom_k_clauses::TopBottomKClausesProvenance<AF>, AF>),
+  // Reuse weighted input parsing; bounded evaluation never executes this context.
+  AnytimeBounds(DiffWeightedContext, Vec<Vec<JointOutcome>>),
 
   // Differentiable
   DiffMinMaxProb(IntegrateContext<diff_min_max_prob::DiffMinMaxProbProvenance<ExtTag, AF>, AF>),
@@ -49,7 +71,7 @@ pub enum ContextEnum {
   DiffMaxMultProb(IntegrateContext<diff_max_mult_prob::DiffMaxMultProbProvenance<ExtTag, AF>, AF>),
   DiffNandMinProb(IntegrateContext<diff_nand_min_prob::DiffNandMinProbProvenance<ExtTag, AF>, AF>),
   DiffSampleKProofs(IntegrateContext<diff_sample_k_proofs::DiffSampleKProofsProvenance<ExtTag, AF>, AF>),
-  DiffTopKProofs(IntegrateContext<diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, AF>, AF>),
+  DiffTopKProofs(DiffWeightedContext),
   DiffTopBottomKClauses(IntegrateContext<diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance<ExtTag, AF>, AF>),
 
   // Debug
@@ -69,6 +91,7 @@ macro_rules! match_context {
       ContextEnum::AddMultProb($v) => $e,
       ContextEnum::TopKProofs($v) => $e,
       ContextEnum::TopBottomKClauses($v) => $e,
+      ContextEnum::AnytimeBounds($v, _) => $e,
       ContextEnum::DiffMinMaxProb($v) => $e,
       ContextEnum::DiffAddMultProb($v) => $e,
       ContextEnum::DiffNandMultProb($v) => $e,
@@ -103,6 +126,7 @@ macro_rules! match_context_except_custom {
       ContextEnum::DiffTopBottomKClauses($v) => Ok($e),
       ContextEnum::DiffTopKProofsDebug($v) => Ok($e),
       ContextEnum::Custom(_) => Err(BindingError::CustomProvenanceUnsupported),
+      ContextEnum::AnytimeBounds(..) => Err(bounds_operation_error()),
     }
   };
 }
@@ -110,6 +134,31 @@ macro_rules! match_context_except_custom {
 #[pyclass(unsendable, name = "InternalScallopContext")]
 pub struct Context {
   pub ctx: ContextEnum,
+}
+
+#[pyclass(name = "InternalBoundsSession")]
+pub struct BoundsSession(anytime_bounds::BoundsSession);
+
+#[pymethods]
+impl BoundsSession {
+  #[pyo3(signature=(max_facts, timeout=None))]
+  fn advance(&mut self, py: Python<'_>, max_facts: usize, timeout: Option<f64>) -> PyResult<PyBoundsInterval> {
+    let timeout = timeout
+      .map(Duration::try_from_secs_f64)
+      .transpose()
+      .map_err(|_| PyValueError::new_err("timeout must be a finite, non-negative duration in seconds"))?;
+    let result = py
+      .detach(|| {
+        if let Some(timeout) = timeout {
+          let start = Instant::now();
+          self.0.advance_until(max_facts, || start.elapsed() >= timeout)
+        } else {
+          self.0.advance(max_facts)
+        }
+      })
+      .map_err(py_bounds_error)?;
+    Ok(py_bounds_interval(&result))
+  }
 }
 
 #[pymethods]
@@ -159,6 +208,12 @@ impl Context {
         ctx: ContextEnum::TopBottomKClauses(IntegrateContext::new_incremental(
           top_bottom_k_clauses::TopBottomKClausesProvenance::new(k, wmc_with_disjunctions),
         )),
+      }),
+      "anytimebounds" => Ok(Self {
+        ctx: ContextEnum::AnytimeBounds(
+          IntegrateContext::new_incremental(diff_top_k_proofs::DiffTopKProofsProvenance::new(0, false)),
+          Vec::new(),
+        ),
       }),
       "diffminmaxprob" => Ok(Self {
         ctx: ContextEnum::DiffMinMaxProb(IntegrateContext::new_incremental(
@@ -437,6 +492,7 @@ impl Context {
       ContextEnum::AddMultProb(_) => None,
       ContextEnum::TopKProofs(_) => None,
       ContextEnum::TopBottomKClauses(_) => None,
+      ContextEnum::AnytimeBounds(..) => None,
       ContextEnum::DiffMinMaxProb(_) => None,
       ContextEnum::DiffAddMultProb(c) => Some(c.provenance_context().input_tags().into_vec()),
       ContextEnum::DiffNandMultProb(c) => Some(c.provenance_context().input_tags().into_vec()),
@@ -464,6 +520,7 @@ impl Context {
       ContextEnum::TopBottomKClauses(c) => {
         c.provenance_context_mut().set_k(k);
       }
+      ContextEnum::AnytimeBounds(..) => (),
       ContextEnum::DiffMinMaxProb(_) => (),
       ContextEnum::DiffAddMultProb(_) => (),
       ContextEnum::DiffNandMultProb(_) => (),
@@ -532,6 +589,40 @@ impl Context {
     match_context!(&mut self.ctx, c, add_py_facts(c, relation, elems))
   }
 
+  fn add_joint_choice(&mut self, outcomes: Vec<PyJointOutcome<'_>>) -> Result<(), BindingError> {
+    let ContextEnum::AnytimeBounds(ctx, choices) = &mut self.ctx else {
+      return Err(PyValueError::new_err("add_joint_choice requires the anytime_bounds mode").into());
+    };
+    let env = ctx.runtime_environment().into();
+    let choice = outcomes
+      .into_iter()
+      .map(|(weight, relations)| {
+        let probability = extract_diff_probability(&weight)?;
+        if !(0.0..=1.0).contains(&probability) {
+          return Err(py_bounds_error(anytime_bounds::BoundsError::InvalidProbability(probability)).into());
+        }
+        let mut rows = Vec::new();
+        for (name, tuples) in relations {
+          let ty = ctx
+            .relation_type(&name)
+            .ok_or_else(|| BindingError::UnknownRelation(name.clone()))?;
+          for tuple in tuples {
+            rows.push((name.clone(), from_python_tuple(&tuple, &ty, &env)?));
+          }
+        }
+        Ok(JointOutcome {
+          weight: InputExclusiveDiffProb::new(probability, (&weight).into(), None),
+          rows,
+        })
+      })
+      .collect::<Result<Vec<_>, BindingError>>()?;
+    if choice.iter().all(|outcome| outcome.rows.is_empty()) {
+      return Err(PyValueError::new_err("a joint choice must contain at least one fact").into());
+    }
+    choices.push(choice);
+    Ok(())
+  }
+
   /// Add a rule
   #[pyo3(signature=(rule, tag=None, demand=None))]
   fn add_rule(
@@ -580,15 +671,212 @@ impl Context {
   /// If the context's ram program is already compiled, the program will be directly executed.
   /// Otherwise, the ram program will be compiled and than be executed.
   fn run(&mut self) -> Result<(), BindingError> {
+    self.require_standard_evaluation()?;
     match_context!(&mut self.ctx, c, c.run()?);
     Ok(())
   }
 
   /// Execute the program while monitoring the provenance and tags
   fn run_with_debug_tag(&mut self) -> Result<(), BindingError> {
+    self.require_standard_evaluation()?;
     let m = monitor::DebugTagsMonitor;
     match_context!(&mut self.ctx, c, c.run_with_monitor(&m)?);
     Ok(())
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  #[pyo3(signature=(relation, tuple, tolerance, max_facts, normalize_disjunctions=false, fact_order="input", checkpoint_schedule="doubling", *, second_order=false, gradient_targets=None))]
+  fn evaluate_bounds(
+    &mut self,
+    relation: &str,
+    tuple: &Bound<'_, PyTuple>,
+    tolerance: Option<f64>,
+    max_facts: usize,
+    normalize_disjunctions: bool,
+    fact_order: &str,
+    checkpoint_schedule: &str,
+    second_order: bool,
+    gradient_targets: Option<Vec<(Bound<'_, PyAny>, f64)>>,
+  ) -> Result<PyBoundsResult, BindingError> {
+    let (ctx, joint) = self.bounds_context()?;
+    let options = bounds_options(
+      tolerance,
+      max_facts,
+      normalize_disjunctions,
+      fact_order,
+      checkpoint_schedule,
+    )?;
+    ctx.compile()?;
+    let py = tuple.py();
+    let tuple = bounds_query_tuple(ctx, relation, &tuple)?;
+    let (inputs, tensors) = snapshot_bounds_inputs(
+      ctx,
+      joint,
+      py,
+      tolerance.is_none() || gradient_targets.is_some(),
+      std::iter::empty(),
+    )?;
+    let targets = gradient_targets
+      .map(|targets| bounds_gradient_targets(py, &tensors, targets))
+      .transpose()?;
+    let program = ctx.ram();
+    let result = py
+      .detach(|| {
+        if let Some(targets) = targets {
+          anytime_bounds::evaluate_until_gradients(program, inputs, relation, &tuple, options, &targets, second_order)
+        } else if second_order {
+          anytime_bounds::evaluate_with_hessian(program, inputs, relation, &tuple, options)
+        } else {
+          anytime_bounds::evaluate(program, inputs, relation, &tuple, options)
+        }
+      })
+      .map_err(py_bounds_error)?;
+    Ok(py_bounds_result(py, result, &tensors))
+  }
+
+  fn start_bounds(
+    &mut self,
+    relation: &str,
+    tuple: &Bound<'_, PyTuple>,
+    tolerance: f64,
+    normalize_disjunctions: bool,
+    fact_order: &str,
+    checkpoint_schedule: &str,
+  ) -> Result<BoundsSession, BindingError> {
+    let (ctx, joint) = self.bounds_context()?;
+    let options = bounds_options(
+      Some(tolerance),
+      0,
+      normalize_disjunctions,
+      fact_order,
+      checkpoint_schedule,
+    )?;
+    ctx.compile()?;
+    let py = tuple.py();
+    let tuple = bounds_query_tuple(ctx, relation, &tuple)?;
+    let (inputs, _) = snapshot_bounds_inputs(ctx, joint, py, false, std::iter::empty())?;
+    let program = ctx.ram();
+    let session = py
+      .detach(|| {
+        anytime_bounds::BoundsSession::new(
+          program,
+          inputs,
+          (relation.to_owned(), tuple),
+          tolerance,
+          options.normalize_disjunctions,
+          options.fact_order,
+          options.checkpoint_schedule,
+        )
+      })
+      .map_err(py_bounds_error)?;
+    Ok(BoundsSession(session))
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  fn evaluate_relation_bounds(
+    &mut self,
+    py: Python<'_>,
+    relation: &str,
+    tolerance: f64,
+    max_facts: usize,
+    normalize_disjunctions: bool,
+    fact_order: &str,
+    checkpoint_schedule: &str,
+  ) -> Result<Vec<(Py<PyAny>, PyBoundsInterval)>, BindingError> {
+    let options = bounds_options(
+      Some(tolerance),
+      max_facts,
+      normalize_disjunctions,
+      fact_order,
+      checkpoint_schedule,
+    )?;
+    self.bounds_relation_rows(py, relation, options, |result, _| py_bounds_interval(&result))
+  }
+
+  fn evaluate_relation_bounds_with_gradients(
+    &mut self,
+    py: Python<'_>,
+    relation: &str,
+    max_facts: usize,
+    normalize_disjunctions: bool,
+    fact_order: &str,
+  ) -> Result<Vec<(Py<PyAny>, PyBoundsResult)>, BindingError> {
+    let options = bounds_options(None, max_facts, normalize_disjunctions, fact_order, "doubling")?;
+    self.bounds_relation_rows(py, relation, options, |result, tensors| {
+      py_bounds_result(py, result, tensors)
+    })
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  fn evaluate_bounds_batch(
+    &mut self,
+    py: Python<'_>,
+    queries: Vec<(String, Bound<'_, PyTuple>)>,
+    inputs: HashMap<String, Vec<Bound<'_, PyList>>>,
+    tolerance: Option<f64>,
+    max_facts: usize,
+    normalize_disjunctions: bool,
+    fact_order: &str,
+    checkpoint_schedule: &str,
+  ) -> Result<Vec<PyBoundsResult>, BindingError> {
+    let (ctx, joint) = self.bounds_context()?;
+    let options = bounds_options(
+      tolerance,
+      max_facts,
+      normalize_disjunctions,
+      fact_order,
+      checkpoint_schedule,
+    )?;
+    if inputs.values().any(|examples| examples.len() != queries.len()) {
+      return Err(BindingError::InvalidBatchSize);
+    }
+    if queries.is_empty() {
+      return Ok(Vec::new());
+    }
+    ctx.compile()?;
+    let queries = queries
+      .into_iter()
+      .map(|(relation, tuple)| bounds_query_tuple(ctx, &relation, &tuple).map(|tuple| (relation, tuple)))
+      .collect::<Result<Vec<_>, _>>()?;
+    let extra = process_batched_inputs::<diff_top_k_proofs::DiffTopKProofsProvenance<ExtTag, AF>, _>(
+      inputs,
+      ctx.runtime_environment(),
+      |relation| ctx.relation_type(relation),
+    )?;
+    let snapshot_count = if extra.is_empty() { 1 } else { queries.len() };
+    let (snapshots, tensors): (Vec<_>, Vec<_>) = (0..snapshot_count)
+      .map(|index| {
+        let facts = extra
+          .iter()
+          .flat_map(|(relation, examples)| examples[index].iter().map(move |fact| (relation.as_str(), fact)));
+        snapshot_bounds_inputs(ctx, joint, py, tolerance.is_none(), facts)
+      })
+      .collect::<PyResult<Vec<_>>>()?
+      .into_iter()
+      .unzip();
+    let program = ctx.ram();
+    let results = py
+      .detach(|| {
+        if snapshot_count == 1 {
+          return anytime_bounds::evaluate_batch(program, &snapshots[0], &queries, options);
+        }
+        queries
+          .iter()
+          .enumerate()
+          .map(|(index, (relation, tuple))| {
+            let facts = snapshots[index].iter().cloned();
+            anytime_bounds::evaluate(program, facts, relation, tuple, options)
+          })
+          .collect::<Result<Vec<_>, _>>()
+      })
+      .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    Ok(
+      results
+        .into_iter()
+        .enumerate()
+        .map(|(index, result)| py_bounds_result(py, result, &tensors[if snapshot_count == 1 { 0 } else { index }]))
+        .collect(),
+    )
   }
 
   /// Check if the tuple matches the type of the queried relation.
@@ -621,6 +909,7 @@ impl Context {
     inputs: HashMap<String, Vec<Bound<'_, PyList>>>,
     parallel: bool,
   ) -> Result<Vec<Vec<Collection>>, BindingError> {
+    self.require_standard_evaluation()?;
     // Sanity check: has input
     if inputs.is_empty() {
       return Err(BindingError::EmptyBatchInput);
@@ -705,6 +994,46 @@ impl Context {
 }
 
 impl Context {
+  fn bounds_context(&mut self) -> Result<(&mut DiffWeightedContext, &[Vec<JointOutcome>]), BindingError> {
+    match &mut self.ctx {
+      ContextEnum::AnytimeBounds(ctx, choices) => Ok((ctx, choices)),
+      _ => Err(PyValueError::new_err("evaluate_bounds requires the anytime_bounds mode").into()),
+    }
+  }
+
+  fn bounds_relation_rows<T>(
+    &mut self,
+    py: Python<'_>,
+    relation: &str,
+    options: anytime_bounds::BoundsOptions,
+    convert: impl Fn(anytime_bounds::BoundsResult, &BoundsTensors) -> T,
+  ) -> Result<Vec<(Py<PyAny>, T)>, BindingError> {
+    let (ctx, joint) = self.bounds_context()?;
+    ctx.compile()?;
+    let (inputs, tensors) = snapshot_bounds_inputs(ctx, joint, py, options.tolerance.is_none(), std::iter::empty())?;
+    let program = ctx.ram();
+    let rows = py
+      .detach(|| anytime_bounds::evaluate_relation(program, inputs, relation, options))
+      .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let env = ctx.runtime_environment().into();
+    rows
+      .into_iter()
+      .map(|(tuple, result)| {
+        let tuple = to_python_tuple(&tuple, &env)
+          .ok_or_else(|| PyValueError::new_err(format!("cannot convert a bounds tuple from relation `{relation}`")))?;
+        Ok((tuple, convert(result, &tensors)))
+      })
+      .collect()
+  }
+
+  fn require_standard_evaluation(&self) -> Result<(), BindingError> {
+    if matches!(self.ctx, ContextEnum::AnytimeBounds(..)) {
+      Err(bounds_operation_error())
+    } else {
+      Ok(())
+    }
+  }
+
   fn run_batch_parallel(
     &self,
     output_relations: Vec<Vec<String>>,
@@ -748,6 +1077,200 @@ impl Context {
       })
       .collect()
   }
+}
+
+fn bounds_operation_error() -> BindingError {
+  PyValueError::new_err(
+    "use evaluate_bounds, evaluate_bounds_batch, or evaluate_relation_bounds in the anytime_bounds mode",
+  )
+  .into()
+}
+
+fn py_bounds_error(error: anytime_bounds::BoundsError) -> PyErr {
+  PyValueError::new_err(error.to_string())
+}
+
+fn bounds_options(
+  tolerance: Option<f64>,
+  max_facts: usize,
+  normalize_disjunctions: bool,
+  fact_order: &str,
+  checkpoint_schedule: &str,
+) -> PyResult<anytime_bounds::BoundsOptions> {
+  let fact_order = match fact_order {
+    "input" => anytime_bounds::FactOrder::Input,
+    "weight" => anytime_bounds::FactOrder::Weight,
+    "required" => anytime_bounds::FactOrder::Required,
+    "lookahead" => anytime_bounds::FactOrder::Lookahead,
+    _ => {
+      return Err(PyValueError::new_err(
+        "fact_order must be 'input', 'weight', 'required', or 'lookahead'",
+      ))
+    }
+  };
+  let checkpoint_schedule = match checkpoint_schedule {
+    "doubling" => anytime_bounds::CheckpointSchedule::Doubling,
+    "adaptive" => anytime_bounds::CheckpointSchedule::Adaptive,
+    _ => {
+      return Err(PyValueError::new_err(
+        "checkpoint_schedule must be 'doubling' or 'adaptive'",
+      ))
+    }
+  };
+  Ok(anytime_bounds::BoundsOptions {
+    tolerance,
+    max_facts,
+    normalize_disjunctions,
+    fact_order,
+    checkpoint_schedule,
+  })
+}
+
+fn bounds_query_tuple(
+  ctx: &DiffWeightedContext,
+  relation: &str,
+  tuple: &Bound<'_, PyTuple>,
+) -> Result<Tuple, BindingError> {
+  let tuple_type = ctx
+    .ram()
+    .relation_tuple_type(relation)
+    .ok_or_else(|| BindingError::UnknownRelation(relation.into()))?;
+  Ok(from_python_tuple(
+    tuple.as_any(),
+    &tuple_type,
+    &ctx.runtime_environment().into(),
+  )?)
+}
+
+type BoundsTensors = HashMap<usize, Py<PyAny>>;
+
+fn bounds_gradient_targets(
+  py: Python<'_>,
+  tensors: &BoundsTensors,
+  targets: Vec<(Bound<'_, PyAny>, f64)>,
+) -> PyResult<Vec<anytime_bounds::GradientTarget>> {
+  let mut selected = Vec::new();
+  for (target, tolerance) in targets {
+    let before = selected.len();
+    selected.extend(tensors.iter().filter_map(|(&input, tensor)| {
+      target
+        .is(tensor.bind(py))
+        .then_some(anytime_bounds::GradientTarget { input, tolerance })
+    }));
+    if selected.len() == before {
+      return Err(PyValueError::new_err(
+        "gradient target is not a trainable fact weight in this context",
+      ));
+    }
+  }
+  Ok(selected)
+}
+
+fn snapshot_bounds_inputs<'a>(
+  ctx: &mut DiffWeightedContext,
+  joint: &[Vec<JointOutcome>],
+  py: Python<'_>,
+  gradients: bool,
+  extra: impl IntoIterator<Item = (&'a str, &'a BoundsFact)>,
+) -> PyResult<(Vec<anytime_bounds::BoundsInput>, BoundsTensors)> {
+  let modules = py.import("sys")?.getattr("modules")?;
+  let torch = modules.cast::<PyDict>().map_err(PyErr::from)?.get_item("torch")?;
+  let tensor_type = torch
+    .filter(|module| !module.is_none())
+    .map(|module| module.getattr("Tensor"))
+    .transpose()?;
+  let mut relations = BTreeMap::<&str, (&[BoundsFact], Vec<&BoundsFact>)>::new();
+  for (name, relation) in &ctx.edb().extensional_relations {
+    relations.entry(name).or_default().0 = relation.pending_static_facts();
+  }
+  for (name, fact) in extra {
+    relations.entry(name).or_default().1.push(fact);
+  }
+  let mut inputs = Vec::new();
+  let mut tensors = HashMap::new();
+  let mut push = |rows, tag: Option<&InputExclusiveDiffProb<ExtTag>>, group| {
+    let mut probability = tag.map_or(1.0, |tag| tag.prob);
+    let mut differentiate = false;
+    if let (Some(tensor_type), Some(source)) = (
+      &tensor_type,
+      tag.and_then(|tag| tag.external_tag.as_ref()).into_option(),
+    ) {
+      let tensor = source.bind(py);
+      if tensor.is_instance(tensor_type)? {
+        if !tensor.call_method0("is_floating_point")?.is_truthy()? {
+          return Err(PyValueError::new_err(
+            "bounds probability tensors must have a floating-point dtype",
+          ));
+        }
+        probability = tensor.call_method0("item")?.extract()?;
+        differentiate = gradients && tensor.getattr("requires_grad")?.is_truthy()?;
+        if differentiate {
+          tensors.insert(inputs.len(), source);
+        }
+      }
+    }
+    inputs.push(anytime_bounds::BoundsInput {
+      rows,
+      probability,
+      group,
+      differentiate,
+    });
+    Ok(())
+  };
+  for (name, (facts, extra)) in relations {
+    for (tag, fact_tuple) in facts.iter().chain(extra) {
+      let tag = tag.as_ref();
+      push(
+        anytime_bounds::BoundsRows::Fact((name.into(), fact_tuple.clone())),
+        tag,
+        tag
+          .and_then(|tag| tag.exclusion)
+          .map(anytime_bounds::BoundsInputGroup::Categorical),
+      )?;
+    }
+  }
+  for (group, outcomes) in joint.iter().enumerate() {
+    for outcome in outcomes {
+      push(
+        anytime_bounds::BoundsRows::Joint(outcome.rows.clone()),
+        Some(&outcome.weight),
+        Some(anytime_bounds::BoundsInputGroup::Joint(group)),
+      )?;
+    }
+  }
+  Ok((inputs, tensors))
+}
+
+fn py_bounds_interval(result: &anytime_bounds::BoundsResult) -> PyBoundsInterval {
+  let reason = match result.stop_reason {
+    anytime_bounds::BoundsStop::Tolerance => "tolerance",
+    anytime_bounds::BoundsStop::FactLimit => "fact_limit",
+    anytime_bounds::BoundsStop::TimeLimit => "time_limit",
+    anytime_bounds::BoundsStop::Complete => "complete",
+  };
+  (
+    result.interval.lower,
+    result.interval.upper,
+    result.active_facts,
+    reason,
+  )
+}
+
+fn py_bounds_result(py: Python<'_>, result: anytime_bounds::BoundsResult, tensors: &BoundsTensors) -> PyBoundsResult {
+  let interval = py_bounds_interval(&result);
+  let gradients = result
+    .gradients
+    .into_iter()
+    .map(|gradient| {
+      (
+        tensors[&gradient.input].clone_ref(py),
+        gradient.lower,
+        gradient.upper,
+        gradient.exact,
+      )
+    })
+    .collect();
+  (interval, result.exact_probability, gradients, result.hessian)
 }
 
 fn add_py_rule<P>(

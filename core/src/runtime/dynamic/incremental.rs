@@ -35,6 +35,7 @@ struct StratumExecution<'a, Prov> {
   strata_info: &'a StrataInformation,
   runtime: &'a RuntimeEnvironment,
   ctx: &'a Prov,
+  interrupted: Option<&'a dyn Fn() -> bool>,
 }
 
 pub struct DynamicExecutionContext<Prov: Provenance, Ptr: PointerFamily = RcFamily> {
@@ -99,7 +100,16 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
 
   /// Directly execute the program stored in the file
   pub fn execute(&mut self, runtime: &RuntimeEnvironment, ctx: &mut Prov) -> Result<(), RuntimeError> {
-    self.execute_inner::<()>(None, runtime, ctx, None)
+    self.execute_inner::<()>(None, runtime, ctx, None, None)
+  }
+
+  pub(crate) fn execute_interruptible(
+    &mut self,
+    runtime: &RuntimeEnvironment,
+    ctx: &Prov,
+    interrupted: &dyn Fn() -> bool,
+  ) -> Result<(), RuntimeError> {
+    self.execute_inner::<()>(None, runtime, ctx, None, Some(interrupted))
   }
 
   pub fn incremental_execute(
@@ -108,7 +118,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     runtime: &RuntimeEnvironment,
     ctx: &Prov,
   ) -> Result<(), RuntimeError> {
-    self.execute_inner::<()>(Some(program), runtime, ctx, None)
+    self.execute_inner::<()>(Some(program), runtime, ctx, None, None)
   }
 
   /// Directly execute the program stored in the file
@@ -116,7 +126,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
   where
     M: Monitor<Prov>,
   {
-    self.execute_inner(None, runtime, ctx, Some(m))?;
+    self.execute_inner(None, runtime, ctx, Some(m), None)?;
     m.observe_finish_execution();
     Ok(())
   }
@@ -131,7 +141,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
   where
     M: Monitor<Prov>,
   {
-    self.execute_inner(Some(program), runtime, ctx, Some(m))
+    self.execute_inner(Some(program), runtime, ctx, Some(m), None)
   }
 
   fn execute_inner<M: Monitor<Prov>>(
@@ -140,7 +150,9 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     runtime: &RuntimeEnvironment,
     ctx: &Prov,
     monitor: Option<&M>,
+    interrupted: Option<&dyn Fn() -> bool>,
   ) -> Result<(), RuntimeError> {
+    check_interruption(interrupted)?;
     let program_ref = maybe_new_program.as_ref().unwrap_or(&self.program);
     self.edb.populate_program_facts(runtime, program_ref)?;
 
@@ -193,9 +205,11 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       strata_info: &strata_info,
       runtime,
       ctx,
+      interrupted,
     };
     // Go through each stratum
     for i in 0..program_ref.strata.len() {
+      check_interruption(interrupted)?;
       // Run the stratum to get the result
       let result = self.execute_stratum(i, &incremental_result, &execution, monitor)?;
 
@@ -257,6 +271,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
       strata_info,
       runtime,
       ctx,
+      interrupted,
     } = *execution;
     let stratum = &ram_program.strata[stratum_id];
     if let Some(m) = monitor {
@@ -378,11 +393,7 @@ impl<Prov: Provenance, Ptr: PointerFamily> DynamicExecutionContext<Prov, Ptr> {
     }
 
     // Run!
-    let result = if let Some(m) = monitor {
-      iter.run_with_monitor(ctx, runtime, m)
-    } else {
-      iter.run(ctx, runtime)
-    };
+    let result = iter.run_checked(ctx, runtime, monitor, interrupted)?;
 
     // Success!
     Ok(IntentionalDatabase::from_dynamic_collections(result.into_iter()))

@@ -1,5 +1,7 @@
 use std::fmt::{Debug, Display};
 
+use crate::common::tuple::Tuple;
+
 use super::*;
 
 /// A provenance
@@ -34,6 +36,11 @@ pub trait Provenance: Clone + 'static {
       Some(et) => self.tagging_fn(et),
       None => self.one(),
     }
+  }
+
+  /// Optionally tag outcomes by source rule, original head grounding, and chosen head tuple.
+  fn rule_choice_tagger(&self) -> Option<impl Fn(usize, Tuple, Tuple) -> Self::Tag + '_> {
+    None::<fn(usize, Tuple, Tuple) -> Self::Tag>
   }
 
   /// Convert the internal tag to the output tag

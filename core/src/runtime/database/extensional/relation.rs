@@ -155,6 +155,11 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
     self.static_input.extend(facts)
   }
 
+  /// Input facts that have not yet been consumed by an execution.
+  pub fn pending_static_facts(&self) -> &[(Option<Prov::InputTag>, Tuple)] {
+    &self.static_input
+  }
+
   pub fn load_from_file(
     &mut self,
     env: &RuntimeEnvironment,
@@ -168,7 +173,7 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
     }
 
     // Load the file into the dynamic input
-    let result = load_from_file(env, file, loaded_file_content, types).map_err(DatabaseError::IO)?;
+    let result = parse_input_file_facts(env, file, loaded_file_content, types).map_err(DatabaseError::IO)?;
     self.add_dynamic_input_facts(result);
 
     // If succeeded, add the file into the file_path
@@ -265,7 +270,7 @@ impl<Prov: Provenance> ExtensionalRelation<Prov> {
   }
 }
 
-fn load_from_file(
+pub(crate) fn parse_input_file_facts(
   env: &RuntimeEnvironment,
   input_file: &InputFile,
   loaded_file_content: &io::InputFileContent,

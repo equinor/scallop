@@ -1,8 +1,14 @@
 from typing import TYPE_CHECKING as _TYPE_CHECKING
 
 from .attribute import foreign_attribute as foreign_attribute, ForeignAttributeProcessor as ForeignAttributeProcessor
-from .context import ScallopContext as ScallopContext
+from .context import BoundsSession as BoundsSession, ScallopContext as ScallopContext
+from .collection import Row as Row
 from .provenance import ScallopProvenance as ScallopProvenance
+from . import modes as modes
+from .modes import ProbabilityInterval as ProbabilityInterval
+from .modes import DifferentiableBounds as DifferentiableBounds
+from .modes import GradientInterval as GradientInterval
+from .modes import ApproximateBounds as ApproximateBounds, ApproximateGradient as ApproximateGradient
 from .function import GenericTypeParameter as GenericTypeParameter, foreign_function as foreign_function, ForeignFunction as ForeignFunction
 from .predicate import Facts as Facts, foreign_predicate as foreign_predicate, ForeignPredicate as ForeignPredicate
 from .value_types import *  # noqa: F403

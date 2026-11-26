@@ -56,7 +56,7 @@ impl<'a, Prov: Provenance> Dataflow<'a, Prov> for DynamicAggregationImplicitGrou
       let group = std::iter::once(first)
         .chain(std::iter::from_fn(|| rows.next_if(|(next_key, _)| next_key == &key)).map(|(_, row)| row))
         .collect();
-      let aggregates = self.agg.aggregate(self.ctx, self.runtime, group);
+      let aggregates = self.agg.aggregate_implicit_group(self.ctx, self.runtime, group);
       result.extend(
         aggregates
           .into_iter()

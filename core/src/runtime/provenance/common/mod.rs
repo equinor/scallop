@@ -1,5 +1,6 @@
 mod as_boolean_formula;
 mod boolean_formula;
+mod categorical_wmc;
 mod chosen_elements;
 mod clause;
 mod cnf_dnf_context;
@@ -21,6 +22,7 @@ mod wmc;
 
 pub use as_boolean_formula::*;
 pub use boolean_formula::{BooleanFormula, Semiring};
+pub use categorical_wmc::{CategoricalError, CategoricalGroup, CategoricalModel, ProbabilityWeight};
 pub use chosen_elements::*;
 pub use clause::*;
 pub use cnf_dnf_context::*;
@@ -38,4 +40,5 @@ pub use output_diff_prob::*;
 pub use output_diff_prob_with_proofs::*;
 pub use real::*;
 pub use top_k_aggregation::*;
-pub use wmc::{DefaultWmcBackend, WmcBackend};
+pub use wmc::{count, DefaultWmcBackend, IndependentFacts, WmcBackend, WmcModel};
+pub(crate) use wmc::{with_prepared_events, PreparedWmc};

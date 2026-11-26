@@ -4,6 +4,7 @@ use crate::common::expr::*;
 use crate::common::tuple::*;
 use crate::common::tuple_type::*;
 use crate::common::value::*;
+use crate::compiler::ram::RuleChoice;
 
 use super::*;
 
@@ -195,7 +196,17 @@ impl<'a, Prov: Provenance> DynamicDataflow<'a, Prov> {
   }
 
   pub fn dynamic_exclusion(self, other: Self, ctx: &'a Prov, runtime: &'a RuntimeEnvironment) -> Self {
-    Self::new(DynamicExclusionDataflow::new(self, other, ctx, runtime))
+    self.dynamic_exclusion_with_rule_choice(other, ctx, runtime, None)
+  }
+
+  pub(crate) fn dynamic_exclusion_with_rule_choice(
+    self,
+    other: Self,
+    ctx: &'a Prov,
+    runtime: &'a RuntimeEnvironment,
+    choice: Option<&'a RuleChoice>,
+  ) -> Self {
+    Self::new(DynamicExclusionDataflow::new(self, other, ctx, runtime).with_rule_choice(choice))
   }
 }
 

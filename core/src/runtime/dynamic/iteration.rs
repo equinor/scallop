@@ -3,6 +3,7 @@ use std::collections::*;
 use crate::compiler::ram;
 use crate::runtime::database::*;
 use crate::runtime::env::*;
+use crate::runtime::error::{check_interruption, RuntimeError};
 use crate::runtime::monitor::*;
 use crate::runtime::provenance::*;
 
@@ -98,7 +99,9 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
   /// Run the main iteration, which iterates until a stopping criteria (provided in the runtime environment)
   /// is reached.
   pub fn run(&'a mut self, ctx: &Prov, runtime: &RuntimeEnvironment) -> HashMap<String, DynamicCollection<Prov>> {
-    self.run_inner::<()>(ctx, runtime, None)
+    self
+      .run_checked::<()>(ctx, runtime, None, None)
+      .expect("unchecked iteration cannot be interrupted")
   }
 
   pub fn run_with_monitor<M: Monitor<Prov>>(
@@ -107,23 +110,31 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
     runtime: &RuntimeEnvironment,
     m: &M,
   ) -> HashMap<String, DynamicCollection<Prov>> {
-    self.run_inner(ctx, runtime, Some(m))
+    self
+      .run_checked(ctx, runtime, Some(m), None)
+      .expect("unchecked iteration cannot be interrupted")
   }
 
-  fn run_inner<M: Monitor<Prov>>(
+  pub(crate) fn run_checked<M: Monitor<Prov>>(
     &'a mut self,
     ctx: &Prov,
     runtime: &RuntimeEnvironment,
     monitor: Option<&M>,
-  ) -> HashMap<String, DynamicCollection<Prov>> {
+    interrupted: Option<&dyn Fn() -> bool>,
+  ) -> Result<HashMap<String, DynamicCollection<Prov>>, RuntimeError> {
     // Iterate until fixpoint
-    while self.need_to_iterate(ctx, runtime, monitor) {
+    loop {
+      check_interruption(interrupted)?;
+      if !self.need_to_iterate(ctx, runtime, monitor) {
+        break;
+      }
       if let Some(m) = monitor {
         m.observe_stratum_iteration(self.iter_num);
       }
 
       // Perform updates
       for update in &self.updates {
+        check_interruption(interrupted)?;
         if monitor.is_some() {
           println!("    [Iteration #{}: Updating {}...]", self.iter_num, update.target);
         }
@@ -143,10 +154,11 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
     // Generate result
     let mut result = HashMap::new();
     for (name, metadata) in &self.output_relations {
+      check_interruption(interrupted)?;
       let col = self.dynamic_relations.remove(name).unwrap().complete(ctx);
       result.insert(name.clone(), metadata.store_sorted(col, ctx));
     }
-    result
+    Ok(result)
   }
 
   /// Move the dynamic entities that are temporarily stored in the runtime into the actual relations.
@@ -342,11 +354,9 @@ impl<'a, Prov: Provenance> DynamicIteration<'a, Prov> {
           .foreign_predicate_join(p.clone(), a.clone(), ctx, env)
       }
       ram::Dataflow::OverwriteOne(d) => self.build_dynamic_dataflow(env, ctx, d).overwrite_one(ctx),
-      ram::Dataflow::Exclusion(d1, d2) => {
-        self
-          .build_dynamic_dataflow(env, ctx, d1)
-          .dynamic_exclusion(self.build_dynamic_dataflow(env, ctx, d2), ctx, env)
-      }
+      ram::Dataflow::Exclusion(d1, d2, choice) => self
+        .build_dynamic_dataflow(env, ctx, d1)
+        .dynamic_exclusion_with_rule_choice(self.build_dynamic_dataflow(env, ctx, d2), ctx, env, choice.as_ref()),
       ram::Dataflow::Sorted(d) => self.build_dynamic_dataflow(env, ctx, d).sorted(),
       ram::Dataflow::Filter(d, e) => {
         let internal_filter = env
@@ -440,4 +450,43 @@ impl<'a, Prov: Provenance> Default for DynamicIteration<'a, Prov> {
 struct DynamicUpdate<'a, Prov: Provenance> {
   target: &'a DynamicRelation<Prov>,
   dataflow: DynamicDataflow<'a, Prov>,
+}
+
+#[cfg(test)]
+mod tests {
+  use std::cell::Cell;
+
+  use super::*;
+  use crate::common::tuple::Tuple;
+  use crate::runtime::provenance::unit::UnitProvenance;
+
+  #[derive(Clone)]
+  struct InterruptOnIteration(Cell<bool>);
+
+  impl Monitor<UnitProvenance> for InterruptOnIteration {
+    fn name(&self) -> &'static str {
+      "interrupt-on-iteration"
+    }
+
+    fn observe_stratum_iteration(&self, _: usize) {
+      self.0.set(true);
+    }
+  }
+
+  #[test]
+  fn interruption_during_iteration_returns_no_partial_relations() {
+    let mut iteration = DynamicIteration::new();
+    iteration.create_dynamic_relation("answer");
+    iteration.add_update_dataflow("answer", ram::Dataflow::UntaggedVec(vec![Tuple::empty()]));
+    iteration.add_output_relation_with_default_storage("answer");
+    let monitor = InterruptOnIteration(Cell::new(false));
+    let result = iteration.run_checked(
+      &UnitProvenance,
+      &RuntimeEnvironment::default(),
+      Some(&monitor),
+      Some(&|| monitor.0.get()),
+    );
+    assert!(monitor.0.get());
+    assert!(matches!(result, Err(RuntimeError::Interrupted)));
+  }
 }

@@ -7,8 +7,38 @@ mod rsdd_backend;
 
 #[cfg(not(target_family = "wasm"))]
 use oxidd_backend as default_backend;
+
+/// A probability model over the fact IDs used by an event.
+pub trait WmcModel<S: Semiring> {
+  fn count(&self, event: &BooleanFormula, algebra: &S, backend: &impl WmcBackend) -> S::Element;
+}
+
+/// Count an event under a probability model, using the given numeric algebra.
+pub fn count<S: Semiring>(
+  event: &BooleanFormula,
+  model: &impl WmcModel<S>,
+  algebra: &S,
+  backend: &impl WmcBackend,
+) -> S::Element {
+  model.count(event, algebra, backend)
+}
+
+/// Independent Bernoulli facts, indexed by their original fact IDs.
+pub struct IndependentFacts<W>(pub W);
+
+impl<S, W> WmcModel<S> for IndependentFacts<W>
+where
+  S: Semiring,
+  W: Fn(&usize) -> S::Element,
+{
+  fn count(&self, event: &BooleanFormula, algebra: &S, backend: &impl WmcBackend) -> S::Element {
+    backend.wmc(event, algebra, &self.0)
+  }
+}
 #[cfg(target_family = "wasm")]
 use rsdd_backend as default_backend;
+
+pub(crate) use default_backend::{with_prepared_events, PreparedWmc};
 
 /// Adapter for a weighted model counting engine. No decision-diagram types are shared with Scallop.
 ///
