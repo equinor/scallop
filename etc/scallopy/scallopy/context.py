@@ -1,4 +1,5 @@
 from __future__ import annotations
+from sys import maxsize
 from typing import Any, Dict, Generic, Iterator, List, Literal, Mapping, Optional, Sequence, Tuple, TypeVar, Union, TYPE_CHECKING, cast, overload
 from copy import deepcopy
 
@@ -8,7 +9,7 @@ from . import torch_importer
 # Import internals
 from .scallopy import InternalScallopContext
 from .collection import Row, ScallopCollection
-from .modes import ProvenanceMode, _Fact
+from .modes import DifferentiableBounds, GradientInterval, ProbabilityInterval, ProvenanceMode, _Fact, _autograd_probability
 from .provenance import ScallopProvenance, DiffAddMultProb2Semiring, DiffNandMultProb2Semiring, DiffMaxMultProb2Semiring
 from .input_output import CSVFileOptions
 from .input_mapping import InputMapping
@@ -20,11 +21,26 @@ from .stdlib import STDLIB
 
 if TYPE_CHECKING:
   from .forward import InternalScallopForwardFunction, _OutputMapping
+  from .scallopy import InternalBoundsSession, _BoundsResult
+  from .torch_importer import Tensor
 
 _FactT = TypeVar("_FactT")
 _ValueT = TypeVar("_ValueT")
 _ModeFactT = TypeVar("_ModeFactT")
 _ModeValueT = TypeVar("_ModeValueT")
+_GroundQuery = Tuple[str, Tuple[Any, ...]]
+_BatchInputs = Mapping[str, Sequence[Union[Tuple[List[Any], Optional[List[List[int]]]], List[Any]]]]
+
+class BoundsSession:
+  """A resumable ground probability query on a fixed input snapshot."""
+
+  def __init__(self, session: InternalBoundsSession, query: Tuple[Any, ...]):
+    self._session = session
+    self._query = query
+
+  def advance(self, *, max_facts: int, timeout: Optional[float] = None) -> Row[ProbabilityInterval]:
+    """Refine up to a total fact budget and optional timeout in seconds."""
+    return Row(self._query, ProbabilityInterval(*self._session.advance(max_facts, timeout)))
 
 
 # Main context
@@ -302,6 +318,188 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     ```
     """
     self._internal.run()
+
+  def evaluate_bounds(
+    self,
+    relation: str,
+    tuple: Tuple[Any, ...],
+    *,
+    tolerance: float = 0.01,
+    max_facts: int = 32,
+    normalize_disjunctions: bool = False,
+    fact_order: Literal["input", "weight", "required", "lookahead"] = "input",
+    checkpoint_schedule: Literal["doubling", "adaptive"] = "doubling",
+  ) -> Row[ProbabilityInterval]:
+    """Evaluate one ground query in an anytime bounds context.
+
+    Set normalize_disjunctions to make input groups exhaustive by normalizing
+    each group's weights. Otherwise leftover mass means no outcome occurs.
+    In positive queries over independent facts, fact_order can prioritize
+    higher weights, facts required by every proof, or a bounded lookahead.
+    The adaptive checkpoint schedule can advance faster when bounds stall.
+    """
+    interval, _, _, _ = self._internal.evaluate_bounds(
+      relation, tuple, tolerance, max_facts, normalize_disjunctions, fact_order, checkpoint_schedule,
+    )
+    return Row(tuple, ProbabilityInterval(*interval))
+
+  def start_bounds(
+    self,
+    relation: str,
+    query: Tuple[Any, ...],
+    *,
+    tolerance: float = 0.01,
+    normalize_disjunctions: bool = False,
+    fact_order: Literal["input", "weight", "required", "lookahead"] = "input",
+    checkpoint_schedule: Literal["doubling", "adaptive"] = "doubling",
+  ) -> BoundsSession:
+    """Snapshot the query, its program, and input weights for later refinement."""
+    session = self._internal.start_bounds(
+      relation, query, tolerance, normalize_disjunctions, fact_order, checkpoint_schedule,
+    )
+    return BoundsSession(session, query)
+
+  def evaluate_bounds_with_gradients(
+    self,
+    relation: str,
+    query: Tuple[Any, ...],
+    *,
+    max_facts: int = maxsize,
+    normalize_disjunctions: bool = False,
+    fact_order: Literal["input", "weight", "required", "lookahead"] = "input",
+    second_order: bool = False,
+    gradient_tolerances: Optional[Sequence[Tuple[Tensor, float]]] = None,
+    probability_tolerance: Optional[float] = None,
+  ) -> Row[DifferentiableBounds]:
+    """Bound a ground query and its partials for fact weights that require gradients.
+
+    With normalize_disjunctions, the partials are with respect to the supplied
+    weights before group normalization. Set second_order to enable double
+    backward for a resolved query. Supply (weight tensor, width) pairs in
+    gradient_tolerances to stop when each selected partial meets its target,
+    and optionally require a probability interval width as well.
+    """
+    targets = None
+    if gradient_tolerances is not None or probability_tolerance is not None:
+      targets = [] if gradient_tolerances is None else list(gradient_tolerances)
+    result = self._internal.evaluate_bounds(
+      relation, query, probability_tolerance, max_facts, normalize_disjunctions, fact_order,
+      second_order=second_order, gradient_targets=targets,
+    )
+    return Row(query, self._differentiable_bounds(result))
+
+  def evaluate_relation_bounds(
+    self,
+    relation: str,
+    *,
+    tolerance: float = 0.01,
+    max_facts: int = 32,
+    normalize_disjunctions: bool = False,
+    fact_order: Literal["input", "weight"] = "input",
+    checkpoint_schedule: Literal["doubling", "adaptive"] = "doubling",
+  ) -> List[Row[ProbabilityInterval]]:
+    """Bound every tuple in the relation using a shared fact budget.
+
+    Tuples with a zero upper probability are omitted. An unresolved row may
+    still have zero true probability. Tolerance applies to every returned row.
+    """
+    rows = self._internal.evaluate_relation_bounds(
+      relation, tolerance, max_facts, normalize_disjunctions, fact_order, checkpoint_schedule,
+    )
+    return [Row(query, ProbabilityInterval(*interval)) for query, interval in rows]
+
+  def evaluate_relation_bounds_with_gradients(
+    self,
+    relation: str,
+    *,
+    max_facts: int = maxsize,
+    normalize_disjunctions: bool = False,
+    fact_order: Literal["input", "weight"] = "input",
+  ) -> List[Row[DifferentiableBounds]]:
+    """Bound every row and its fact-weight partials at one shared fact budget.
+
+    Rows may be retained at zero probability when a derivative can be nonzero.
+    """
+    rows = self._internal.evaluate_relation_bounds_with_gradients(
+      relation, max_facts, normalize_disjunctions, fact_order,
+    )
+    return [Row(query, self._differentiable_bounds(result)) for query, result in rows]
+
+  def evaluate_bounds_batch(
+    self,
+    queries: Sequence[_GroundQuery],
+    *,
+    inputs: Optional[_BatchInputs] = None,
+    tolerance: float = 0.01,
+    max_facts: int = 32,
+    normalize_disjunctions: bool = False,
+    fact_order: Literal["input", "weight", "required", "lookahead"] = "input",
+    checkpoint_schedule: Literal["doubling", "adaptive"] = "doubling",
+  ) -> List[Row[ProbabilityInterval]]:
+    """Evaluate ground queries in order, with independent per-query budgets.
+
+    Each input relation can supply one fact list (or facts and disjunctions)
+    per query. Those facts are local to the example and supplement context facts.
+    """
+    queries = list(queries)
+    results = self._internal.evaluate_bounds_batch(
+      queries, self._prepare_bounds_batch_inputs(queries, inputs), tolerance, max_facts,
+      normalize_disjunctions, fact_order, checkpoint_schedule,
+    )
+    return [
+      Row(query, ProbabilityInterval(*interval))
+      for (_, query), (interval, _, _, _) in zip(queries, results, strict=True)
+    ]
+
+  def evaluate_bounds_batch_with_gradients(
+    self,
+    queries: Sequence[_GroundQuery],
+    *,
+    inputs: Optional[_BatchInputs] = None,
+    max_facts: int = maxsize,
+    normalize_disjunctions: bool = False,
+    fact_order: Literal["input", "weight", "required", "lookahead"] = "input",
+  ) -> List[Row[DifferentiableBounds]]:
+    """Return certified bounds and gradients for each ground query in order."""
+    queries = list(queries)
+    results = self._internal.evaluate_bounds_batch(
+      queries, self._prepare_bounds_batch_inputs(queries, inputs), None, max_facts,
+      normalize_disjunctions, fact_order, "doubling",
+    )
+    return [
+      Row(query, self._differentiable_bounds(result))
+      for (_, query), result in zip(queries, results, strict=True)
+    ]
+
+  def _prepare_bounds_batch_inputs(
+    self, queries: Sequence[_GroundQuery], inputs: Optional[_BatchInputs],
+  ) -> Dict[str, List[List[Tuple[Any, ...]]]]:
+    if inputs is None:
+      return {}
+    for relation, examples in inputs.items():
+      if len(examples) != len(queries):
+        raise ValueError(f"Expected {len(queries)} input examples for {relation!r}, got {len(examples)}")
+    return {
+      relation: [
+        self._prepare_facts(relation, *example) if isinstance(example, tuple) else self._prepare_facts(relation, example)
+        for example in examples
+      ]
+      for relation, examples in inputs.items()
+    }
+
+  @staticmethod
+  def _differentiable_bounds(result: _BoundsResult) -> DifferentiableBounds:
+    interval, exact, partials, hessian = result
+    gradients = tuple(GradientInterval(source, lower, upper) for source, lower, upper, _ in partials)
+    probability = None
+    if exact is not None:
+      weights = []
+      for source, _, _, derivative in partials:
+        if derivative is None:
+          raise RuntimeError("Missing derivative for the exact query probability")
+        weights.append((source, derivative))
+      probability = _autograd_probability(exact, weights, hessian)
+    return DifferentiableBounds(ProbabilityInterval(*interval), gradients, probability)
 
   def run_batch(
     self,
@@ -612,6 +810,22 @@ class ScallopContext(Generic[_FactT, _ValueT]):
       raise ValueError(f"Relation {relation!r} requires tagged facts; use add_facts instead")
     self.add_facts(relation, cast(Sequence[_FactT], elems), disjunctions)
 
+  @record_history
+  def add_joint_choice(
+    self, outcomes: Sequence[Tuple[Union[float, Tensor], Mapping[str, Sequence[_Fact]]]],
+  ) -> None:
+    """Add a categorical draw whose outcomes each assert a set of facts together."""
+    self._internal.add_joint_choice([
+      (weight, {
+        relation: [
+          (row,) if self._input_is_singleton.get(relation, False) and not isinstance(row, tuple) else row
+          for row in rows
+        ]
+        for relation, rows in relations.items()
+      })
+      for weight, relations in outcomes
+    ])
+
   def _prepare_facts(
     self,
     relation: str,
@@ -816,6 +1030,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     Check if the current context supports probabilistic reasoning
     """
     PROVENANCE_SUPPORTING_PROBABILITY = set([
+      "anytimebounds",
       "probproofs",
       "topkproofs",
       "samplekproofs",
@@ -831,6 +1046,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     """
     PROVENANCE_SUPPORTING_DISJUNCTIONS = set([
       "proofs",
+      "anytimebounds",
       "topkproofs",
       "topbottomkclauses",
       "diffsamplekproofs",
@@ -857,11 +1073,20 @@ class ScallopContext(Generic[_FactT, _ValueT]):
       if disjunctions and len(disjunctions) > 0:
         # Go through each disjunction
         for disjunction in disjunctions:
+          if self.provenance == "anytimebounds" and not disjunction:
+            raise ValueError("An exclusion group must contain at least one fact")
           # Assign a new disjunction id for this one
           disjunction_id = self._mutual_exclusion_counter.get_and_increment()
 
           # Go through the facts and update the tag to include disjunction id
           for fact_id in disjunction:
+            if self.provenance == "anytimebounds":
+              if not 0 <= fact_id < len(elems):
+                raise ValueError(f"Invalid exclusion fact index {fact_id}")
+              if fact_id in visited_fact_ids:
+                raise ValueError(f"Fact {fact_id} occurs more than once in exclusion groups")
+              if elems[fact_id][0] is None:
+                raise ValueError("An exclusion alternative must have a weight")
             visited_fact_ids.add(fact_id)
             if self.requires_tag():
               (tag, tup) = elems[fact_id]

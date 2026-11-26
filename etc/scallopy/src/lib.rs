@@ -26,6 +26,7 @@ fn scallopy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
   // Add classes
   m.add_class::<Context>()?;
+  m.add_class::<BoundsSession>()?;
   m.add_class::<Collection>()?;
   m.add_class::<CollectionIterator>()?;
 
