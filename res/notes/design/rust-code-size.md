@@ -17,7 +17,7 @@ The goal is to maintain less handwritten Rust, not to shrink binaries or minimiz
 
 Weighted model counting always compiles a diagram. The native backend uses OxiDD with a thread-local manager; each evaluation still has its own weights and memo table. WebAssembly uses RSDD because OxiDD's managers require native threads. Both backends map sparse fact IDs to dense labels and support owned semiring elements such as sparse gradients.
 
-Applications can implement `WmcBackend` and keep their diagram representation private. For exclusive groups, `wmc_with_disjunctions` counts the query OR any exactly-one violation; its complement counts assignments where the query is false and all groups satisfy exactly-one.
+Applications can implement `WmcBackend` and keep their diagram representation private.
 
 ### Historical rollout measurements
 

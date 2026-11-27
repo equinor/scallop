@@ -33,7 +33,7 @@ class InternalScallopContext:
     self,
     provenance: str = "unit",
     k: int = 3,
-    wmc_with_disjunctions: bool = False,
+    *,
     custom_provenance: Optional[ScallopProvenance] = None,
   ) -> None: ...
 
@@ -45,7 +45,6 @@ class InternalScallopContext:
     self,
     provenance: str,
     k: int,
-    wmc_with_disjunctions: bool,
   ) -> InternalScallopContext: ...
 
   def set_non_incremental(self) -> None: ...

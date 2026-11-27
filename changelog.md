@@ -1,5 +1,6 @@
 # Unreleased
 
+- Removed `wmc_with_disjunctions`, `legacy_disjunction_score`, and their CLI flags. The default proof scores and gradients are unchanged. For categorical probabilities, use `anytime_bounds`.
 - Scallop now executes programs only through the RAM interpreter. The `sclc` executable, `scallop!` Rust macro, and Scallopy's optional native JIT have been removed. Python callers should omit `jit=True`, `jit_name`, and `recompile` (`jit_recompile` on `ScallopForwardFunction`). The Rust extension, `ctx.compile()`, and parallel batch execution remain available.
 - Compiler diagnostics now show source spans in Rust-style snippets, including syntax errors from REPL and in-memory input. REPL snippets use a `REPL:<id>` header.
 
@@ -10,6 +11,7 @@
 
 Rust API migration:
 - The standalone `sdd` crate has been removed. To use your own decision diagram implementation, implement `scallop_core::runtime::provenance::WmcBackend` and pass it to the provenance's `new_with_wmc_backend` constructor. Custom provenance implementations can also use `AsBooleanFormula::wmc_using`. Existing provenance constructors select the default backend.
+- Drop the disjunction-scoring boolean from top-k proof and top/bottom-k clause provenance constructors, including `new_with_wmc_backend`. `AsBooleanFormula::wmc_with_disjunctions` and its backend-specific variant were removed.
 - Use `NodeLocation::report` or `report_warning` instead of supplying a caret color. Custom `Source` implementations can supply `diagnostic_name` and `first_line_number` instead of `line` and `line_name`.
 - `ForeignFunction::infer_return_type` overrides now take `&[Value]` instead of `&Vec<Value>`.
 - `FrontContext::analysis` is now an `Rc<Analysis>`. Read it through dereferencing and use `Rc::make_mut` to update it.

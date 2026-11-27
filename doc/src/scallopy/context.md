@@ -296,8 +296,6 @@ stop short of the next whole group. Gradient intervals are for the supplied
 weights: increasing a weight takes mass from the "none" outcome by default,
 or changes all normalized outcome probabilities when normalization is
 enabled. Using PyTorch weights derived from logits preserves the chain rule.
-These are categorical probabilities, not the legacy proof modes'
-`wmc_with_disjunctions` score.
 
 Use `add_joint_choice()` when one outcome should make several facts true
 together, possibly across relations:

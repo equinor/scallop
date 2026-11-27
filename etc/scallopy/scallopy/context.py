@@ -85,7 +85,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     provenance: str = "unit",
     custom_provenance: Optional[ScallopProvenance] = None,
     k: int = 3,
-    wmc_with_disjunctions: bool = False,
+    *,
     train_k: Optional[int] = None,
     test_k: Optional[int] = None,
     fork_from: Optional[ScallopContext[_FactT, _ValueT]] = None,
@@ -125,7 +125,6 @@ class ScallopContext(Generic[_FactT, _ValueT]):
       self._mutual_exclusion_counter = Counter()
       self._sample_facts = {}
       self._k = k
-      self._wmc_with_disjunctions = wmc_with_disjunctions
       self._train_k = train_k
       self._test_k = test_k
       self._history_actions: List[HistoryAction] = []
@@ -134,7 +133,6 @@ class ScallopContext(Generic[_FactT, _ValueT]):
         provenance=provenance,
         custom_provenance=custom_provenance,
         k=k,
-        wmc_with_disjunctions=wmc_with_disjunctions,
       )
 
       # Load stdlib
@@ -156,7 +154,6 @@ class ScallopContext(Generic[_FactT, _ValueT]):
       self._mutual_exclusion_counter = deepcopy(fork_from._mutual_exclusion_counter)
       self._sample_facts = deepcopy(fork_from._sample_facts)
       self._k = deepcopy(fork_from._k)
-      self._wmc_with_disjunctions = deepcopy(fork_from._wmc_with_disjunctions)
       self._train_k = deepcopy(fork_from._train_k)
       self._test_k = deepcopy(fork_from._test_k)
       self._history_actions = deepcopy(fork_from._history_actions)
@@ -177,7 +174,6 @@ class ScallopContext(Generic[_FactT, _ValueT]):
       provenance=mode._name,
       custom_provenance=mode._custom,
       k=mode._k,
-      wmc_with_disjunctions=mode._wmc_with_disjunctions,
       train_k=train_k,
       test_k=test_k,
       no_stdlib=no_stdlib,
@@ -196,6 +192,10 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     """
     Deserialize from pickle state
     """
+    if state.get("_wmc_with_disjunctions"):
+      raise ValueError("Legacy disjunction scoring was removed. Recreate this context without it.")
+    state.pop("_wmc_with_disjunctions", None)
+
     # Serializable part
     self.__dict__.update(state)
 
@@ -203,7 +203,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     self._history_actions: List[HistoryAction] = []
 
     # Internal scallop context
-    self._internal = InternalScallopContext(provenance=self.provenance, custom_provenance=self._custom_provenance, k=self._k, wmc_with_disjunctions=self._wmc_with_disjunctions)
+    self._internal = InternalScallopContext(provenance=self.provenance, custom_provenance=self._custom_provenance, k=self._k)
 
     # Restore from history actions
     for history_action in state["_history_actions"]:
@@ -215,7 +215,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     self,
     provenance: None = None,
     k: Optional[int] = None,
-    wmc_with_disjunctions: Optional[bool] = None,
+    *,
     monitors: Optional[List[str]] = None,
   ) -> ScallopContext[_FactT, _ValueT]: ...
 
@@ -224,7 +224,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     self,
     provenance: Optional[str],
     k: Optional[int] = None,
-    wmc_with_disjunctions: Optional[bool] = None,
+    *,
     monitors: Optional[List[str]] = None,
   ) -> ScallopContext[Any, Any]: ...
 
@@ -232,7 +232,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     self,
     provenance: Optional[str] = None,
     k: Optional[int] = None,
-    wmc_with_disjunctions: Optional[bool] = None,
+    *,
     monitors: Optional[List[str]] = None,
   ) -> ScallopContext[Any, Any]:
     """
@@ -259,13 +259,11 @@ class ScallopContext(Generic[_FactT, _ValueT]):
 
       # Clone internal context; this process may fail if the provenance is not compatible
       new_k = k if k is not None else self._k
-      new_wmc_with_disjunctions = wmc_with_disjunctions if wmc_with_disjunctions is not None else self._wmc_with_disjunctions
-      new_ctx._internal = new_ctx._internal.clone_with_new_provenance(provenance, new_k, new_wmc_with_disjunctions)
+      new_ctx._internal = new_ctx._internal.clone_with_new_provenance(provenance, new_k)
 
       # Update parameters related to provenance
       new_ctx.provenance = provenance
       new_ctx._k = new_k
-      new_ctx._wmc_with_disjunctions = new_wmc_with_disjunctions
 
     if monitors is not None:
       # Update parameters related to provenance

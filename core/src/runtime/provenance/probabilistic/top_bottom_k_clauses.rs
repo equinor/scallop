@@ -8,7 +8,6 @@ pub struct TopBottomKClausesProvenance<P: PointerFamily = RcFamily, W: WmcBacken
   pub k: usize,
   pub probs: P::Cell<Vec<f64>>,
   pub disjunctions: P::Cell<Disjunctions>,
-  pub wmc_with_disjunctions: bool,
   wmc_backend: W,
 }
 
@@ -18,25 +17,23 @@ impl<P: PointerFamily, W: WmcBackend> Clone for TopBottomKClausesProvenance<P, W
       k: self.k,
       probs: P::clone_cell(&self.probs),
       disjunctions: P::clone_cell(&self.disjunctions),
-      wmc_with_disjunctions: self.wmc_with_disjunctions,
       wmc_backend: self.wmc_backend.clone(),
     }
   }
 }
 
 impl<P: PointerFamily> TopBottomKClausesProvenance<P> {
-  pub fn new(k: usize, wmc_with_disjunctions: bool) -> Self {
-    Self::new_with_wmc_backend(k, wmc_with_disjunctions, DefaultWmcBackend)
+  pub fn new(k: usize) -> Self {
+    Self::new_with_wmc_backend(k, DefaultWmcBackend)
   }
 }
 
 impl<P: PointerFamily, W: WmcBackend> TopBottomKClausesProvenance<P, W> {
-  pub fn new_with_wmc_backend(k: usize, wmc_with_disjunctions: bool, wmc_backend: W) -> Self {
+  pub fn new_with_wmc_backend(k: usize, wmc_backend: W) -> Self {
     Self {
       k,
       probs: P::new_cell(Vec::new()),
       disjunctions: P::new_cell(Disjunctions::new()),
-      wmc_with_disjunctions,
       wmc_backend,
     }
   }
@@ -84,13 +81,7 @@ impl<P: PointerFamily, W: WmcBackend> Provenance for TopBottomKClausesProvenance
   fn recover_fn(&self, t: &Self::Tag) -> Self::OutputTag {
     let s = RealSemiring;
     let v = |i: &usize| -> f64 { self.fact_probability(i) };
-    if self.wmc_with_disjunctions {
-      P::get_cell(&self.disjunctions, |disj| {
-        t.wmc_with_disjunctions_using(&self.wmc_backend, &s, &v, disj)
-      })
-    } else {
-      t.wmc_using(&self.wmc_backend, &s, &v)
-    }
+    t.wmc_using(&self.wmc_backend, &s, &v)
   }
 
   fn discard(&self, t: &Self::Tag) -> bool {

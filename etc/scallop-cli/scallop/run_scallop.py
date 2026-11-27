@@ -21,7 +21,6 @@ def argument_parser(plugin_registry: scallopy.PluginRegistry):
   parser.add_argument("file", nargs="?", default=None, help="The file to execute")
   parser.add_argument("-p", "--provenance", type=str, default="unit", help="The provenance to pick")
   parser.add_argument("-k", "--top-k", default=3, type=int, help="The `k` to use when applying `top-k` related provenance")
-  parser.add_argument("--wmc-with-disjunctions", action="store_true", help="Whether to use disjunctions when performing weighted model counting (WMC)")
   parser.add_argument("-m", "--module", type=str, default=None, help="Load module in interactive mode")
   parser.add_argument("--iter-limit", type=int, default=100, help="Iteration limit")
   parser.add_argument("--debug-front", action="store_true", help="Dump Front IR")
@@ -45,7 +44,12 @@ def argument_parser(plugin_registry: scallopy.PluginRegistry):
 
 def cmd_args(plugin_registry: scallopy.PluginRegistry):
   parser = argument_parser(plugin_registry)
-  return parser.parse_known_args()
+  args, unknown_args = parser.parse_known_args()
+  for arg in unknown_args:
+    flag = arg.partition("=")[0]
+    if flag in ("--wmc-with-disjunctions", "--legacy-disjunction-score"):
+      parser.error(f"{flag} was removed; proof modes now always use their default scoring")
+  return args, unknown_args
 
 
 def print_relation(ctx: scallopy.ScallopContext, relation_name: str):
@@ -160,10 +164,7 @@ def main():
     plugin_registry.dump_loaded_plugins()
 
   # Create a scallopy context
-  ctx = scallopy.ScallopContext(
-    provenance=args.provenance,
-    k=args.top_k,
-    wmc_with_disjunctions=args.wmc_with_disjunctions)
+  ctx = scallopy.ScallopContext(provenance=args.provenance, k=args.top_k)
   setup_context(ctx, args)
 
   # Load the scallopy extension library
