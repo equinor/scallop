@@ -1,7 +1,7 @@
-from scallopy import ScallopContext
+from scallopy import ScallopContext, modes
 
 # Create new context
-ctx = ScallopContext(provenance = "minmaxprob")
+ctx = ScallopContext.from_mode(modes.min_max_prob)
 
 # Construct the program
 ctx.add_relation("edge", (int, int))
@@ -14,5 +14,6 @@ ctx.run()
 
 # Inspect the result
 paths = ctx.relation("path")
-for (p, (s, t)) in paths:
-  print(f"prob: {p}, elem: ({s}, {t})")
+for row in paths:
+  s, t = row.tuple
+  print(f"prob: {row.value}, elem: ({s}, {t})")

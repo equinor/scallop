@@ -30,4 +30,4 @@ ctx.add_rule("S($my_sum(a, b)) :- R(a, b)")
 ctx.run()
 
 # See the result, should be [(3,), (5,)] according to the facts we inserted
-print(list(ctx.relation("S")))
+print(list(ctx.relation_tuples("S")))

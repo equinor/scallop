@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from math import inf, isfinite, nextafter
 from typing import Any, Generic, Literal, TypeAlias, TypeVar
+from warnings import warn
 
 from . import torch_importer
 from .provenance import ScallopProvenance
@@ -144,6 +145,20 @@ class ProvenanceMode(Generic[_FactT, _ValueT]):
   _name: str
   _k: int = 3
   _custom: ScallopProvenance | None = field(default=None, kw_only=True)
+
+
+def from_name(
+  name: str, *, k: int = 3, custom_provenance: ScallopProvenance | None = None,
+) -> ProvenanceMode[Any, Any]:
+  """Select a mode by its stable identifier for CLI and configuration use."""
+  return ProvenanceMode(name, k, _custom=custom_provenance)
+
+
+def _warn_string_provenance() -> None:
+  warn(
+    "Passing a provenance string directly is deprecated; use scallopy.modes or scallopy.modes.from_name() for configuration.",
+    DeprecationWarning, stacklevel=3,
+  )
 
 
 unit = ProvenanceMode[_Fact, None]("unit")

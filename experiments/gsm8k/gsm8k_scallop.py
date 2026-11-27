@@ -36,7 +36,7 @@ def test_semantic_parser(range=range(N)):
             ctx.import_file(SCALLOP_FILE)
             ctx.add_facts("question", [(question,)])
             ctx.run()
-            res = list(ctx.relation("result"))
+            res = list(ctx.relation_tuples("result"))
             exact_score = 0
             margin_score = 0
             final_answer = None
@@ -56,8 +56,8 @@ def test_semantic_parser(range=range(N)):
                     "final_answer": final_answer,
                     "exact_score": exact_score,
                     "margin_score": margin_score,
-                    "parsed_expr": list(ctx.relation("parsed_expr")),
-                    "outputted_answers": list(ctx.relation("result")),
+                    "parsed_expr": list(ctx.relation_tuples("parsed_expr")),
+                    "outputted_answers": list(ctx.relation_tuples("result")),
                     "num_answers": len(res),
                 }
             ]

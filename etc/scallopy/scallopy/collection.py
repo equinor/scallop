@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Generic, Iterable, Iterator, List, Tuple, TypeVar
+from typing import Any, Generic, Iterable, Iterator, List, Tuple, TypeVar, cast
 
 from .scallopy import InternalScallopCollection
 
@@ -16,7 +16,7 @@ class Row(Generic[_ValueT]):
   value: _ValueT
 
 
-class ScallopCollection:
+class ScallopCollection(Generic[_ValueT]):
   def __init__(
     self,
     provenance: str,
@@ -25,22 +25,20 @@ class ScallopCollection:
     self.provenance = provenance
     self._internal = internal_collection
 
-  def __iter__(self) -> Iterator[Tuple[Any, ...]]:
-    if self.provenance in ("unit", "proofs"):
-      yield from self._internal
-    else:
-      yield from self._converted_tags(self._internal)
-
-  def _rows(self) -> Iterator[Row[Any]]:
+  def __iter__(self) -> Iterator[Row[_ValueT]]:
     if self.provenance == "unit":
-      for tup in self._internal:
-        yield Row(tup, None)
+      for tup in self.tuples():
+        yield Row(tup, cast(_ValueT, None))
     else:
       items = self._internal.iter_tagged() if self.provenance == "proofs" else self._internal
       for value, tup in self._converted_tags(items):
         if tup is None:
           raise TypeError("Could not convert a Scallop result tuple to Python")
         yield Row(tup, value)
+
+  def tuples(self) -> Iterator[Tuple[Any, ...]]:
+    """Iterate through tuples without converting their provenance values."""
+    return self._internal.iter_tuples()
 
   def _converted_tags(self, items: Iterable[Tuple[Any, ...]]) -> Iterator[Tuple[Any, Tuple[Any, ...]]]:
     if self.provenance == "diffminmaxprob":

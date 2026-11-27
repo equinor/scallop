@@ -4,19 +4,32 @@ import scallopy
 import torch
 
 class TestForward(unittest.TestCase):
-  def test_removed_jit_options_explain_the_migration(self):
-    ctx = scallopy.Context(provenance="diffminmaxprob")
-    message = "Native JIT was removed.*RAM interpreter"
-    with self.assertRaisesRegex(ValueError, message):
-      ctx.forward_function(jit=True)
-    with self.assertRaisesRegex(ValueError, message):
-      ctx.forward_function(jit_name="saved")
-    with self.assertRaisesRegex(ValueError, message):
-      ctx.forward_function(recompile=True)
-    with self.assertRaisesRegex(ValueError, message):
-      scallopy.Module(jit=True)
-    with self.assertRaisesRegex(ValueError, message):
-      scallopy.Module(jit_recompile=True)
+  def test_removed_jit_options_are_not_accepted_even_when_disabled(self):
+    ctx = scallopy.Context.from_mode(scallopy.modes.diff_min_max_prob)
+    for constructor, options in (
+      (ctx.forward_function, {"jit": False, "jit_name": "", "recompile": False}),
+      (scallopy.Module, {"jit": False, "jit_name": "", "jit_recompile": False}),
+    ):
+      for name, value in options.items():
+        with self.subTest(name=name):
+          with self.assertRaisesRegex(TypeError, name):
+            constructor(**{name: value})
+    with self.assertRaises(TypeError):
+      ctx.forward_function(None, None, None, "parallel", False, False)
+
+  def test_module_accepts_typed_provenance_with_options(self):
+    module = scallopy.Module(
+      provenance=scallopy.modes.diff_top_k_proofs(k=1),
+      program="type a(i32), b(i32)\nrel answer(x) = a(x) or b(x)",
+      output_relation="answer",
+      output_mapping=[1],
+    )
+    a = torch.tensor([[0.75]], requires_grad=True)
+    b = torch.tensor([[0.5]], requires_grad=True)
+    # Both inputs have the same tuple, so k=1 keeps only the stronger proof.
+    result = module(a=[[(a[0, 0], (1,))]], b=[[(b[0, 0], (1,))]])
+    torch.testing.assert_close(result, torch.tensor([[0.75]]))
+    self.assertEqual(torch.autograd.grad(result.sum(), a)[0].item(), 1.0)
 
   def test_digit_sum_values_and_gradients_across_dispatch_modes(self):
     ctx = scallopy.Context(provenance="diffminmaxprob")

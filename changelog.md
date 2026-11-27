@@ -1,7 +1,8 @@
 # Unreleased
 
+- Scallop now executes programs only through the RAM interpreter. The `sclc` executable, `scallop!` Rust macro, and Scallopy's optional native JIT have been removed. Remove `jit`, `jit_name`, `recompile`, and `jit_recompile` from Python callers, even if set to their old defaults. The Rust extension, `ctx.compile()`, and parallel batch execution remain available.
+- Scallopy relation and batch results now iterate over named `Row(tuple, value)` records for every provenance. Use `ctx.relation_tuples(name)` or `collection.tuples()` for bare tuples. Direct Python provenance strings are deprecated; use `scallopy.modes`.
 - Removed `wmc_with_disjunctions`, `legacy_disjunction_score`, and their CLI flags. The default proof scores and gradients are unchanged. For categorical probabilities, use `anytime_bounds`.
-- Scallop now executes programs only through the RAM interpreter. The `sclc` executable, `scallop!` Rust macro, and Scallopy's optional native JIT have been removed. Python callers should omit `jit=True`, `jit_name`, and `recompile` (`jit_recompile` on `ScallopForwardFunction`). The Rust extension, `ctx.compile()`, and parallel batch execution remain available.
 - Compiler diagnostics now show source spans in Rust-style snippets, including syntax errors from REPL and in-memory input. REPL snippets use a `REPL:<id>` header.
 
 - Weighted model counting always compiles a decision diagram. It uses OxiDD on native targets and RSDD on WebAssembly, where OxiDD cannot start its manager threads. Probabilities and gradients can differ in their last floating-point digits because the diagram changes the order of arithmetic.

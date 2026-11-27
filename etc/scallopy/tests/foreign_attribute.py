@@ -57,7 +57,7 @@ class TestForeignAttribute(unittest.TestCase):
       rel R($compute(x)) = S(x)
     """)
     ctx.run()
-    self.assertEqual(list(ctx.relation("R")), [(4,)])
+    self.assertEqual(list(ctx.relation_tuples("R")), [(4,)])
 
   @unittest.expectedFailure
   def test_register_function_type_check_fail_1(self):
@@ -74,7 +74,7 @@ class TestForeignAttribute(unittest.TestCase):
       rel R($compute(x)) = S(x)
     """)
     ctx.run()
-    self.assertEqual(list(ctx.relation("R")), [(4,)])
+    self.assertEqual(list(ctx.relation_tuples("R")), [(4,)])
 
   @unittest.expectedFailure
   def test_register_function_fail_2(self):
@@ -101,7 +101,7 @@ class TestForeignAttribute(unittest.TestCase):
       rel R(w) = S(x, y, z) and join3(x, y, z, w)
     """)
     ctx.run()
-    self.assertEqual(list(ctx.relation("R")), [("x,y,z",)])
+    self.assertEqual(list(ctx.relation_tuples("R")), [("x,y,z",)])
 
   def test_register_predicate_2(self):
     ctx = scallopy.ScallopContext()
@@ -112,7 +112,7 @@ class TestForeignAttribute(unittest.TestCase):
       rel R(w) = S(x, y, z) and join3(x, y, z, w)
     """)
     ctx.run()
-    self.assertEqual(list(ctx.relation("R")), [("x-y-z",)])
+    self.assertEqual(list(ctx.relation_tuples("R")), [("x-y-z",)])
 
   def test_register_predicate_3(self):
     ctx = scallopy.ScallopContext()
@@ -123,7 +123,7 @@ class TestForeignAttribute(unittest.TestCase):
       rel R(w) = S(x, y, z) and join3(x, y, z, w)
     """)
     ctx.run()
-    self.assertEqual(list(ctx.relation("R")), [("x-y-z",)])
+    self.assertEqual(list(ctx.relation_tuples("R")), [("x-y-z",)])
 
   @unittest.expectedFailure
   def test_register_predicate_fail_1(self):

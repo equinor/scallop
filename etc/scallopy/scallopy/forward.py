@@ -2,6 +2,7 @@ from typing import Dict, Union, List, Optional, Tuple, Any, TypeAlias
 import logging
 
 from .context import ScallopContext
+from .modes import ProvenanceMode, from_name, _warn_string_provenance
 from .provenance import ScallopProvenance
 from .utils import _mapping_tuple, get_backward_proxy
 
@@ -18,33 +19,39 @@ class ScallopForwardFunction(torch_importer.Module):
     relations: Optional[List[Tuple[str, Tuple]]] = None,
     rules: Optional[List[str]] = None,
     facts: Optional[Dict[str, List]] = None,
-    provenance: str = "difftopkproofs",
+    provenance: Union[str, ProvenanceMode[Any, Any], None] = None,
     custom_provenance: Optional[ScallopProvenance] = None,
     non_probabilistic: Optional[List[str]] = None,
     input_mappings: Optional[Dict[str, Any]] = None,
     output_relation: Optional[str] = None,
     output_mapping: Optional[_OutputMapping] = None,
     output_mappings: Optional[Dict[str, Optional[_OutputMapping]]] = None,
-    k: int = 3,
+    k: Optional[int] = None,
     train_k: Optional[int] = None,
     test_k: Optional[int] = None,
     *,
     early_discard: Optional[bool] = None,
     iter_limit: Optional[int] = None,
     retain_topk: Optional[Dict[str, int]] = None,
-    jit: bool = False,
-    jit_name: str = "",
-    jit_recompile: bool = False,
     dispatch: str = "parallel",
     sparse_jacobian: bool = False,
     monitors: List[str] = [],
   ):
     super(ScallopForwardFunction, self).__init__()
 
-    # Setup the context
+    if isinstance(provenance, ProvenanceMode):
+      if custom_provenance is not None:
+        raise TypeError("Specify custom provenance on the provenance mode")
+    else:
+      if provenance is not None:
+        _warn_string_provenance()
+      provenance = from_name(
+        "difftopkproofs" if provenance is None else provenance,
+        custom_provenance=custom_provenance,
+      )
+
     self.ctx = ScallopContext(
       provenance=provenance,
-      custom_provenance=custom_provenance,
       k=k,
       train_k=train_k,
       test_k=test_k,
@@ -102,9 +109,6 @@ class ScallopForwardFunction(torch_importer.Module):
       output_mapping=output_mapping,
       output_mappings=output_mappings,
       dispatch=dispatch,
-      jit=jit,
-      jit_name=jit_name,
-      recompile=jit_recompile,
       sparse_jacobian=sparse_jacobian,
     )
 

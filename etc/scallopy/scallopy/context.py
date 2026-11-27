@@ -9,7 +9,10 @@ from . import torch_importer
 # Import internals
 from .scallopy import InternalScallopContext
 from .collection import Row, ScallopCollection
-from .modes import DifferentiableBounds, GradientInterval, ProbabilityInterval, ProvenanceMode, _Fact, _autograd_probability
+from .modes import (
+  DifferentiableBounds, GradientInterval, ProbabilityInterval, ProvenanceMode,
+  _Fact, _autograd_probability, _warn_string_provenance,
+)
 from .provenance import ScallopProvenance, DiffAddMultProb2Semiring, DiffNandMultProb2Semiring, DiffMaxMultProb2Semiring
 from .input_output import CSVFileOptions
 from .input_mapping import InputMapping
@@ -54,27 +57,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
   ctx = ScallopContext()
   ```
 
-  :param provenance: The type of provenance used during execution.
-  Default to "unit", and can be any value from the following
-  - `"unit"`, no provenance information associated
-  - `"proofs"`, collect proofs
-  - `"tropical"`, positive integer with +inf; min-add semiring
-  - `"minmaxprob"`, min-max probability
-  - `"addmultprob"`, add-mult probability
-  - `"topkproofs"`, top-k proofs. It is possible to supply a `k` value for this
-    provenance
-  - `"diffminmaxprob"`, differentiable min-max probability
-  - `"diffandmultprob"`, differentiable add-mult probability
-  - `"diffandmultprob2"`, differentiable add-mult probability, implemented in Python
-  - `"diffnandmultprob2"`, differentiable nand-mult probability, implemented in Python
-  - `"diffmaxmultprob2"`, differentiable max-mult probability, implemented in Python
-  - `"diffsamplekproofs"`, differentiable unbiased sampling of k proofs. It is
-    possible to supply a `k` value for this provenance
-  - `"difftopkproofs"`, differentiable top-k proofs. It is possible to supply a
-    `k` value for this provenance
-  - `"difftopbottomkclauses"`, differentiable top/bottom-k clauses.
-    This provenance supports full negation and aggregation. It is possible to supply
-    a `k` value for this provenance
+  :param provenance: A selection from `scallopy.modes`. The default is `modes.unit`.
 
   :param k:
   :param train_k:
@@ -82,9 +65,9 @@ class ScallopContext(Generic[_FactT, _ValueT]):
   """
   def __init__(
     self,
-    provenance: str = "unit",
+    provenance: Union[str, ProvenanceMode[_FactT, _ValueT], None] = None,
     custom_provenance: Optional[ScallopProvenance] = None,
-    k: int = 3,
+    k: Optional[int] = None,
     *,
     train_k: Optional[int] = None,
     test_k: Optional[int] = None,
@@ -96,7 +79,17 @@ class ScallopContext(Generic[_FactT, _ValueT]):
 
     # Check if we are creating a forked context or not
     if fork_from is None:
-      # Validify provenance; differentiable needs PyTorch
+      if isinstance(provenance, ProvenanceMode):
+        if custom_provenance is not None:
+          raise TypeError("Specify custom provenance on the provenance mode")
+        custom_provenance = provenance._custom
+        k = provenance._k if k is None else k
+        provenance = provenance._name
+      elif provenance is None:
+        provenance = "unit"
+      else:
+        _warn_string_provenance()
+      k = 3 if k is None else k
       if "diff" in provenance and not torch_importer.has_pytorch():
         raise Exception("Attempting to use differentiable provenance but with no PyTorch imported")
 
@@ -112,8 +105,6 @@ class ScallopContext(Generic[_FactT, _ValueT]):
         custom_provenance = DiffMaxMultProb2Semiring()
       elif custom_provenance is not None:
         provenance = "custom"
-      else:
-        pass
 
       # Setup
       self.provenance = provenance
@@ -171,9 +162,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
   ) -> ScallopContext[_ModeFactT, _ModeValueT]:
     """Create a context whose fact and result types are inferred from the mode."""
     return ScallopContext(
-      provenance=mode._name,
-      custom_provenance=mode._custom,
-      k=mode._k,
+      provenance=mode,
       train_k=train_k,
       test_k=test_k,
       no_stdlib=no_stdlib,
@@ -214,7 +203,6 @@ class ScallopContext(Generic[_FactT, _ValueT]):
   def clone(
     self,
     provenance: None = None,
-    k: Optional[int] = None,
     *,
     monitors: Optional[List[str]] = None,
   ) -> ScallopContext[_FactT, _ValueT]: ...
@@ -222,7 +210,15 @@ class ScallopContext(Generic[_FactT, _ValueT]):
   @overload
   def clone(
     self,
-    provenance: Optional[str],
+    provenance: ProvenanceMode[_ModeFactT, _ModeValueT],
+    *,
+    monitors: Optional[List[str]] = None,
+  ) -> ScallopContext[_ModeFactT, _ModeValueT]: ...
+
+  @overload
+  def clone(
+    self,
+    provenance: str,
     k: Optional[int] = None,
     *,
     monitors: Optional[List[str]] = None,
@@ -230,7 +226,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
 
   def clone(
     self,
-    provenance: Optional[str] = None,
+    provenance: Union[str, ProvenanceMode[Any, Any], None] = None,
     k: Optional[int] = None,
     *,
     monitors: Optional[List[str]] = None,
@@ -255,13 +251,23 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     # Create a new context
     new_ctx = ScallopContext(fork_from=self)
 
-    if provenance is not None:
-
-      # Clone internal context; this process may fail if the provenance is not compatible
+    if isinstance(provenance, ProvenanceMode):
+      if k is not None:
+        raise TypeError("Configure k on the provenance mode")
+      new_k = provenance._k
+      provenance = provenance._name
+    elif provenance is not None:
+      _warn_string_provenance()
       new_k = k if k is not None else self._k
-      new_ctx._internal = new_ctx._internal.clone_with_new_provenance(provenance, new_k)
+    else:
+      if k is not None:
+        raise TypeError("Specify a provenance to change k when cloning")
+      new_k = self._k
 
-      # Update parameters related to provenance
+    if provenance is not None:
+      if "diff" in provenance and not torch_importer.has_pytorch():
+        raise ValueError("Attempting to use differentiable provenance but with no PyTorch imported")
+      new_ctx._internal = new_ctx._internal.clone_with_new_provenance(provenance, new_k)
       new_ctx.provenance = provenance
       new_ctx._k = new_k
 
@@ -504,9 +510,9 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     inputs: Mapping[str, Sequence[Union[Tuple[List[Any], Optional[List[List[int]]]], List[Any]]]],
     output_relation: Union[str, List[str]],
     parallel: bool = False,
-  ) -> List[ScallopCollection]:
+  ) -> List[ScallopCollection[_ValueT]]:
     """
-    Run the program in batch mode, returning one collection per task.
+    Run the program in batch mode, returning one collection of named rows per task.
     Pass one output relation for all tasks or one name per task.
     """
     if not inputs:
@@ -582,9 +588,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     output_mappings: Optional[Dict[str, Optional[_OutputMapping]]] = None,
     dispatch: str = "parallel",
     debug_provenance: bool = False,
-    jit: bool = False,
-    jit_name: str = "",
-    recompile: bool = False,
+    *,
     sparse_jacobian: bool = False,
   ) -> InternalScallopForwardFunction:
     """
@@ -601,12 +605,6 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     :param output_mapping: the output mapping for vectorization
     If not specified (i.e. None), will run until fixpoint
     """
-    if jit or jit_name or recompile:
-      raise ValueError(
-        "Native JIT was removed. Remove jit, jit_name, and recompile (jit_recompile on "
-        "ScallopForwardFunction) to use the RAM interpreter."
-      )
-
     # Check PyTorch support
     if not torch_importer.has_pytorch():
       raise Exception("`forward_function` cannot be called when there is no PyTorch")
@@ -883,24 +881,18 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     """
     return self._internal.get_front_ir()
 
-  def relation(self, relation: str) -> ScallopCollection:
-    """
-    Inspect the (computed) relation in the context. Will return
-    a `ScallopCollection` which is iterable.
-
-    ``` python
-    for tuple in ctx.relation("edge"):
-      print(tuple)
-    ```
-
-    :param relation: the name of the relation
-    """
+  def relation(self, relation: str) -> ScallopCollection[_ValueT]:
+    """Return the computed relation as a collection of named rows."""
     int_col = self._internal.relation(relation)
     return ScallopCollection(self.provenance, int_col)
 
   def relation_rows(self, relation: str) -> Iterator[Row[_ValueT]]:
     """Iterate through computed tuples and their recovered provenance values."""
-    return self.relation(relation)._rows()
+    return iter(self.relation(relation))
+
+  def relation_tuples(self, relation: str) -> Iterator[Tuple[Any, ...]]:
+    """Iterate through the computed tuples without converting provenance values."""
+    return self.relation(relation).tuples()
 
   def has_relation(self, relation: str) -> bool:
     """
@@ -1029,9 +1021,7 @@ class ScallopContext(Generic[_FactT, _ValueT]):
     """
     PROVENANCE_SUPPORTING_PROBABILITY = set([
       "anytimebounds",
-      "probproofs",
       "topkproofs",
-      "samplekproofs",
       "topbottomkclauses",
       "minmaxprob",
       "addmultprob",

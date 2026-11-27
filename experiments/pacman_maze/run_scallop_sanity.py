@@ -27,8 +27,8 @@ class ScallopPolicy:
     temp_ctx.run()
     output = list(temp_ctx.relation("action_score"))
     if len(output) > 0:
-      action_id = numpy.argmax(numpy.array([p for (p, _) in output]))
-      action = output[action_id][1][0]
+      action_id = numpy.argmax(numpy.array([row.value for row in output]))
+      action = output[action_id].tuple[0]
       return action
     else:
       return random.randrange(0, 4)

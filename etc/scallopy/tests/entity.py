@@ -12,7 +12,7 @@ class TestEntity(unittest.TestCase):
     ctx.add_rule("result(y) = root(e) and eval(e, y)")
     ctx.add_facts("root", [("Add(Const(5), Add(Const(3), Const(4)))",)])
     ctx.run()
-    assert list(ctx.relation("result")) == [(12,)]
+    assert list(ctx.relation_tuples("result")) == [(12,)]
 
   def test_entity_2(self):
     ctx = scallopy.Context()
@@ -25,7 +25,7 @@ class TestEntity(unittest.TestCase):
     """)
     ctx.add_facts("root", [("Add(Const(5), Add(Const(3), Const(4)))",)])
     ctx.run()
-    assert list(ctx.relation("result")) == [(12,)]
+    assert list(ctx.relation_tuples("result")) == [(12,)]
 
   def test_entity_tuple_1(self):
     ctx = scallopy.Context()
@@ -38,7 +38,7 @@ class TestEntity(unittest.TestCase):
     """)
     ctx.add_facts("target", [(1, "Add(Const(3), Const(5))"), (2, "Add(Const(6), Const(5))")])
     ctx.run()
-    assert list(ctx.relation("result")) == [(1, 8), (2, 11)]
+    assert list(ctx.relation_tuples("result")) == [(1, 8), (2, 11)]
 
   def test_entity_compile_failure_1(self):
     # Unexisted variant
@@ -46,7 +46,7 @@ class TestEntity(unittest.TestCase):
     ctx.add_relation("root", scallopy.Entity)
     ctx.add_facts("root", [("Unexisted(5)",)])
     ctx.run()
-    assert len(list(ctx.relation("root"))) == 0
+    assert len(list(ctx.relation_tuples("root"))) == 0
 
   def test_entity_compile_failure_2(self):
     # Arity mismatch
@@ -55,7 +55,7 @@ class TestEntity(unittest.TestCase):
     ctx.add_relation("root", scallopy.Entity)
     ctx.add_facts("root", [("Add(Const(5), Const(3), Const(7))",)])
     ctx.run()
-    assert len(list(ctx.relation("root"))) == 0
+    assert len(list(ctx.relation_tuples("root"))) == 0
 
   def test_entity_forward(self):
     forward = scallopy.Module(

@@ -13,6 +13,6 @@ ctx.add_rule("path(a, c) = edge(a, b), path(b, c)")
 ctx.run()
 
 # Inspect the result
-paths = ctx.relation("path")
+paths = ctx.relation_tuples("path")
 for (s, t) in paths:
   print(f"elem: ({s}, {t})")

@@ -32,7 +32,7 @@ ctx.add_rule("R($my_sum(a, b)) = I(a, b)")
 ctx.run()
 
 # See the result, should be [(3,), (5,), (7,)]
-print(list(ctx.relation("R")))
+print(list(ctx.relation_tuples("R")))
 ```
 
 Now we elaborate on how we define new foreign functions in Python.

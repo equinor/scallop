@@ -46,7 +46,7 @@ def test_date_understanding(range):
             temp_ctx.run()
             res = [
                 datetime.strptime(x[0].split(" ")[0], "%Y-%m-%d").strftime("%m/%d/%Y")
-                for x in list(temp_ctx.relation("answer"))
+                for x in list(temp_ctx.relation_tuples("answer"))
             ]
             score = 0
             final_answer = ""
@@ -62,10 +62,10 @@ def test_date_understanding(range):
                     "question": example["input"],
                     "final_answer": final_answer,
                     "score": score,
-                    "mentioned_date": list(temp_ctx.relation("mentioned_date")),
-                    "relationship": list(temp_ctx.relation("relationship")),
-                    "goal": list(temp_ctx.relation("goal")),
-                    "answer": list(temp_ctx.relation("answer")),
+                    "mentioned_date": list(temp_ctx.relation_tuples("mentioned_date")),
+                    "relationship": list(temp_ctx.relation_tuples("relationship")),
+                    "goal": list(temp_ctx.relation_tuples("goal")),
+                    "answer": list(temp_ctx.relation_tuples("answer")),
                 }
             ]
         except Exception as e:

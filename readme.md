@@ -137,7 +137,7 @@ ctx.add_rule("path(a, c) = edge(a, b), path(b, c)")
 ctx.run()
 
 # Inspect the result
-print(list(ctx.relation("path"))) # [(0, 1), (0, 2), (1, 2)]
+print(list(ctx.relation_tuples("path"))) # [(0, 1), (0, 2), (1, 2)]
 ```
 
 In addition, `scallopy` can be seamlessly integrated with PyTorch.

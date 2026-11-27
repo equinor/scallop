@@ -10,7 +10,7 @@ class ConfigurationTests(unittest.TestCase):
     ctx.add_facts("edge", [(0, 1), (1, 2), (2, 3), (3, 4)])
     ctx.add_rule("path(a, c) = edge(a, c) or path(a, b) and edge(b, c)")
     ctx.run()
-    assert list(ctx.relation("path")) == [(0, 1), (0, 2), (1, 2), (1, 3), (2, 3), (2, 4), (3, 4)]
+    assert list(ctx.relation_tuples("path")) == [(0, 1), (0, 2), (1, 2), (1, 3), (2, 3), (2, 4), (3, 4)]
 
   def test_iter_limit_2(self):
     ctx = scallopy.ScallopContext()
@@ -20,7 +20,7 @@ class ConfigurationTests(unittest.TestCase):
     ctx.add_facts("edge", [(0, 1), (1, 2), (2, 3)])
     ctx.add_rule("path(a, c) = edge(a, c) or path(a, b) and edge(b, c)")
     ctx.run()
-    assert list(ctx.relation("path")) == [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
+    assert list(ctx.relation_tuples("path")) == [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
 
   def test_hidden_relation_1(self):
     ctx = scallopy.ScallopContext()

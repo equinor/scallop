@@ -183,6 +183,17 @@ pub struct Collection {
   pub collection: CollectionEnum<ArcFamily>,
 }
 
+impl Collection {
+  fn iterator(&self, include_tag: bool) -> CollectionIterator {
+    CollectionIterator {
+      include_tag,
+      env: self.env.clone(),
+      collection: self.collection.clone(),
+      current_index: 0,
+    }
+  }
+}
+
 #[pymethods]
 impl Collection {
   fn num_input_facts(&self) -> Option<usize> {
@@ -201,19 +212,16 @@ impl Collection {
     slf.collection.len()
   }
 
-  fn __iter__(slf: PyRef<Self>) -> CollectionIterator {
-    CollectionIterator {
-      include_tag: !slf.collection.has_empty_tag(),
-      env: slf.env.clone(),
-      collection: slf.collection.clone(),
-      current_index: 0,
-    }
+  fn __iter__(&self) -> CollectionIterator {
+    self.iterator(!self.collection.has_empty_tag())
   }
 
-  fn iter_tagged(slf: PyRef<Self>) -> CollectionIterator {
-    let mut iter = Self::__iter__(slf);
-    iter.include_tag = true;
-    iter
+  fn iter_tagged(&self) -> CollectionIterator {
+    self.iterator(true)
+  }
+
+  fn iter_tuples(&self) -> CollectionIterator {
+    self.iterator(false)
   }
 }
 

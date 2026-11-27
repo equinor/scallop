@@ -79,7 +79,7 @@ class TensorTests(unittest.TestCase):
 
     ctx.run()
 
-    result = list(ctx.relation("y"))[0][0]
+    result = next(ctx.relation_tuples("y"))[0]
     assert s == result
 
   @unittest.skipIf(not scallopy.torch_tensor_enabled(), "not supported in this scallopy version")
@@ -92,7 +92,7 @@ class TensorTests(unittest.TestCase):
     ctx.add_facts("r", [(1, x), (2, y)])
     ctx.add_rule("y(ta + tb) = r(1, ta) and r(2, tb)")
     ctx.run()
-    my_sum = list(ctx.relation("y"))[0][0]
+    my_sum = next(ctx.relation_tuples("y"))[0]
 
     assert all(gt_sum == my_sum)
 
@@ -107,7 +107,7 @@ class TensorTests(unittest.TestCase):
     ctx.add_facts("embed", [(1, x), (2, y)])
     ctx.add_rule("similar(x, y) = embed(x, tx) and embed(y, ty) and x != y and soft_eq<Tensor>(tx, ty)")
     ctx.run()
-    my_sim = list(ctx.relation("similar"))[0][0]
+    my_sim = next(iter(ctx.relation("similar"))).value
 
     assert abs(gt_sim.item() - my_sim.item()) < 0.001
 
@@ -124,7 +124,7 @@ class TensorTests(unittest.TestCase):
     ctx.add_facts("embed", [(1, x), (2, y)])
     ctx.add_rule("similar(x, y) = embed(x, tx) and embed(y, ty) and x != y and soft_eq<Tensor>(tx, ty)")
     ctx.run()
-    my_initial_sim = list(ctx.relation("similar"))[0][0]
+    my_initial_sim = next(iter(ctx.relation("similar"))).value
 
     assert abs(gt_initial_sim.item() - my_initial_sim.item()) < 0.001
 

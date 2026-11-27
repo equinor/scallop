@@ -37,7 +37,7 @@ class TestBasics(unittest.TestCase):
     """)
     self.ctx.run()
 
-    self.assertCountEqual(self.ctx.relation("answer"), [(1, "test answer"), (2, "test answer")])
+    self.assertCountEqual(self.ctx.relation_tuples("answer"), [(1, "test answer"), (2, "test answer")])
     self.complete.assert_called_once_with(
       model="gpt-5.4-mini",
       messages=[{"role": "user", "content": "test question"}],
@@ -53,7 +53,7 @@ class TestBasics(unittest.TestCase):
     """)
     self.ctx.run()
 
-    self.assertEqual(list(self.ctx.relation("answers")), [("test answer",)])
+    self.assertEqual(list(self.ctx.relation_tuples("answers")), [("test answer",)])
 
   def test_gpt_attribute(self):
     self.complete.return_value = completion('{"answer": "test answer"}')
@@ -66,7 +66,7 @@ class TestBasics(unittest.TestCase):
     """)
     self.ctx.run()
 
-    self.assertEqual(list(self.ctx.relation("answers")), [("test answer",)])
+    self.assertEqual(list(self.ctx.relation_tuples("answers")), [("test answer",)])
 
   def test_gpt_extract_info_legacy_model_uses_json_mode(self):
     self.complete.side_effect = [completion("test reasoning"), completion('{"answer": "test answer"}')]
@@ -79,7 +79,7 @@ class TestBasics(unittest.TestCase):
     """)
     self.ctx.run()
 
-    self.assertEqual(list(self.ctx.relation("answers")), [("test answer",)])
+    self.assertEqual(list(self.ctx.relation_tuples("answers")), [("test answer",)])
     self.assertEqual(self.complete.call_count, 2)
     self.assertEqual(self.complete.call_args.kwargs["model"], "gpt-3.5-turbo")
     self.assertEqual(self.complete.call_args.kwargs["response_format"], {"type": "json_object"})
@@ -105,7 +105,7 @@ class TestBasics(unittest.TestCase):
     """)
     self.ctx.run()
 
-    self.assertCountEqual(self.ctx.relation("answers"), [(1, "test answer", 2), (2, "test answer", 2)])
+    self.assertCountEqual(self.ctx.relation_tuples("answers"), [(1, "test answer", 2), (2, "test answer", 2)])
     self.assertEqual(self.complete.call_count, 2)
     for request in self.complete.call_args_list:
       self.assertEqual(request.kwargs["model"], "gpt-5.4-mini")
@@ -130,5 +130,5 @@ class TestBasics(unittest.TestCase):
     """)
     self.ctx.run()
 
-    self.assertEqual(len(list(self.ctx.relation("vectors"))), 2)
+    self.assertEqual(len(list(self.ctx.relation_tuples("vectors"))), 2)
     embed.assert_called_once_with(input=["example"], model="test-embedding-model")

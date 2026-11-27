@@ -2,7 +2,7 @@ import os
 import scallopy
 
 def test_relation(ctx, relation_name, expected_output):
-  result = set(ctx.relation(relation_name))
+  result = set(ctx.relation_tuples(relation_name))
   expected = set(expected_output)
   in_result_not_expected = result.difference(expected)
   if len(in_result_not_expected) > 0:
