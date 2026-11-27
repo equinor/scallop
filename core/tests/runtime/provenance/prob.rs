@@ -125,15 +125,13 @@ fn test_custom_decision_diagram_backend_for_differentiable_provenance() {
   let calls = Rc::new(Cell::new(0));
   let ctx = diff_top_k_proofs::DiffTopKProofsProvenance::<(), RcFamily, _>::new_with_wmc_backend(
     3,
-    true,
     OneVariableDdBackend(calls.clone()),
   );
   let tag = ctx.tagging_fn((0.25, (), Some(4)).into());
   assert_eq!(ctx.weight(&tag), 0.25);
   let OutputDiffProb(probability, gradient) = ctx.clone().recover_fn(&tag);
-  // With a singleton exclusion, the query or the exactly-one violation is a tautology.
-  assert_eq!(probability, 1.0);
-  assert!(gradient.is_empty());
+  assert_eq!(probability, 0.25);
+  assert_eq!(gradient, [(0, 1.0)]);
   assert_eq!(calls.get(), 2);
 
   let tag = Literal::Neg(usize::MAX);
@@ -170,32 +168,21 @@ fn test_disjunctions_preserve_first_seen_order_for_sparse_groups() {
 }
 
 #[test]
-fn test_diff_top_k_weighted_model_count_with_multiple_exclusions() {
-  let ctx = diff_top_k_proofs::DiffTopKProofsProvenance::<(), RcFamily>::new(3, true);
-  let query = ctx.tagging_fn((0.5, (), None).into());
-  for (weight, group) in [(0.25, 1), (0.25, 1), (0.5, 2), (0.5, 2), (0.5, 2)] {
-    ctx.tagging_fn((weight, (), Some(group)).into());
-  }
+fn test_diff_top_k_prunes_conflicting_proofs_but_counts_retained_proofs_independently() {
+  let ctx = diff_top_k_proofs::DiffTopKProofsProvenance::<(), RcFamily>::new(3);
+  let a = ctx.tagging_fn((0.25, (), Some(1)).into());
+  let b = ctx.tagging_fn((0.5, (), Some(1)).into());
+  ctx.tagging_fn((0.5, (), Some(2)).into());
 
-  // The complement is query false and exactly one fact true in each group.
-  let OutputDiffProb(probability, gradient) = ctx.recover_fn(&query);
-  assert_eq!(probability, 119.0 / 128.0);
-  assert_eq!(
-    gradient,
-    [
-      (0, 9.0 / 64.0),
-      (1, -3.0 / 32.0),
-      (2, -3.0 / 32.0),
-      (3, 3.0 / 64.0),
-      (4, 3.0 / 64.0),
-      (5, 3.0 / 64.0)
-    ]
-  );
+  assert!(ctx.discard(&ctx.mult(&a, &b)));
+  let OutputDiffProb(probability, gradient) = ctx.recover_fn(&ctx.add(&a, &b));
+  assert_eq!(probability, 0.625);
+  assert_eq!(gradient, [(0, 0.5), (1, 0.75)]);
 }
 
 #[test]
 fn test_top_k_proofs_breaks_addition_and_join_ties_by_literals() {
-  let ctx = diff_top_k_proofs::DiffTopKProofsProvenance::<(), RcFamily>::new(1, false);
+  let ctx = diff_top_k_proofs::DiffTopKProofsProvenance::<(), RcFamily>::new(1);
   let first = ctx.tagging_fn((0.5, (), None).into());
   let second = ctx.tagging_fn((0.5, (), None).into());
   let third = ctx.tagging_fn((0.5, (), None).into());
@@ -215,7 +202,7 @@ fn test_top_k_proofs_breaks_addition_and_join_ties_by_literals() {
 
 #[test]
 fn test_top_k_proofs_breaks_negation_frontier_ties_by_literals() {
-  let ctx = top_k_proofs::TopKProofsProvenance::<RcFamily>::new(2, false);
+  let ctx = top_k_proofs::TopKProofsProvenance::<RcFamily>::new(2);
   let [a, b, c, d] = std::array::from_fn(|_| ctx.tagging_fn((0.5, None).into()));
   let ab = ctx.mult(&a, &b);
   let cd = ctx.mult(&c, &d);

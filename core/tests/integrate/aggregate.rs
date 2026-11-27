@@ -9,7 +9,7 @@ use scallop_core::utils::*;
 
 #[test]
 fn test_min_max_with_topkproofs() {
-  let prov = top_k_proofs::TopKProofsProvenance::<RcFamily>::new(3, false);
+  let prov = top_k_proofs::TopKProofsProvenance::<RcFamily>::new(3);
   expect_interpret_result_with_tag(
     r#"
       rel number = {0.1::1, 0.1::3, 0.8::5, 0.0::7}

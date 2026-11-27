@@ -29,15 +29,28 @@ class TestConversion(unittest.TestCase):
     ctx2 = ctx.clone("topkproofs", k=5)
     self.assertEqual(ctx2._k, 5)
 
-  def test_convert_5(self):
-    ctx = scallopy.ScallopContext("topkproofs")
-    ctx2 = ctx.clone("topkproofs", wmc_with_disjunctions=True)
-    self.assertTrue(ctx2._wmc_with_disjunctions)
+  def test_cloned_proof_modes_count_grouped_facts_independently(self):
+    ctx = scallopy.ScallopContext.from_mode(scallopy.modes.top_k_proofs())
+    ctx.add_relation("choice", int)
+    ctx.add_relation("some_choice", ())
+    ctx.add_rule("some_choice() = choice(x)")
+    ctx.add_facts("choice", [(0.25, 1), (0.5, 2)], disjunctions=[[0, 1]])
+    for provenance in ("topkproofs", "topbottomkclauses"):
+      cloned = ctx.clone(provenance)
+      cloned.run()
+      self.assertEqual(list(cloned.relation("some_choice")), [(0.625, ())])
 
-  def test_convert_6(self):
-    ctx = scallopy.ScallopContext("topkproofs", wmc_with_disjunctions=True)
-    ctx2 = ctx.clone("topkproofs")
-    self.assertTrue(ctx2._wmc_with_disjunctions)
+  def test_loading_context_with_removed_disjunction_scoring(self):
+    ctx = scallopy.ScallopContext("topkproofs")
+    ctx.add_relation("choice", int)
+    ctx.add_facts("choice", [(0.25, 1)], disjunctions=[[0]])
+    state = ctx.__getstate__()
+    restored = scallopy.ScallopContext()
+    with self.assertRaisesRegex(ValueError, "Legacy disjunction scoring was removed"):
+      restored.__setstate__({**state, "_wmc_with_disjunctions": True})
+    restored.__setstate__({**state, "_wmc_with_disjunctions": False})
+    restored.run()
+    self.assertEqual(list(restored.relation("choice")), [(0.25, (1,))])
 
   def test_convert_7(self):
     ctx = scallopy.ScallopContext()

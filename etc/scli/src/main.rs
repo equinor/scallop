@@ -25,10 +25,6 @@ struct Options {
   #[arg(short = 'k', long, default_value_t = 3)]
   top_k: usize,
 
-  /// Whether we perform weighted model counting (WMC) with disjunctions
-  #[arg(long)]
-  wmc_with_disjunctions: bool,
-
   /// The name of the relation that we want to query for
   #[arg(short = 'q', long)]
   query: Option<String>,
@@ -190,14 +186,11 @@ fn main() -> Result<(), String> {
       interpret(ctx, &opt.input, integrate_opt, predicate_set, monitor_options)
     }
     "topkproofs" => {
-      let ctx = provenance::top_k_proofs::TopKProofsProvenance::<RcFamily>::new(opt.top_k, opt.wmc_with_disjunctions);
+      let ctx = provenance::top_k_proofs::TopKProofsProvenance::<RcFamily>::new(opt.top_k);
       interpret(ctx, &opt.input, integrate_opt, predicate_set, monitor_options)
     }
     "topbottomkclauses" => {
-      let ctx = provenance::top_bottom_k_clauses::TopBottomKClausesProvenance::<RcFamily>::new(
-        opt.top_k,
-        opt.wmc_with_disjunctions,
-      );
+      let ctx = provenance::top_bottom_k_clauses::TopBottomKClausesProvenance::<RcFamily>::new(opt.top_k);
       interpret(ctx, &opt.input, integrate_opt, predicate_set, monitor_options)
     }
     _ => Err(format!("Unknown provenance semiring `{}`", opt.provenance)),

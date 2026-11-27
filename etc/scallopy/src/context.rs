@@ -171,13 +171,8 @@ impl Context {
   /// * `k` - an unsigned integer serving as the hyper-parameter for provenance such as `"topkproofs"`
   /// * `custom_provenance` - an optional python object serving as the provenance context
   #[new]
-  #[pyo3(signature=(provenance="unit", k=3, wmc_with_disjunctions=false, custom_provenance=None))]
-  fn new(
-    provenance: &str,
-    k: usize,
-    wmc_with_disjunctions: bool,
-    custom_provenance: Option<Py<PyAny>>,
-  ) -> Result<Self, BindingError> {
+  #[pyo3(signature=(provenance="unit", k=3, *, custom_provenance=None))]
+  fn new(provenance: &str, k: usize, custom_provenance: Option<Py<PyAny>>) -> Result<Self, BindingError> {
     // Check provenance type
     match provenance {
       "unit" => Ok(Self {
@@ -201,17 +196,17 @@ impl Context {
       }),
       "topkproofs" => Ok(Self {
         ctx: ContextEnum::TopKProofs(IntegrateContext::new_incremental(
-          top_k_proofs::TopKProofsProvenance::new(k, wmc_with_disjunctions),
+          top_k_proofs::TopKProofsProvenance::new(k),
         )),
       }),
       "topbottomkclauses" => Ok(Self {
         ctx: ContextEnum::TopBottomKClauses(IntegrateContext::new_incremental(
-          top_bottom_k_clauses::TopBottomKClausesProvenance::new(k, wmc_with_disjunctions),
+          top_bottom_k_clauses::TopBottomKClausesProvenance::new(k),
         )),
       }),
       "anytimebounds" => Ok(Self {
         ctx: ContextEnum::AnytimeBounds(
-          IntegrateContext::new_incremental(diff_top_k_proofs::DiffTopKProofsProvenance::new(0, false)),
+          IntegrateContext::new_incremental(diff_top_k_proofs::DiffTopKProofsProvenance::new(0)),
           Vec::new(),
         ),
       }),
@@ -247,17 +242,17 @@ impl Context {
       }),
       "difftopkproofs" => Ok(Self {
         ctx: ContextEnum::DiffTopKProofs(IntegrateContext::new_incremental(
-          diff_top_k_proofs::DiffTopKProofsProvenance::new(k, wmc_with_disjunctions),
+          diff_top_k_proofs::DiffTopKProofsProvenance::new(k),
         )),
       }),
       "difftopbottomkclauses" => Ok(Self {
         ctx: ContextEnum::DiffTopBottomKClauses(IntegrateContext::new_incremental(
-          diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance::new(k, wmc_with_disjunctions),
+          diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance::new(k),
         )),
       }),
       "difftopkproofsdebug" => Ok(Self {
         ctx: ContextEnum::DiffTopKProofsDebug(IntegrateContext::new_incremental(
-          diff_top_k_proofs_debug::DiffTopKProofsDebugProvenance::new(k, wmc_with_disjunctions),
+          diff_top_k_proofs_debug::DiffTopKProofsDebugProvenance::new(k),
         )),
       }),
       "custom" => {
@@ -281,12 +276,7 @@ impl Context {
   }
 
   /// Create a new scallop context with a different provenance as the current context
-  fn clone_with_new_provenance(
-    &self,
-    provenance: &str,
-    k: usize,
-    wmc_with_disjunctions: bool,
-  ) -> Result<Self, BindingError> {
+  fn clone_with_new_provenance(&self, provenance: &str, k: usize) -> Result<Self, BindingError> {
     // Check provenance type
     match provenance {
       "unit" => Ok(Self {
@@ -321,17 +311,14 @@ impl Context {
         ctx: ContextEnum::TopKProofs(match_context_except_custom!(
           &self.ctx,
           c,
-          c.clone_with_new_provenance(top_k_proofs::TopKProofsProvenance::new(k, wmc_with_disjunctions))
+          c.clone_with_new_provenance(top_k_proofs::TopKProofsProvenance::new(k))
         )?),
       }),
       "topbottomkclauses" => Ok(Self {
         ctx: ContextEnum::TopBottomKClauses(match_context_except_custom!(
           &self.ctx,
           c,
-          c.clone_with_new_provenance(top_bottom_k_clauses::TopBottomKClausesProvenance::new(
-            k,
-            wmc_with_disjunctions
-          ),)
+          c.clone_with_new_provenance(top_bottom_k_clauses::TopBottomKClausesProvenance::new(k))
         )?),
       }),
       "diffminmaxprob" => Ok(Self {
@@ -380,20 +367,14 @@ impl Context {
         ctx: ContextEnum::DiffTopKProofs(match_context_except_custom!(
           &self.ctx,
           c,
-          c.clone_with_new_provenance(diff_top_k_proofs::DiffTopKProofsProvenance::new(
-            k,
-            wmc_with_disjunctions
-          ),)
+          c.clone_with_new_provenance(diff_top_k_proofs::DiffTopKProofsProvenance::new(k))
         )?),
       }),
       "difftopbottomkclauses" => Ok(Self {
         ctx: ContextEnum::DiffTopBottomKClauses(match_context_except_custom!(
           &self.ctx,
           c,
-          c.clone_with_new_provenance(diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance::new(
-            k,
-            wmc_with_disjunctions
-          ),)
+          c.clone_with_new_provenance(diff_top_bottom_k_clauses::DiffTopBottomKClausesProvenance::new(k))
         )?),
       }),
       "custom" => Err(BindingError::CustomProvenanceUnsupported),

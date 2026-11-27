@@ -1,6 +1,6 @@
 """Typed provenance selections for :meth:`ScallopContext.from_mode`."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import inf, isfinite, nextafter
 from typing import Any, Generic, Literal, TypeAlias, TypeVar
 
@@ -143,8 +143,7 @@ class ProvenanceMode(Generic[_FactT, _ValueT]):
 
   _name: str
   _k: int = 3
-  _wmc_with_disjunctions: bool = False
-  _custom: ScallopProvenance | None = None
+  _custom: ScallopProvenance | None = field(default=None, kw_only=True)
 
 
 unit = ProvenanceMode[_Fact, None]("unit")
@@ -160,32 +159,28 @@ diff_max_mult_prob = ProvenanceMode[_TensorFact, Tensor]("diffmaxmultprob")
 diff_nand_min_prob = ProvenanceMode[_TensorFact, Tensor]("diffnandminprob")
 
 
-def top_k_proofs(k: int = 3, *, wmc_with_disjunctions: bool = False) -> ProvenanceMode[_ScoreFact, float]:
-  return ProvenanceMode("topkproofs", k, wmc_with_disjunctions)
+def top_k_proofs(k: int = 3) -> ProvenanceMode[_ScoreFact, float]:
+  return ProvenanceMode("topkproofs", k)
 
 
-def top_bottom_k_clauses(k: int = 3, *, wmc_with_disjunctions: bool = False) -> ProvenanceMode[_ScoreFact, float]:
-  return ProvenanceMode("topbottomkclauses", k, wmc_with_disjunctions)
+def top_bottom_k_clauses(k: int = 3) -> ProvenanceMode[_ScoreFact, float]:
+  return ProvenanceMode("topbottomkclauses", k)
 
 
 def diff_sample_k_proofs(k: int = 3) -> ProvenanceMode[_TensorFact, Tensor]:
   return ProvenanceMode("diffsamplekproofs", k)
 
 
-def diff_top_k_proofs(k: int = 3, *, wmc_with_disjunctions: bool = False) -> ProvenanceMode[_TensorFact, Tensor]:
-  return ProvenanceMode("difftopkproofs", k, wmc_with_disjunctions)
+def diff_top_k_proofs(k: int = 3) -> ProvenanceMode[_TensorFact, Tensor]:
+  return ProvenanceMode("difftopkproofs", k)
 
 
-def diff_top_bottom_k_clauses(k: int = 3, *, wmc_with_disjunctions: bool = False) -> ProvenanceMode[_TensorFact, Tensor]:
-  return ProvenanceMode("difftopbottomkclauses", k, wmc_with_disjunctions)
+def diff_top_bottom_k_clauses(k: int = 3) -> ProvenanceMode[_TensorFact, Tensor]:
+  return ProvenanceMode("difftopbottomkclauses", k)
 
 
-def diff_top_k_proofs_debug(
-  k: int = 3,
-  *,
-  wmc_with_disjunctions: bool = False,
-) -> ProvenanceMode[_DebugFact, tuple[Tensor, DebugProofSet]]:
-  return ProvenanceMode("difftopkproofsdebug", k, wmc_with_disjunctions)
+def diff_top_k_proofs_debug(k: int = 3) -> ProvenanceMode[_DebugFact, tuple[Tensor, DebugProofSet]]:
+  return ProvenanceMode("difftopkproofsdebug", k)
 
 
 def custom(provenance: ScallopProvenance) -> ProvenanceMode[tuple[Any, _Fact], Any]:

@@ -28,7 +28,7 @@ class ScallopForwardFunction(torch_importer.Module):
     k: int = 3,
     train_k: Optional[int] = None,
     test_k: Optional[int] = None,
-    wmc_with_disjunctions: Optional[bool] = None,
+    *,
     early_discard: Optional[bool] = None,
     iter_limit: Optional[int] = None,
     retain_topk: Optional[Dict[str, int]] = None,
@@ -48,7 +48,6 @@ class ScallopForwardFunction(torch_importer.Module):
       k=k,
       train_k=train_k,
       test_k=test_k,
-      wmc_with_disjunctions=wmc_with_disjunctions if wmc_with_disjunctions is not None else False,
       monitors=monitors,
     )
 

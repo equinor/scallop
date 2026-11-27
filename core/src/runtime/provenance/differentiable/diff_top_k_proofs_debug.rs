@@ -7,7 +7,6 @@ pub struct DiffTopKProofsDebugProvenance<T: FromTensor, P: PointerFamily, W: Wmc
   pub k: usize,
   pub storage: DiffProbStorage<T, P>,
   pub disjunctions: P::Cell<Disjunctions>,
-  pub wmc_with_disjunctions: bool,
   wmc_backend: W,
 }
 
@@ -17,25 +16,23 @@ impl<T: FromTensor, P: PointerFamily, W: WmcBackend> Clone for DiffTopKProofsDeb
       k: self.k,
       storage: self.storage.clone_internal(),
       disjunctions: P::clone_cell(&self.disjunctions),
-      wmc_with_disjunctions: self.wmc_with_disjunctions,
       wmc_backend: self.wmc_backend.clone(),
     }
   }
 }
 
 impl<T: FromTensor, P: PointerFamily> DiffTopKProofsDebugProvenance<T, P> {
-  pub fn new(k: usize, wmc_with_disjunctions: bool) -> Self {
-    Self::new_with_wmc_backend(k, wmc_with_disjunctions, DefaultWmcBackend)
+  pub fn new(k: usize) -> Self {
+    Self::new_with_wmc_backend(k, DefaultWmcBackend)
   }
 }
 
 impl<T: FromTensor, P: PointerFamily, W: WmcBackend> DiffTopKProofsDebugProvenance<T, P, W> {
-  pub fn new_with_wmc_backend(k: usize, wmc_with_disjunctions: bool, wmc_backend: W) -> Self {
+  pub fn new_with_wmc_backend(k: usize, wmc_backend: W) -> Self {
     Self {
       k,
       storage: DiffProbStorage::new(),
       disjunctions: P::new_cell(Disjunctions::new()),
-      wmc_with_disjunctions,
       wmc_backend,
     }
   }
@@ -108,13 +105,7 @@ impl<T: FromTensor, P: PointerFamily, W: WmcBackend> Provenance for DiffTopKProo
         s.constant(real)
       }
     };
-    let wmc_result = if self.wmc_with_disjunctions {
-      P::get_cell(&self.disjunctions, |disj| {
-        t.wmc_with_disjunctions_using(&self.wmc_backend, &s, &v, disj)
-      })
-    } else {
-      t.wmc_using(&self.wmc_backend, &s, &v)
-    };
+    let wmc_result = t.wmc_using(&self.wmc_backend, &s, &v);
     let prob = wmc_result.real;
     let deriv = wmc_result
       .deriv

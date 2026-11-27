@@ -3,7 +3,7 @@ use scallop_core::testing::*;
 
 #[test]
 fn expression_tags_preserve_runtime_exclusions() {
-  let context = top_k_proofs::TopKProofsProvenance::<scallop_core::utils::RcFamily>::new(8, false);
+  let context = top_k_proofs::TopKProofsProvenance::<scallop_core::utils::RcFamily>::new(8);
   let result = scallop_core::integrate::interpret_string_with_ctx(
     r#"
       rel variable = {1, 2}
