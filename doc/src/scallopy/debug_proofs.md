@@ -9,7 +9,7 @@ We can use the provenance `difftopkproofsdebug`.
 Take the `sum_2` application as an example, we have
 
 ``` py
-ctx = scallopy.ScallopContext(provenance="difftopkproofsdebug", k=3)
+ctx = scallopy.ScallopContext.from_mode(scallopy.modes.diff_top_k_proofs_debug(k=3))
 ctx.add_relation("digit_a", int)
 ctx.add_relation("digit_b", int)
 ctx.add_rule("sum_2(a + b) = digit_a(a) and digit_b(b)")
@@ -19,7 +19,9 @@ ctx.add_facts("digit_a", [((torch.tensor(0.1), 1), (1,)), ((torch.tensor(0.9), 2
 ctx.add_facts("digit_b", [((torch.tensor(0.9), 3), (1,)), ((torch.tensor(0.1), 4), (2,))])
 
 ctx.run()
-result = ctx.relation("sum_2")
+for row in ctx.relation("sum_2"):
+  probability, proofs = row.value
+  print(row.tuple, probability, proofs)
 ```
 
 A majority of the code will look identical to the original example,
@@ -53,8 +55,7 @@ The forward module should be setup just like before, with the only change being 
 
 ``` py
 sum_2 = scallopy.Module(
-  provenance="difftopkproofsdebug",
-  k=3,
+  provenance=scallopy.modes.diff_top_k_proofs_debug(k=3),
   program="""
     type digit_a(a: i32), digit_b(b: i32)
     rel sum_2(a + b) = digit_a(a) and digit_b(b)

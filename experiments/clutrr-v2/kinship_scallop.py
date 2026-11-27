@@ -37,7 +37,7 @@ def test_kinship(range=range(N)):
             ctx.import_file(SCALLOP_FILE)
             ctx.add_facts("context", [(input,)])
             ctx.run()
-            res = list(ctx.relation("result"))
+            res = list(ctx.relation_tuples("result"))
             score = 0
             final_answer = ""
             for output_ans, in res:
@@ -50,10 +50,10 @@ def test_kinship(range=range(N)):
                     "question": input,
                     "final_answer": final_answer,
                     "score": score,
-                    "mentioned_kinship": list(ctx.relation("kinship")),
-                    "derived_kinship": list(ctx.relation("derived_kinship")),
-                    "query": list(ctx.relation("question")),
-                    "answer": list(ctx.relation("result")),
+                    "mentioned_kinship": list(ctx.relation_tuples("kinship")),
+                    "derived_kinship": list(ctx.relation_tuples("derived_kinship")),
+                    "query": list(ctx.relation_tuples("question")),
+                    "answer": list(ctx.relation_tuples("result")),
                     "num_answers": len(res),
                 }
             ]

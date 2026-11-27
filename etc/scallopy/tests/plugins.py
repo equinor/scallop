@@ -61,7 +61,7 @@ class TestConfigure(unittest.TestCase):
       rel is_odd(x, $eval_bool($format("{} % 2 == 1", x))) = my_num(x)
     """)
     ctx.run()
-    result = list(ctx.relation("is_odd"))
+    result = list(ctx.relation_tuples("is_odd"))
     self.assertListEqual(result, [(3, True), (5, True), (8, False), (10, False)])
 
   def test_cmd_args(self):
@@ -82,7 +82,7 @@ class TestConfigure(unittest.TestCase):
       rel result(s) = key(s)
     """)
     ctx.run()
-    result = list(ctx.relation("result"))
+    result = list(ctx.relation_tuples("result"))
     self.assertListEqual(result, [("some-key",)])
 
 if __name__ == '__main__':

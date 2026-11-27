@@ -15,5 +15,5 @@ ctx.add_rule("path(a, b) = edge(a, b) or (path(a, c) and edge(c, b))")
 ctx.run()
 
 # Inspect the result
-print("edge:", list(ctx.relation("edge")))
-print("path:", list(ctx.relation("path")))
+print("edge:", list(ctx.relation_tuples("edge")))
+print("path:", list(ctx.relation_tuples("path")))

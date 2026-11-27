@@ -20,7 +20,7 @@ ctx.add_rule("path(a, c) = edge(a, c) or path(a, b) and edge(b, c)")
 ctx.run()
 
 # Check the result!
-print(list(ctx.relation("path"))) # [(0, 1), (0, 2), (1, 2)]
+print(list(ctx.relation_tuples("path"))) # [(0, 1), (0, 2), (1, 2)]
 ```
 
 Roughly, the program above can be divided into three phases:
@@ -39,32 +39,32 @@ If no argument is supplied, as shown in the above example, the context will be i
 To explicitly specify this, you can do
 
 ``` py
-ctx = scallopy.ScallopContext(provenance="unit")
+ctx = scallopy.ScallopContext.from_mode(scallopy.modes.unit)
 ```
 
 Of course, Scallop can be used to perform reasoning on probabilistic and differentiable inputs.
 For instance, you can write the following
 
 ``` py
-ctx = scallopy.ScallopContext(provenance="minmaxprob") # Probabilistic
+ctx = scallopy.ScallopContext.from_mode(scallopy.modes.min_max_prob)
 # or
-ctx = scallopy.ScallopContext(provenance="diffminmaxprob") # Differentiable
+ctx = scallopy.ScallopContext.from_mode(scallopy.modes.diff_min_max_prob)
 ```
 
 For more information on possible provenance information, please refer to the [provenance](scallopy/provenance.md) section.
 It it worth noting that some provenance, such as `topkproofs`, accept additional parameters such as `k`.
-In this case, you can supply this as additional arguments when creating the context:
+Pass those options when selecting the mode:
 
 ``` py
-ctx = scallopy.ScallopContext(provenance="topkproofs", k=5) # top-k-proofs provenance with k = 5
+ctx = scallopy.ScallopContext.from_mode(scallopy.modes.top_k_proofs(k=5))
 ```
 
 ### Typed modes and result rows
 
 Use `ScallopContext.from_mode()` to have a type checker infer the accepted fact
-format and the result value type from the chosen provenance. `run()` is
-unchanged. Use `relation_rows()` to get named `tuple` and `value` fields rather
-than unpacking the legacy shape returned by `relation()`:
+format and the result value type from the chosen provenance. Both `relation()`
+and `relation_rows()` yield named rows with `tuple` and `value` fields. Batch
+results use the same row shape:
 
 ```py
 ctx = scallopy.ScallopContext.from_mode(scallopy.modes.top_k_proofs(k=5))
@@ -72,7 +72,7 @@ ctx.add_relation("digit", int)
 ctx.add_facts("digit", [(0.8, (2,)), (0.2, (3,))])
 ctx.run()
 
-for row in ctx.relation_rows("digit"):
+for row in ctx.relation("digit"):
   print(row.tuple, row.value)  # tuple and float
 ```
 
@@ -89,9 +89,20 @@ determines the allowed contents of each fact tuple at runtime.
 | `modes.diff_top_k_proofs(...)` | A PyTorch tensor that supports backpropagation |
 | `modes.diff_top_k_proofs_debug(...)` | A pair containing a PyTorch tensor and its proof details |
 
-Existing string-based contexts and `relation()` still work unchanged. In
-particular, `relation()` under the `proofs` provenance still yields only the
-tuples; use `relation_rows()` to read their proofs.
+To migrate from bare tuples, use `ctx.relation_tuples("digit")`, or call
+`.tuples()` on a batch result collection. To migrate from `(value, tuple)` pairs,
+use `row.value` and `row.tuple`. Proof rows now expose their proofs in `row.value`.
+
+`Module(provenance=modes.diff_top_k_proofs(k=5), ...)` also accepts typed modes.
+Use `ctx.clone(modes.top_k_proofs(k=5))` to change to a compatible provenance
+with explicit options, or `ctx.clone()` to preserve the current mode and options.
+Direct string selections are deprecated; use `modes.from_name(name, k=5)` when
+the identifier comes from a CLI argument or configuration.
+
+Top-k proof and top/bottom-k clause modes use disjunction groups to prune
+conflicting alternatives, then score the retained formula using independent
+fact weights. Use `anytime_bounds` when disjunction groups should represent
+categorical draws.
 
 ### Anytime probability bounds (experimental)
 
@@ -473,13 +484,12 @@ ctx.add_facts("color", [("A", "blue"), ("A", "green"), ...])               # wit
 ctx.add_facts("color", [(0.1, ("A", "blue")), (0.2, ("A", "green")), ...]) # with probability
 ```
 
-We can extend this syntax into tagged facts in general.
-Suppose we are using the boolean semiring (`boolean`), we are going to tag each fact using values such as `True` or `False`.
+Other modes accept different tag types. For example, tropical provenance uses integer costs:
 
 ``` py
-ctx = scallopy.Context(provenance="boolean")
+ctx = scallopy.Context.from_mode(scallopy.modes.tropical)
 ctx.add_relation("edge", (int, int))
-ctx.add_facts("edge", [(True, (1, 2)), (False, (2, 3))])
+ctx.add_facts("edge", [(1, (1, 2)), (3, (2, 3))])
 ```
 
 ### Non-tagged Facts in Tagged Context

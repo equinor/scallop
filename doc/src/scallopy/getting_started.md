@@ -16,7 +16,7 @@ ctx.add_rule("path(a, c) = edge(a, c) or path(a, b) and edge(b, c)")
 
 ctx.run()
 
-print(list(ctx.relation("path"))) # [(1, 2), (1, 3), (2, 3)]
+print(list(ctx.relation_tuples("path"))) # [(1, 2), (1, 3), (2, 3)]
 ```
 
 In this very simple edge-path example, we are interacting with Scallop through a Python class called `Context`.
@@ -46,7 +46,7 @@ my_sum2 = scallopy.Module(
   """,
   input_mappings={"digit_1": range(10), "digit_2": range(10)},
   output_mappings={"sum_2": range(19)},
-  provenance="difftopkproofs")
+  provenance=scallopy.modes.diff_top_k_proofs())
 
 # Invoking the module with torch tensors. `result` is a tensor of 16 x 19
 result = my_sum2(

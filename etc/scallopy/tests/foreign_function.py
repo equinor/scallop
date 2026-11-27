@@ -27,7 +27,7 @@ class TestForeignFunction(unittest.TestCase):
     ctx.add_rule("R($my_sum(a, b) as i32) = S(a, b)")
     ctx.add_rule("R($my_sum(a, b, c) as i32) = T(a, b, c)")
     ctx.run()
-    self.assertEqual(list(ctx.relation("R")), [(3,), (5,), (6,), (18,)])
+    self.assertEqual(list(ctx.relation_tuples("R")), [(3,), (5,), (6,), (18,)])
 
   def test_foreign_string_index_of(self):
     """
@@ -46,7 +46,7 @@ class TestForeignFunction(unittest.TestCase):
     ctx.add_facts("S", [("hello world", "hello"), ("hello world", "world"), ("hello world", "42")])
     ctx.add_rule("R($my_string_index_of(a, b)) = S(a, b)")
     ctx.run()
-    self.assertEqual(list(ctx.relation("R")), [(0,), (6,)])
+    self.assertEqual(list(ctx.relation_tuples("R")), [(0,), (6,)])
 
   def test_explicit_unsigned_and_optional_string_arguments(self):
     @scallopy.foreign_function(arg_types=[scallopy.u32])
@@ -62,8 +62,8 @@ class TestForeignFunction(unittest.TestCase):
       rel prefixed($format_id(id, "ID-")) = ids(id)
     """)
     ctx.run()
-    self.assertEqual(list(ctx.relation("plain")), [("7",)])
-    self.assertEqual(list(ctx.relation("prefixed")), [("ID-7",)])
+    self.assertEqual(list(ctx.relation_tuples("plain")), [("7",)])
+    self.assertEqual(list(ctx.relation_tuples("prefixed")), [("ID-7",)])
 
   @unittest.expectedFailure
   def test_register_non_foreign_function(self):

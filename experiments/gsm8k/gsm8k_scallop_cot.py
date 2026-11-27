@@ -93,7 +93,7 @@ def test_semantic_parser_cot(range=range(N)):
             ctx.add_facts("parsed_expr", [(parsed_expr,)])
             ctx.run()
 
-            final_ans, = list(ctx.relation("result"))[0]
+            final_ans, = list(ctx.relation_tuples("result"))[0]
             exact_score = int(final_ans == answer)
             margin_score = int(abs(final_ans - answer) <= MARGIN)
 
@@ -107,7 +107,7 @@ def test_semantic_parser_cot(range=range(N)):
                     "margin_score": margin_score,
                     "reasoning": output,
                     "parsed_expr": parsed_expr,
-                    "outputted_answers": list(ctx.relation("result")),
+                    "outputted_answers": list(ctx.relation_tuples("result")),
                 }
             ]
             out["exact_score"] += exact_score

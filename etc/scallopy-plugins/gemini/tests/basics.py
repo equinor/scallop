@@ -42,7 +42,7 @@ class TestBasics(unittest.TestCase):
     """)
     ctx.run()
 
-    self.assertCountEqual(ctx.relation("answer"), [(1, "test answer"), (2, "test answer")])
+    self.assertCountEqual(ctx.relation_tuples("answer"), [(1, "test answer"), (2, "test answer")])
     create_client.assert_called_once_with(api_key="test-key")
     client.models.generate_content.assert_called_once()
     request = client.models.generate_content.call_args.kwargs
@@ -71,7 +71,7 @@ class TestBasics(unittest.TestCase):
     """)
     ctx.run()
 
-    self.assertCountEqual(ctx.relation("answers"), [(1, "test answer", 2), (2, "test answer", 2)])
+    self.assertCountEqual(ctx.relation_tuples("answers"), [(1, "test answer", 2), (2, "test answer", 2)])
     reasoning, final = [request.kwargs["config"] for request in generate.call_args_list]
     self.assertIsNone(reasoning.response_json_schema)
     self.assertEqual(final.response_mime_type, "application/json")
@@ -103,7 +103,7 @@ class TestBasics(unittest.TestCase):
     """)
     ctx.run()
 
-    self.assertEqual(len(list(ctx.relation("vectors"))), 2)
+    self.assertEqual(len(list(ctx.relation_tuples("vectors"))), 2)
     embed.assert_called_once()
     request = embed.call_args.kwargs
     self.assertEqual(request["model"], "models/gemini-embedding-001")

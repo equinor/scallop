@@ -55,35 +55,31 @@ def cmd_args(plugin_registry: scallopy.PluginRegistry):
 def print_relation(ctx: scallopy.ScallopContext, relation_name: str):
   # First get the relation
   probabilistic = ctx.is_probabilistic()
-  if probabilistic:
-    relation = [(f"{prob:.4f}", *tup) for (prob, tup) in ctx.relation(relation_name)]
+  if ctx.provenance in ("unit", "proofs"):
+    relation = [(row or ("()",)) for row in ctx.relation_tuples(relation_name)]
+    value_column = None
   else:
-    relation = list(ctx.relation(relation_name))
+    value_column = "prob" if probabilistic else "value"
+    relation = [
+      (f"{row.value:.4f}" if probabilistic else row.value, *(row.tuple or ("()",)))
+      for row in ctx.relation(relation_name)
+    ]
 
   # Check if relation is empty
   if len(relation) == 0:
     print("{}")
     return
 
-  # Get arity and max column width
-  arity = len(relation[0])
-
-  # Check if the tuple is empty
-  if arity == 0 and not probabilistic:
-    relation[0] = ("()",)
-  elif arity == 1 and probabilistic:
-    relation[0] = (relation[0][0], "()")
-
   # Compute column width
   max_column_width: list[int | None] = [MAX_COL_WIDTH] * len(relation[0])
-  if probabilistic:
+  if value_column is not None:
     max_column_width[0] = None
 
   # Then get the headers
   fields = ctx.relation_field_names(relation_name)
   headers = [field or "" for field in fields] if fields else []
-  if headers and probabilistic:
-    headers = ["prob"] + headers
+  if headers and value_column is not None:
+    headers = [value_column] + headers
 
   # Check if we need multi-line table
   need_multi_line_table = False
@@ -164,7 +160,7 @@ def main():
     plugin_registry.dump_loaded_plugins()
 
   # Create a scallopy context
-  ctx = scallopy.ScallopContext(provenance=args.provenance, k=args.top_k)
+  ctx = scallopy.ScallopContext.from_mode(scallopy.modes.from_name(args.provenance, k=args.top_k))
   setup_context(ctx, args)
 
   # Load the scallopy extension library

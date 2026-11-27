@@ -13,7 +13,9 @@ class TestDebugProvenance(unittest.TestCase):
     ctx.add_facts("digit_b", [((torch.tensor(0.9), 3), (1,)), ((torch.tensor(0.1), 4), (2,))])
     ctx.run()
     result = ctx.relation("sum_2")
-    for ((prob, proofs), (summation,)) in result:
+    for row in result:
+      (summation,) = row.tuple
+      prob, proofs = row.value
       if summation == 2:
         self.assertAlmostEqual(prob.item(), 0.09)
         self.assertEqual(proofs, [[(True, 1), (True, 3)]])

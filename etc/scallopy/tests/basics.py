@@ -31,7 +31,7 @@ class BasicTests(unittest.TestCase):
             ctx = scallopy.Context()
             ctx.add_program("rel numbers = {1, 2}")
             ctx.run()
-            assert list(ctx.relation("numbers")) == [(1,), (2,)]
+            assert list(ctx.relation_tuples("numbers")) == [(1,), (2,)]
             typed = scallopy.Context.from_mode(scallopy.modes.unit)
             typed.add_program("rel numbers = {1, 2}")
             typed.run()
@@ -81,9 +81,9 @@ class BasicTests(unittest.TestCase):
 
     ctx.add_facts("row", [fact])
     ctx.run()
-    self.assertEqual(list(ctx.relation("row")), [fact])
+    self.assertEqual(list(ctx.relation_tuples("row")), [fact])
 
-  def test_typed_probability_rows_and_legacy_results(self):
+  def test_typed_probability_rows_and_tuples_only_view(self):
     ctx = scallopy.Context.from_mode(scallopy.modes.top_k_proofs(k=1))
     ctx.add_relation("weighted", (int, int))
     ctx.add_relation("deterministic", int, non_probabilistic=True)
@@ -97,12 +97,13 @@ class BasicTests(unittest.TestCase):
     (row,) = ctx.relation_rows("result")
     assert_type(row.value, float)
     self.assertEqual(row, scallopy.Row((1,), 0.5))
-    self.assertEqual(list(ctx.relation("result")), [(0.5, (1,))])
+    self.assertEqual(list(ctx.relation("result")), [row])
+    self.assertEqual(list(ctx.relation_tuples("result")), [(1,)])
     (cloned_row,) = ctx.clone().relation_rows("result")
     assert_type(cloned_row.value, float)
     self.assertEqual(cloned_row, row)
 
-  def test_typed_proof_rows_preserve_legacy_untagged_iteration(self):
+  def test_proof_rows_include_proofs_and_allow_tuple_projection(self):
     ctx = scallopy.Context.from_mode(scallopy.modes.proofs)
     ctx.add_relation("choice", int)
     ctx.add_facts("choice", [1, 2], disjunctions=[[0, 1]])
@@ -113,7 +114,8 @@ class BasicTests(unittest.TestCase):
     self.assertEqual((first.tuple, second.tuple), ((1,), (2,)))
     ((first_id,),), ((second_id,),) = first.value, second.value
     self.assertNotEqual(first_id, second_id)
-    self.assertEqual(list(ctx.relation("choice")), [(1,), (2,)])
+    self.assertEqual(list(ctx.relation("choice")), [first, second])
+    self.assertEqual(list(ctx.relation_tuples("choice")), [(1,), (2,)])
 
   def test_typed_debug_rows_preserve_proofs_and_autograd(self):
     import torch
@@ -147,7 +149,7 @@ class BasicTests(unittest.TestCase):
     ctx.run()
 
     self.assertEqual(list(ctx.relation_rows("input")), [scallopy.Row((1,), {"value": "tag"})])
-    self.assertEqual(list(ctx.relation("input")), [({"value": "tag"}, (1,))])
+    self.assertEqual(list(ctx.relation("input")), [scallopy.Row((1,), {"value": "tag"})])
 
   def test_anytime_bounds_tighten_for_recursive_overlapping_proofs(self):
     ctx = scallopy.Context.from_mode(scallopy.modes.anytime_bounds)
@@ -1402,7 +1404,7 @@ class BasicTests(unittest.TestCase):
     ctx.add_facts("edge", [(1, 2), (2, 3), (3, 4)])
     ctx.add_rule("path(a, c) = edge(a, c) or (path(a, b) and edge(b, c))")
     ctx.run()
-    self.assertEqual(list(ctx.relation("path")), [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)])
+    self.assertEqual(list(ctx.relation_tuples("path")), [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)])
 
   def test_tropical_edge_path(self):
     ctx = scallopy.ScallopContext(provenance="tropical")
@@ -1411,9 +1413,9 @@ class BasicTests(unittest.TestCase):
     ctx.add_rule("path(a, c) = edge(a, c) or (path(a, b) and edge(b, c))")
     ctx.run()
     self.assertEqual(list(ctx.relation("path")), [
-      (1, (1, 2)), (2, (1, 3)), (1, (1, 4)),
-      (1, (2, 3)), (2, (2, 4)),
-      (1, (3, 4)),
+      scallopy.Row((1, 2), 1), scallopy.Row((1, 3), 2), scallopy.Row((1, 4), 1),
+      scallopy.Row((2, 3), 1), scallopy.Row((2, 4), 2),
+      scallopy.Row((3, 4), 1),
     ])
 
   def test_fibonacci(self):
@@ -1422,7 +1424,7 @@ class BasicTests(unittest.TestCase):
     ctx.add_facts("fib", [(0, 1), (1, 1)])
     ctx.add_rule("fib(x, y + z) = fib(x - 1, y), fib(x - 2, z), x <= 5")
     ctx.run()
-    self.assertEqual(list(ctx.relation("fib")), [(0, 1), (1, 1), (2, 2), (3, 3), (4, 5), (5, 8)])
+    self.assertEqual(list(ctx.relation_tuples("fib")), [(0, 1), (1, 1), (2, 2), (3, 3), (4, 5), (5, 8)])
 
   def test_fibonacci_demand(self):
     ctx = scallopy.ScallopContext()
@@ -1431,7 +1433,7 @@ class BasicTests(unittest.TestCase):
     ctx.add_rule("fib(x, y + z) = fib(x - 1, y), fib(x - 2, z), x > 1", demand="bf")
     ctx.add_rule("result(y) = fib(5, y)")
     ctx.run()
-    self.assertEqual(list(ctx.relation("result")), [(8,)])
+    self.assertEqual(list(ctx.relation_tuples("result")), [(8,)])
 
   def test_digit_sum(self):
     ctx = scallopy.ScallopContext()
@@ -1441,7 +1443,7 @@ class BasicTests(unittest.TestCase):
     ctx.add_facts("digit2", [(i,) for i in range(10)])
     ctx.add_rule("sum_2(a + b) = digit1(a), digit2(b)")
     ctx.run()
-    self.assertEqual(list(ctx.relation("sum_2")), [(i,) for i in range(19)])
+    self.assertEqual(list(ctx.relation_tuples("sum_2")), [(i,) for i in range(19)])
 
   def test_run_batch(self):
     ctx = scallopy.Context()
@@ -1453,9 +1455,9 @@ class BasicTests(unittest.TestCase):
     for parallel in (False, True):
       with self.subTest(parallel=parallel):
         batches = ctx.run_batch(inputs, "successor", parallel=parallel)
-        self.assertEqual([list(batch) for batch in batches], [[(2,)], [(5,)]])
+        self.assertEqual([list(batch) for batch in batches], [[scallopy.Row((2,), None)], [scallopy.Row((5,), None)]])
         batches = ctx.run_batch(inputs, ["digit", "successor"], parallel=parallel)
-        self.assertEqual([list(batch) for batch in batches], [[(1,)], [(5,)]])
+        self.assertEqual([list(batch.tuples()) for batch in batches], [[(1,)], [(5,)]])
 
     with self.assertRaisesRegex(ValueError, "Expected 2 output relations"):
       ctx.run_batch(inputs, ["digit"])
@@ -1469,7 +1471,7 @@ class BasicTests(unittest.TestCase):
     inputs = {"choice": [facts, (facts, [[0, 1]])]}
 
     independent, exclusive = ctx.run_batch(inputs, "both")
-    self.assertEqual(list(independent), [(0.25, (1,)), (0.25, (2,))])
+    self.assertEqual(list(independent), [scallopy.Row((1,), 0.25), scallopy.Row((2,), 0.25)])
     self.assertEqual(list(exclusive), [])
 
   def test_softmax(self):
@@ -1478,9 +1480,9 @@ class BasicTests(unittest.TestCase):
     ctx.add_facts("digit", [(0.5, (i,)) for i in range(10)])
     ctx.add_rule("softmax_digit(n) = n := softmax(d: digit(d))")
     ctx.run()
-    for (i, (prob, (p_i,))) in enumerate(list(ctx.relation("softmax_digit"))):
-      self.assertAlmostEqual(prob, 0.1)
-      self.assertEqual(i, p_i)
+    for i, row in enumerate(ctx.relation("softmax_digit")):
+      self.assertAlmostEqual(row.value, 0.1)
+      self.assertEqual(row.tuple, (i,))
 
   def test_rule_weight(self):
     ctx = scallopy.ScallopContext(provenance="minmaxprob")
@@ -1491,7 +1493,7 @@ class BasicTests(unittest.TestCase):
     ctx.add_rule("born_in(a, \"china\") = lives_in(a, \"china\")", tag = 0.8)
     ctx.add_rule("born_in(a, \"china\") = speaks(a, \"chinese\")", tag = 0.6)
     ctx.run()
-    self.assertEqual(list(ctx.relation("born_in")), [(0.8, (0, "china")), (0.6, (1, "china"))])
+    self.assertEqual(list(ctx.relation("born_in")), [scallopy.Row((0, "china"), 0.8), scallopy.Row((1, "china"), 0.6)])
 
   def test_proofs_disjunction(self):
     ctx = scallopy.ScallopContext(provenance="proofs")
@@ -1513,7 +1515,7 @@ class BasicTests(unittest.TestCase):
     ctx.add_facts("bf_root", [(6,)]) # Note that here (6,) is a one-tuple
     ctx.add_facts("assignment", [("A", False), ("A", True), ("B", False), ("B", True)], disjunctions=[[0, 1], [2, 3]])
     ctx.run()
-    self.assertEqual(list(ctx.relation("result")), [(False,)])
+    self.assertEqual(list(ctx.relation_tuples("result")), [(False,)])
 
   def test_top_k_proofs_disjunction(self):
     ctx = scallopy.ScallopContext(provenance="topkproofs")
@@ -1535,7 +1537,7 @@ class BasicTests(unittest.TestCase):
     ctx.add_facts("bf_root", [6]) # Note that the fact here is a single integer
     ctx.add_facts("assignment", [(1.0, ("A", False)), (1.0, ("A", True)), (1.0, ("B", False)), (1.0, ("B", True))], disjunctions=[[0, 1], [2, 3]])
     ctx.run()
-    self.assertEqual(list(ctx.relation("result")), [(1.0, (False,))])
+    self.assertEqual(list(ctx.relation("result")), [scallopy.Row((False,), 1.0)])
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ class TestForeignPredicate(unittest.TestCase):
     ctx.register_foreign_predicate(my_range)
     ctx.add_rule("r(x) = my_range(1, 5, x)")
     ctx.run()
-    self.assertEqual(list(ctx.relation("r")), [(1,), (2,), (3,), (4,)])
+    self.assertEqual(list(ctx.relation_tuples("r")), [(1,), (2,), (3,), (4,)])
 
   def test_foreign_predicate_in_parallel_batch(self):
     @scallopy.foreign_predicate
@@ -54,7 +54,7 @@ class TestForeignPredicate(unittest.TestCase):
     ctx.run()
 
     # The result should be 5
-    self.assertEqual(list(ctx.relation("result")), [(5,)])
+    self.assertEqual(list(ctx.relation_tuples("result")), [(5,)])
 
   def test_fp_suppress_warning(self):
     @scallopy.foreign_predicate(suppress_warning=True)
@@ -65,4 +65,4 @@ class TestForeignPredicate(unittest.TestCase):
     ctx.register_foreign_predicate(dummy)
     ctx.add_program("""rel result(y) = dummy("hello", y)""")
     ctx.run()
-    self.assertEqual(list(ctx.relation("result")), [])
+    self.assertEqual(list(ctx.relation_tuples("result")), [])

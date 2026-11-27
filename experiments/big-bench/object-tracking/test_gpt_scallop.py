@@ -49,7 +49,7 @@ def test_date_understanding(range):
             temp_ctx = ctx.clone()
             temp_ctx.add_facts("question", [(example["input"],)])
             temp_ctx.run()
-            res = list(temp_ctx.relation("answer"))[0][0]
+            res = list(temp_ctx.relation_tuples("answer"))[0][0]
             score = 0
             final_answer = ""
             for answer in example["target_scores"]:
@@ -64,10 +64,10 @@ def test_date_understanding(range):
                     "question": example["input"],
                     "final_answer": final_answer,
                     "score": score,
-                    "possessions": list(temp_ctx.relation("possessions")),
-                    "swaps": list(temp_ctx.relation("swaps")),
-                    "goal": list(temp_ctx.relation("goal")),
-                    "answer": list(temp_ctx.relation("answer")),
+                    "possessions": list(temp_ctx.relation_tuples("possessions")),
+                    "swaps": list(temp_ctx.relation_tuples("swaps")),
+                    "goal": list(temp_ctx.relation_tuples("goal")),
+                    "answer": list(temp_ctx.relation_tuples("answer")),
                 }
             ]
         except Exception as e:
